@@ -79,7 +79,9 @@
 					;(close stream)
 		(multiprocessing::make-process
 		 (lambda ()
-		   (let ((ltk::*w* stream))
+		   (let ((ltk::*wish* stream)
+			 (*callbacks* (make-hash-table :test #'equal))
+			 (*counter* 1))
 		     ,@body
 		     (mainloop)
 		     (format t "closing connection~&")
@@ -139,7 +141,9 @@
 	  (let* ((s (socket-accept socket))
 		 (stream (socket-make-stream s :input t :output t)))
 	    (make-thread (lambda ()
-			   (let ((ltk::*w* stream))
+			   (let ((ltk::*wish* stream)
+				 (*callbacks* (make-hash-table :test #'equal))
+				 (*counter* 1))
 			     ,@body
 			     (mainloop)
 			     
@@ -174,7 +178,9 @@
                                                                     handle)
                                                             '()
                                                             (lambda ()
-                                                             (let ((ltk::*w* stream))
+                                                             (let ((ltk::*wish* stream)
+								   (*callbacks* (make-hash-table :test #'equal))
+								   (*counter* 1))
                                                                ,@body
                                                                (mainloop)
                                                                (close stream)
