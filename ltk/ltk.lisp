@@ -1,6 +1,21 @@
-;;;; Copyright 2003 Peter Herth
+#|
+  Copyright 2003 Peter Herth <herth@peter-herth.de>
 
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
+|#
 
 (defpackage "LTK"
   (:use "COMMON-LISP"
@@ -15,12 +30,14 @@
 	   "CANVAS"
 	   "CREATE-IMAGE"
 	   "CREATE-LINE"
+	   "CREATE-MENU2"
 	   "CREATE-POLYGON"
 	   "CREATE-TEXT"
 	   "EXIT-WISH"
 	   "DO-EXECUTE"
-	   "DO-MESSAGE"
+	   "DO-MSG"
 	   "ENTRY"
+	   "*EXIT-MAINLOOP*"
 	   "FRAME"
 	   "GET-CONTENT"
 	   "GET-OPEN-FILE"
@@ -30,7 +47,7 @@
 	   "GRID-COLUMNCONFIGURE"
 	   "GRID-ROWCONFIGURE"
 	   "IMAGE-LOAD"
-	   "ITEM-CONFIGURE"
+	   "ITEMCONFIGURE"
 	   "LABEL"
 	   "LOAD-TEXT"
 	   "MAINLOOP"
@@ -38,7 +55,7 @@
 	   "MAKE-CANVAS"
 	   "MAKE-ENTRY"
 	   "MAKE-LABEL"
-	   "make-FRAME"
+	   "MAKE-FRAME"
 	   "MAKE-IMAGE"
 	   "MAKE-MENU"
 	   "MAKE-MENUBAR"
@@ -62,8 +79,10 @@
 	   "SEE"
 	   "SET-CONTENT"
 	   "SET-COORDS"
+	   "START-W"
 	   "TAG-CONFIGURE"
 	   "TEXT"
+	   "*TK*"
 	   "TKOBJECT"
 	   "TOPLEVEL"
 	   "WIDGET"
@@ -892,4 +911,7 @@
 
 (defun hello-1()
   (with-ltk
-   (pack (make-button nil "Press Me" (lambda () (format t "Hello World!~&"))))))
+   (let ((b (make-button nil "Press Me"
+			 (lambda ()
+			   (format t "Hello World!~&")))))
+     (pack b))))
