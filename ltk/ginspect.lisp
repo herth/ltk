@@ -75,8 +75,6 @@
      (pack f :side "top" :fill "x")
      (pack lbl :side "top"  :fill "x")
      (pack pane :side "top" :expand 1 :fill "both")
-     ;(pack desc :side "top" :fill "x")
-     ;(pack lb-fields :side "top" :expand 1 :fill "both")
      (grid desc 0 0 :sticky "news")
      (grid dscroll 0 1 :sticky "ns")
      (grid-columnconfigure f2 0 "weight" 1)
@@ -180,6 +178,7 @@
 				     *inspect-unbound-object-marker*))
 		(cons "Plist" (symbol-plist object)))))
 
+#+:sbcl
 (defun inspected-structure-elements (object)
   (let ((parts-list '())
         (info (sb-impl::layout-info (sb-kernel:layout-of object))))
@@ -189,12 +188,17 @@
                     (funcall (sb-impl::dsd-accessor-name dd-slot) object))
               parts-list)))))
 
+#-:sbcl
+(defun inspected-structure-elements (object)
+  (list))
+
 (defmethod inspected-parts ((object structure-object))
   (values (format nil "The object is a STRUCTURE-OBJECT of type ~S.~%"
 		  (type-of object))
 	  t
 	  (inspected-structure-elements object)))
 
+#+:sbcl
 (defun inspected-standard-object-elements (object)
   (let ((reversed-elements nil)
 	(class-slots (sb-pcl::class-slots (class-of object))))
@@ -204,6 +208,9 @@
 			     (slot-value object slot-name)
 			     *inspect-unbound-object-marker*)))
 	(push (cons slot-name slot-value) reversed-elements)))))
+#-:sbcl
+(defun inspected-standard-object-elements (object)
+  (list))
 
 (defmethod inspected-parts ((object standard-object))
   (values (format nil "The object is a STANDARD-OBJECT of type ~S.~%"
@@ -222,7 +229,7 @@
 		  (type-of object))
 	  t
 	  (inspected-standard-object-elements object)))
-
+#+:sbcl
 (defmethod inspected-parts ((object function))
   (let* ((type (sb-kernel:widetag-of object))
 	 (object (if (= type sb-vm:closure-header-widetag)
@@ -236,12 +243,23 @@
 		    )
 	    t
 	    nil)))
+#-:sbcl
+(defmethod inspected-parts ((object function))
+  (values (format nil "FUNCTION ~S.~@[~%Argument List: ~A~]." object (list)
+		  ;(sb-kernel:%simple-fun-arglist object)
+		  ;; Defined-from stuff used to be here. Someone took
+		  ;; it out. FIXME: We should make it easy to get
+		  ;; to DESCRIBE from the inspector.
+		  )
+	    t
+	    nil))
 
 (defmethod inspected-parts ((object vector))
   (values (format nil
 		  "The object is a ~:[~;displaced ~]VECTOR of length ~W.~%"
-		  (and (sb-impl::array-header-p object)
-		       (sb-impl::%array-displaced-p object))
+		  #+:sbcl (and (sb-impl::array-header-p object)
+			       (sb-impl::%array-displaced-p object))
+		  #-:sbcl nil
 		  (length object))
 	  nil
 	  ;; FIXME: Should we respect *INSPECT-LENGTH* here? If not, what
@@ -274,8 +292,9 @@
     (values (format nil "The object is ~:[a displaced~;an~] ARRAY of ~A.~%~
                          Its dimensions are ~S.~%"
 		    (array-element-type object)
-		    (and (sb-impl::array-header-p object)
-			 (sb-impl::%array-displaced-p object))
+		    #+:sbcl (and (sb-impl::array-header-p object)
+				 (sb-impl::%array-displaced-p object))
+		    #-:sbcl nil
 		    dimensions)
 	    t
 	    (nreverse reversed-elements))))
