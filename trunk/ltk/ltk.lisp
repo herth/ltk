@@ -104,6 +104,7 @@ wm                   x
 	   "*MB-ICONS*"
 	   "*TK*"
 	   "*WISH*"
+	   "*WISH-PATHNAME*"
 	   "ADD-PANE"
 	   "ADD-SEPARATOR"
 	   "AFTER"
@@ -324,12 +325,22 @@ wm                   x
   ;; print string readable, escaping all " and \
   ;; proc esc {s} {puts "\"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\""}
   (send-wish "proc esc {s} {puts \"\\\"[regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]\\\"\"} ")
+  (send-wish "proc escape {s} {return [regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]} ")
   ;;; proc senddata {s} {puts "(data \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
-  (send-wish "proc senddata {s} {puts \"(data \\\"[regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]\\\")\"} ")
+  (send-wish "proc senddata {s} {puts \"(:data [escape $s])\";flush stdout}")
+  (send-wish "proc senddatastring {s} {puts \"(:data \\\"[escape $s]\\\")\";flush stdout} ")
+  
   ;;; proc sendevent {s} {puts "(event \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
-  (send-wish "proc sendevent {s} {puts \"(event \\\"[regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]\\\")\"} ")
+  (send-wish "proc sendevent {s} {puts \"(:event \\\"[regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]\\\")\"} ")
   ;;; proc callback {s} {puts "(callback \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
-  (send-wish "proc callback {s} {puts \"(callback \\\"[regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]\\\")\"} ")
+
+  ;;; callback structure: (:callback "widgetname")          ;; for non-parameter callbacks
+  ;;;                     (:callback "widgetname" val)      ;; wideget returns non-string value
+  ;;;                     (:callback "widgetname" "string") ;; widget returns string value
+
+  (send-wish "proc callback {s} {puts \"(:callback \\\"$s\\\")\";flush stdout} ")
+  (send-wish "proc callbackval {s val} {puts \"(:callback \\\"$s\\\" $val)\"} ")
+  (send-wish "proc callbackstring {s val} {puts \"(:callback \\\"$s\\\" \\\"[escape $val]\\\")\"} ")
 
   (dolist (fun *init-wish-hook*)	; run init hook funktions 
     (funcall fun))
@@ -399,20 +410,23 @@ wm                   x
 
 (defun read-event ()
   (let ((pending (pop *event-queue*)))
+    ;(format t "re:pending:~a~%" pending) (force-output)
     (unless pending
-      (setf pending (read-wish)))
+      (setf pending (read-preserving-whitespace *wish* nil nil)))
+    ;(format t "re:returning:~a~%" pending) (force-output)
     pending
     ))
 
 (defun read-data ()
   (let ((d (read-wish)))
-    (loop while (not (eq (first d) 'data))
+    
+    (loop while (not (equal (first d) :data))
       do
       (setf *event-queue* (append *event-queue* (list d)))
       (format t "postponing event: ~a ~%" d)
       (force-output)
       (setf d (read-wish)))
-    d))
+    (second d)))
 
 ;;; sanitizing strings: lisp -> tcl (format *wish* "{~a}" string)
 ;;; in string escaped : {} mit \{ bzw \}  und \ mit \\
@@ -584,8 +598,11 @@ wm                   x
   (format-wish "~a configure -variable ~a" (path v) (name v)))
 
 (defmethod value ((v tkvariable))
-  (format-wish "puts $~a;flush stdout" (name v))
-  (read-wish))
+  ;(format-wish "puts $~a;flush stdout" (name v))
+  (format-wish "senddata $~a" (name v))
+  ;(read-wish)
+  (read-data)
+  )
 
 (defgeneric (setf value) (widget val))
 (defmethod (setf value) (val (v tkvariable))
@@ -603,8 +620,10 @@ wm                   x
   (format-wish "~a configure -textvariable ~a" (path v) (name v)))
 
 (defmethod text ((v tktextvariable))
-  (format-wish "esc $~a; flush stdout" (name v))
-  (read-wish))
+  ;(format-wish "esc $~a; flush stdout" (name v))
+  (format-wish "senddatastring $~a" (name v))
+  ;(read-wish)
+  (read-data))
 
 (defgeneric (setf text) (val variable))
 
@@ -982,7 +1001,9 @@ a list of numbers may be given"
 (defmethod initialize-instance :after ((sc scale) &key)
   (when (command sc)
     (add-callback (name sc) (command sc))
-    (format-wish "proc ~a-command {val} {puts -nonewline {(\"~a\" };puts -nonewline \"[~a get]\";puts {)};flush stdout }" (name sc) (name sc) (path sc)))
+    ;(format-wish "proc ~a-command {val} {puts -nonewline {(\"~a\" };puts -nonewline \"[~a get]\";puts {)};flush stdout }" (name sc) (name sc) (path sc))
+    (format-wish "proc ~a-command {val} {callbackval ~a $val}" (name sc) (name sc))
+    )
   
   (format-wish "scale ~a -variable ~a~@[ -from ~a~]~@[ -to ~a~]~@[ -orient ~(~a~)~] ~a" (path sc) (name sc)
 	       (scale-from sc)
@@ -994,8 +1015,9 @@ a list of numbers may be given"
 	       ))
 
 (defmethod value ((sc scale))
-  (format-wish "puts $~a;flush stdout" (name sc))
-  (read-wish))
+  ;(format-wish "puts $~a;flush stdout" (name sc))
+  (format-wish "senddata $~a" (name sc))
+  (read-data))
 
 (defmethod (setf value) (val (sc scale))
   (format-wish "set ~a ~a" (name sc) val))
@@ -1207,47 +1229,74 @@ set y [winfo y ~a]
 ;; canvas item functions
 
 (defun create-line (canvas coords)
-  (format-wish "puts [~a create line~{ ~a~}]" (path canvas) coords)
-  (read-wish))
+  (format-wish "senddata [~a create line~{ ~a~}]" (path canvas) coords)
+;  (format-wish "puts [~a create line~{ ~a~}]" (path canvas) coords)
+  (read-data))
+;  (read-wish))
 
 (defun create-line* (canvas &rest coords)
   (funcall #'create-line canvas coords))
 
 (defun create-polygon (canvas coords)
-  (format-wish "puts [~a create polygon~{ ~a~}]" (path canvas) coords)
-  (read-wish))
+  ;(format-wish "puts [~a create polygon~{ ~a~}]" (path canvas) coords)
+  ;(read-wish))
+  (format-wish "senddata [~a create polygon~{ ~a~}]" (path canvas) coords)
+  (read-data))
+  
 
 (defun create-oval (canvas x0 y0 x1 y1)
-  (format-wish "puts [~a create oval ~a ~a ~a ~a]" (path canvas) x0 y0 x1 y1)
-  (read-wish))
+  ;(format-wish "puts [~a create oval ~a ~a ~a ~a]" (path canvas) x0 y0 x1 y1)
+  ;(read-wish))
+  (format-wish "senddata [~a create oval ~a ~a ~a ~a]" (path canvas) x0 y0 x1 y1)
+  (read-data))
 
 (defun create-rectangle (canvas x0 y0 x1 y1)
-  (format-wish "puts [~a create rectangle ~a ~a ~a ~a]" (path canvas) x0 y0 x1 y1)
-  (read-wish))
+  ;(format-wish "puts [~a create rectangle ~a ~a ~a ~a]" (path canvas) x0 y0 x1 y1)
+  ;(read-wish))
+  (format-wish "senddata [~a create rectangle ~a ~a ~a ~a]" (path canvas) x0 y0 x1 y1)
+  (read-data))
 
 (defun create-text (canvas x y text)
-  (format-wish "puts [~a create text ~a ~a -anchor nw -text {~a}]" (path canvas) x y text)
-  (read-wish))
+  ;(format-wish "puts [~a create text ~a ~a -anchor nw -text {~a}]" (path canvas) x y text)
+  ;(read-wish))
+  (format-wish "senddata [~a create text ~a ~a -anchor nw -text {~a}]" (path canvas) x y text)
+  (read-data))
 
 (defun create-image (canvas x y &key image)
-  (format-wish "puts [~a create image ~a ~a -anchor nw~@[ -image ~a~]]" (path canvas) x y
-	    (and image (name image)))
-  (read-wish))
+  ;(format-wish "puts [~a create image ~a ~a -anchor nw~@[ -image ~a~]]" (path canvas) x y
+  ;	    (and image (name image)))
+  ;(read-wish))
+  (format-wish "senddata [~a create image ~a ~a -anchor nw~@[ -image ~a~]]" (path canvas) x y
+	       (and image (name image)))
+  (read-data))
+
 
 (defun create-bitmap (canvas x y &key (bitmap nil))
-  (format-wish "puts [~a create image ~a ~a -anchor nw~@[ -bitmap ~a~]]" (path canvas) x y
-	    (and bitmap (name bitmap)))
-  (read-wish))
+  ;(format-wish "puts [~a create image ~a ~a -anchor nw~@[ -bitmap ~a~]]" (path canvas) x y
+  ;	    (and bitmap (name bitmap)))
+  ;(read-wish))
+  (format-wish "senddata [~a create image ~a ~a -anchor nw~@[ -bitmap ~a~]]" (path canvas) x y
+	       (and bitmap (name bitmap)))
+  (read-data))
+
 
 (defun create-arc (canvas x0 y0 x1 y1 &key (start 0) (extent 180) (style "pieslice"))
-  (format-wish "puts [~a create arc ~a ~a ~a ~a -start ~a -extent ~a -style ~a]"
-		  (path canvas) x0 y0 x1 y1 start extent style)
-  (read-wish))
+;  (format-wish "puts [~a create arc ~a ~a ~a ~a -start ~a -extent ~a -style ~a]"
+;		  (path canvas) x0 y0 x1 y1 start extent style)
+;  (read-wish))
+  (format-wish "senddata [~a create arc ~a ~a ~a ~a -start ~a -extent ~a -style ~a]"
+	       (path canvas) x0 y0 x1 y1 start extent style)
+  (read-data))
+
 
 (defun create-window (canvas x y widget)
-  (format-wish "puts [~a create window ~a ~a -anchor nw -window ~a]"
-	    (path canvas) x y (path widget))
-  (read-wish))
+;  (format-wish "puts [~a create window ~a ~a -anchor nw -window ~a]"
+;	    (path canvas) x y (path widget))
+;  (read-wish))
+  (format-wish "senddata [~a create window ~a ~a -anchor nw -window ~a]"
+	       (path canvas) x y (path widget))
+  (read-data))
+
 
 (defun set-coords (canvas item coords)
   (format-wish "~a coords ~a~{ ~a~}" (path canvas) item coords))
@@ -1417,17 +1466,20 @@ set y [winfo y ~a]
 
 ;;; configure a widget parameter
 
-(defgeneric configure (w o v))
-(defmethod configure (widgt option value)
+(defgeneric configure (w o v &rest others))
+(defmethod configure (widgt option value &rest others)
   ;(format t "normal config~&")
-  (format-wish "~A configure -~(~A~) {~A}" (path widgt) option
+  (format-wish "~A configure -~(~A~) {~A} ~{ -~(~a~) {~(~a~)}~}" (path widgt) option 
 	    (if (stringp value) ;; There may be values that need to be passed as
 		value           ;; unmodified strings, so do not downcase strings
-	      (format nil "~(~a~)" value)))) ;; if its not a string, print it downcased
-                                             ;; (eg. symbols)
+	      (format nil "~(~a~)" value)) ;; if its not a string, print it downcased (eg. symbols)
+	    others
+
+	    )) 
+                                             ;; 
 
 ;;; for tkobjects, the name of the widget is taken
-(defmethod configure (wid option (value tkobject))
+(defmethod configure (wid option (value tkobject) &rest others)
   (format-wish "~A configure -~(~A~) {~A}" (path wid) option (path value)))
 
 (defgeneric cget (w o))
@@ -1700,13 +1752,17 @@ set y [winfo y ~a]
   (let ((*exit-mainloop* nil)
 	(*read-eval* nil))    ;;safety against malicious clients
   (loop
-    (let* ((l (read-preserving-whitespace *wish* nil nil)))
+    (let* ((l (read-event))) ;((l (read-preserving-whitespace *wish* nil nil)))
       (when (null l) (return))
       (if *debug-tk*
 	  (format t "l:~A<=~%" l))
       (force-output)
       (if (listp l)
-	  (callback (first l) (rest l))
+	  (if (eq (first l) :callback)
+	      (let ((params (rest l)))
+		;(format t "Callback received~%") (force-output)
+		(callback (first params) (rest params)))
+	    (callback (first l) (rest l)))
 	(progn
 	  (princ l)
 	  (force-output)
