@@ -19,8 +19,8 @@
 
 #|
 All tk commads as of version 8.4 with support information. "-" means not
-supported by purpos (look comment), "x" means supported, though some uncommon
-options may not be supported.
+supported by purpose (look comment), "x" means supported, though some
+options may not be supported. 
 
 command      supported comment
 bell                 x
@@ -149,6 +149,7 @@ wm                   x
 	   "LABELFRAME"
 	   "LISTBOX"
 	   "LISTBOX-APPEND"
+	   "LISTBOX-CLEAR"
 	   "LISTBOX-GET-SELECTION"
 	   "LISTBOX-SELECT"
 	   "LOAD-TEXT"
@@ -276,8 +277,9 @@ wm                   x
 
 ;;; send a string to wish
 (defun send-w(text)
-  (if *debug-tk*
-      (format t "~A~%" text))
+  (when *debug-tk*
+    (format t "~A~%" text)
+    (force-output))
   (format *w* "~A~%" text)
   (force-output *w*))
 
@@ -311,6 +313,31 @@ wm                   x
 (defun read-w()
   (read-line *w* nil nil))
 
+
+;;; sanitizing strings: lisp -> tcl (format *w* "{~a}" string)
+;;; in string escaped : {} mit \{ bzw \}  und \ mit \\
+
+(defun replace-char (char with txt)
+  (let ((pos (position char txt)))
+    (loop
+      while pos
+      do
+      (progn
+	(format t "txt: ~a -> " txt)
+	(setf txt (concatenate 'string (subseq txt 0 pos) with (subseq txt pos)))
+	(format t " ~a~&" txt)
+	(force-output)
+	(setf pos (position char txt :start (+ pos (length with)))))))
+  txt)
+
+(defun sanitize (txt)
+  (let ((pos (position #\{ txt)))
+    (when pos
+      (setf txt (concatenate 'string (subseq txt 0 pos) "\\" (subseq txt pos)))))
+  txt
+  )
+;;; tcl -> lisp: puts "$x" mit \ und " escaped
+;;;  puts [regsub {"} [regsub {\\} $x {\\\\}] {\"}]
 
 ;;; call to convert untility
 (defun convert(from to)
@@ -408,7 +435,7 @@ wm                   x
 ;; basic tk object
 (defclass tkobject ()
   ((name :accessor name :initarg :name :initform nil)
-   (created :accessor created :initform nil))
+      )
   )
 
 ;; basic class for all widgets 
@@ -455,8 +482,7 @@ wm                   x
   (send-w (format nil "~a configure -menu ~a" (if (master mb)
 						  (path (master mb))
 						".")
-		  (path mb)))
-  (setf (created mb) t))
+		  (path mb))))
 
 ;;; menues
 
@@ -498,8 +524,7 @@ wm                   x
 
 (defmethod create ((bt button))
   (add-callback (name bt) (command bt))
-  (send-w (format nil "button ~A -text {~A} -command {puts -nonewline {(\"~A\")};flush stdout}" (path bt) (text bt) (name bt)))
-  (setf (created bt) t))
+  (send-w (format nil "button ~A -text {~A} -command {puts -nonewline {(\"~A\")};flush stdout}" (path bt) (text bt) (name bt))))
 
 (defun make-button (master text command)
   (let* ((b (make-instance 'button :master master :text text :command command)))
@@ -517,8 +542,7 @@ wm                   x
       (progn
 	(add-callback (name cb) (command cb))
 	(send-w (format nil "checkbutton ~A -text {~A} -variable ~A -command {puts -nonewline {(\"~A\")};flush stdout}" (path cb) (text cb) (name cb) (name cb))))
-    (send-w (format nil "checkbutton ~A -text {~A} -variable ~A" (path cb) (text cb) (name cb))))
-  (setf (created cb) t))
+    (send-w (format nil "checkbutton ~A -text {~A} -variable ~A" (path cb) (text cb) (name cb)))))
 
 (defgeneric value (widget)
   (:documentation "reads the value of the variable associated with the widget"))
@@ -554,8 +578,7 @@ wm                   x
 		      (progn
 			(add-callback (name rb) (command rb))
 			(format nil "-command {puts -nonewline {(\"~A\")};flush stdout}" (name rb)))
-		    "")))
-  (setf (created rb) t))
+		    ""))))
 
 (defmethod value ((rb radio-button))
   "reads the content of the shared variable of the radio button set"
@@ -578,11 +601,10 @@ wm                   x
   )
 
 (defmethod create ((e entry))
-  (send-w (format nil "entry ~A ~A" (path e)
+  (send-w (format nil "entry ~A -textvariable ~A ~A" (path e) (name e)
 		  (if (width e)
 		      (format nil "-width ~a" (width e))
-		    "")))
-  (setf (created e) t))
+		    ""))))
 
 (defun make-entry (master)
   (make-instance 'entry :master master))
@@ -600,17 +622,23 @@ wm                   x
 (defmethod set-content ((e entry) txt)
   (send-w (format nil "~A delete 0 end;~A insert end {~A}" (path e) (path e) txt)))
 
-
 (defun entry-select (e from to)
   (send-w (format nil "~a selection range ~a ~a" (path e) from to)))
+
+(defmethod value ((e entry))
+  (send-w (format nil "puts \"\\\"$~a\\\"\";flush stdout" (name e)))
+  (read *w* nil nil))
+
+(defmethod (setf value) (val (e entry))
+  (send-w (format nil "set ~a {~a}" (name e) val)))
+
 
 ;;; frame widget 
 
 (defclass frame(widget)  ())
 
 (defmethod create ((f frame))
-  (send-w (format nil "frame ~A " (path f)))
-  (setf (created f) t))
+  (send-w (format nil "frame ~A " (path f))))
 
 (defun make-frame (master)
   (make-instance 'frame :master master))
@@ -622,8 +650,7 @@ wm                   x
    ))
 
 (defmethod create ((l labelframe))
-  (send-w (format nil "labelframe ~A -text {~A} " (path l) (text l)))
-  (setf (created l) t))
+  (send-w (format nil "labelframe ~A -text {~A} " (path l) (text l))))
 
 ;;; panedwindow widget
 
@@ -631,8 +658,7 @@ wm                   x
   ())
 
 (defmethod create ((pw paned-window))
-  (send-w (format nil "panedwindow ~a" (path pw)))
-  (setf (created pw) t))
+  (send-w (format nil "panedwindow ~a" (path pw))))
 
 (defgeneric pane-configure (window option value))
 (defmethod pane-configure ((pw paned-window) option value)
@@ -664,8 +690,7 @@ wm                   x
 		  (if (height l)
 		      (format nil " -height ~a" (height l))
 		    "")
-		  ))
-  (setf (created l) t))
+		  )))
 
 
 (defgeneric listbox-append (l vals))
@@ -692,7 +717,10 @@ a list of numbers may be given"
 	(send-w (format nil "~a selecttion set ~{ ~a~}" (path l) val))
       (send-w (format nil "~a selecttion set ~a" (path l) val)))))
 
+(defgeneric listbox-clear (l))
 
+(defmethod listbox-clear ((l listbox))
+  (send-w (format nil "~a delete 0 end" (path l))))
 
 (defclass scrolled-listbox (frame)
   ((listbox :accessor listbox)
@@ -717,7 +745,6 @@ a list of numbers may be given"
   (configure (vscroll sl) "command" (concatenate 'string (path (listbox sl)) " yview"))
   (configure (listbox sl) "xscrollcommand" (concatenate 'string (path (hscroll sl)) " set"))
   (configure (listbox sl) "yscrollcommand" (concatenate 'string (path (vscroll sl)) " set"))
-  (setf (created sl) t)
   )
 
 (defmethod listbox-append ((l scrolled-listbox) values)
@@ -749,8 +776,7 @@ a list of numbers may be given"
 		  (if (scale-orient sc)
 		      (format nil " -orient ~a" (scale-orient sc))
 		    "")
-		  ))
-  (setf (created sc) t))
+		  )))
 
 
 (defmethod value ((sc scale))
@@ -776,9 +802,7 @@ a list of numbers may be given"
 		  (if (spinbox-to sp)
 		      (format nil " -to ~a" (spinbox-to sp))
 		    "")
-		  ))
-  (setf (created sp) t))
-
+		  )))
 
 (defmethod value ((sp spinbox))
   (send-w (format nil "puts $~a;flush stdout" (name sp)))
@@ -796,9 +820,7 @@ a list of numbers may be given"
 (defmethod create ((w toplevel))
   (send-w (format nil "toplevel ~A" (path w)))
   (unless (protocol-destroy w)
-    (send-w (format nil "wm protocol ~a WM_DELETE_WINDOW {wm withdraw ~a}" (path w) (path w))))
-      
-  (setf (created w) t))
+    (send-w (format nil "wm protocol ~a WM_DELETE_WINDOW {wm withdraw ~a}" (path w) (path w)))))
 
 (defun make-toplevel (master)
   (make-instance 'toplevel :master master))
@@ -811,8 +833,7 @@ a list of numbers may be given"
    ))
 
 (defmethod create ((l label))
-  (send-w (format nil "label ~A -text {~A} " (path l) (text l)))
-  (setf (created l) t))
+  (send-w (format nil "label ~A -text {~A} " (path l) (text l))))
 
 (defun make-label (master text)
   (make-instance 'label :master master  :text text))
@@ -837,9 +858,7 @@ a list of numbers may be given"
 		    "")
 		  (if (message-width m)
 		      (format nil " -width {~a}" (message-width m))
-		    "")))
-  (setf (created m) t)
-  )
+		    ""))))
 
 
 ;;; scrollbar
@@ -852,8 +871,7 @@ a list of numbers may be given"
   (make-instance 'scrollbar :master master :orientation orientation))
 
 (defmethod create ((sb scrollbar))
-  (send-w (format nil "scrollbar ~a -orient ~a" (path sb) (orientation sb)))
-  (setf (created sb) t))
+  (send-w (format nil "scrollbar ~a -orient ~a" (path sb) (orientation sb))))
 
 (defclass scrolled-canvas (frame)
   ((canvas :accessor canvas)
@@ -881,7 +899,6 @@ a list of numbers may be given"
   (configure (vscroll sc) "command" (concatenate 'string (path (canvas sc)) " yview"))
   (configure (canvas sc) "xscrollcommand" (concatenate 'string (path (hscroll sc)) " set"))
   (configure (canvas sc) "yscrollcommand" (concatenate 'string (path (vscroll sc)) " set"))
-  (setf (created sc) t)
   )
 
 
@@ -906,8 +923,7 @@ a list of numbers may be given"
 		  (if (height c)
 		      (format nil " -height ~A" (height c))
 		    "")
-		  ))
-  (setf (created c) t))
+		  )))
 
 (defun make-canvas (master &key (width nil) (height nil) (xscroll nil) (yscroll nil))
   (make-instance 'canvas :master master :width width :height height :xscroll xscroll :yscroll yscroll))
@@ -982,8 +998,7 @@ a list of numbers may be given"
 		  (if (height txt)
 		      (format nil " -height ~A" (height txt))
 		    "")
-		  ))
-  (setf (created txt) t))
+		  )))
 
 (defun make-text (master &key (width nil) (height nil))
   (make-instance 'text :master master :width width :height height )
@@ -1050,9 +1065,7 @@ a list of numbers may be given"
   )
 
 (defmethod create ((p photo-image))
-  (send-w (format nil "image create photo ~A" (name p)))
-  (setf (created p) t)
-  )
+  (send-w (format nil "image create photo ~A" (name p))))
 
 (defun make-image ()
   (let* ((name (create-name))
@@ -1078,8 +1091,6 @@ a list of numbers may be given"
 
 (defgeneric pack (w &key side fill expand))
 (defmethod pack ((w widget) &key (side "left") (fill nil) (expand nil))
-  (unless (created w)
-    (create w))
   (send-w (format nil "pack ~A -side {~A}~A~A" (path w) side
 		  (if fill
 		      (format nil " -fill ~A" fill)
@@ -1090,10 +1101,7 @@ a list of numbers may be given"
 
 (defgeneric pack-forget (w))
 (defmethod pack-forget ((w widget))
-  (when (created w)
-    (send-w (format nil "pack forget ~A" (path w)))))
-
-
+  (send-w (format nil "pack forget ~A" (path w))))
 
 ;;; grid manager
 
@@ -1135,7 +1143,6 @@ a list of numbers may be given"
 ;;; for tkobjects, the name of the widget is taken
 (defmethod itemconfigure ((widget canvas) item option (value tkobject))
   (send-w (format nil "~A itemconfigure ~A -~A {~A}" (path widget) item option (name value))))
-
 
 ;;; wm functions
 

@@ -1,9 +1,28 @@
+#|
+  Copyright 2003 Peter Herth <herth@peter-herth.de>
+
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+
+|#
+
 (in-package ltk)
 
 
        
 
-;;; system dependant part
+;;; cmu version
 
 #+:cmu
 (defun ip-address-string (address)
@@ -63,10 +82,9 @@
 		)))
 	  (close fd)))))
 
-#+:sbcl
+#+:cmu
 (defun stop-server ()
   (setf *stop-remote* t))
-
 
 #+:cmu
 (defun start-mp ()
@@ -77,6 +95,11 @@
   (multiprocessing::make-process #'(lambda () (ltk-remote-server port))))
 
 
+;;; sbcl version
+
+#+:sbcl
+(defun stop-server ()
+  (setf *stop-remote* t))
 
 #+:sbcl
 (use-package :sb-thread)
@@ -122,6 +145,8 @@
 	  (socket-close socket)))))
 
 
+;; lispworks version
+
 (defvar *server* nil)
 #+:lispworks
 (defun stop-server ()
@@ -154,30 +179,7 @@
 
 
 
-(defun b-callback (txt)
-  (append-text txt (format nil "Halloele~%")))
-
-(defun lrt2setup ()
-  (let* ((txt (make-text nil :width 40 :height 10))
-	 (f (make-frame nil))
-	 (b (make-button f "Hallo" (lambda ()
-				     (b-callback txt ))))
-	 (b2 (make-button f "Quit" (lambda ()
-				     (setf *exit-mainloop* t))))
-	 (b3 (make-button f "Clear" (lambda ()
-				       (clear-text txt ))))
-	  )
-    (pack b :side "left")
-    (pack b3 :side "left")
-    (pack b2 :side "left")
-    (pack f :side "top")
-    (pack txt :side "bottom")
-    )
-  )
-
-(defun lrt2 (port)
-  (with-remote-ltk port
-		   (lrt2setup)))
+;;; simple test function
 
 (defun lrtest (port)
   (with-remote-ltk
@@ -246,58 +248,3 @@
 
      )))
 
-(defun reyes ()
-  (with-remote-ltk 
-   8080
-   (let* ((*debug-tk* nil)
-	  (w (screen-width))
-	  (h (screen-height))
-	  (c (make-instance 'canvas :width 400 :height 300))
-	  (e1 (create-oval c 10 10 190 290))
-	  (e2 (create-oval c 210 10 390 290))
-	  (p1 (create-oval c 10 10 40 40))
-	  (p2 (create-oval c 10 10 40 40))
-	  (old-x 0)
-	  (old-y 0))
-     (setf *debug-tk* nil)
-     (labels ((update ()
-                (let* ((pos (screen-mouse))
-			     (wx (window-x *tk*))
-			     (wy (window-y *tk*))
-			     (width (window-width *tk*))
-			     (height (window-height *tk*))
-			     (mx (first pos))
-			     (my (second pos))
-			     (x (truncate (* width (/ mx w))))
-			     (y (truncate (* height (/ my h))))
-			     (diam (truncate width 8))
-			     (dx1 (- mx (+ wx (truncate width 4))))
-			     (dy1 (- my (+ wy (truncate height 2))))
-			     (dx2 (- mx (+ wx (* 3 (truncate width 4)))))
-			     (dy2 (- my (+ wy (truncate height 2))))
-			     (p1x (+ (- (truncate width 4)  (truncate diam 2)) (truncate (* width  dx1) (* 4.5 w))))
-			     (p1y (+ (- (truncate height 2) (truncate diam 2)) (truncate (* height dy1) (* 2.3 h))))
-			     (p2x (+ (- (* 3 (truncate width 4))  (truncate diam 2)) (truncate (*  width  dx2) (* 4.5 w))))
-			     (p2y (+ (- (truncate height 2) (truncate diam 2)) (truncate (* height dy2) (* 2.3 h))))
-
-			     )
-			(setf *debug-tk* nil)
-			(unless (and (= x old-x)
-				     (= y old-y))
-			  (set-coords c e1 (list 10 10 (- (truncate width 2) 10) (- height 10)))
-			  (set-coords c e2 (list (+ (truncate width 2) 10) 10  (- width 10) (- height 10)))
-			  (set-coords c p1 (list p1x p1y (+ diam p1x) (+ diam p1y)))
-			  (set-coords c p2 (list p2x p2y (+ diam p2x) (+ diam p2y)))
-			  (setf old-x x
-				old-y y))
-			)
-		      (after 100 #'update)))
-     (pack c :expand 1 :fill "both")
-     (itemconfigure c e1 "width" 10)
-     (itemconfigure c e2 "width" 10)
-     (itemconfigure c p1 "fill" "blue")
-     (itemconfigure c p2 "fill" "blue")
-     ;(iconwindow *tk* *tk*)
-     (after 100 #'update)
-     ))))
-	    
