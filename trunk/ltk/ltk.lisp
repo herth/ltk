@@ -35,10 +35,10 @@ cursors              x
 destroy              x
 entry                x
 event                  create and manage virtual events
-focus                  focus management functions
+focus                x focus management functions
 font
 frame                x
-grab                 - 
+grab                  
 grid                 x
 image                x 
 keysyms              - constants only
@@ -51,7 +51,7 @@ menu                 x
 menubutton           x
 message              x 
 option               -
-options              -
+options              - only helpfile
 pack                 x
 panedwindow          x
 photo                x 
@@ -65,7 +65,7 @@ send
 spinbox              x
 text                 x
 tk
-tk_bisque            -
+tk_bisque            - only for tk backwards compatibility
 tk_chooseColor
 tk_chooseDirectory
 tk_dialog
@@ -190,10 +190,8 @@ toplevel             x
 	   "FORMAT-WISH"
 	   "FRAME"
 	   "GEOMETRY"
-;	   "GET-CONTENT"
 	   "GET-OPEN-FILE"
 	   "GET-SAVE-FILE"
-;	   "GET-TEXT"
 	   "GRID"
 	   "GRID-COLUMNCONFIGURE"
 	   "GRID-CONFIGURE"
@@ -604,7 +602,8 @@ toplevel             x
 ;; basic tk object
 (defclass tkobject ()
   ((name :accessor name :initarg :name :initform nil)
-   ))
+   )
+  (:documentation "Base class for every Tk object"))
 
 (defgeneric path (w))
 (defmethod path ((w (eql nil))) nil)
@@ -613,7 +612,8 @@ toplevel             x
 (defclass widget(tkobject)
   ((master :accessor master :initarg :master :initform nil) ;; parent widget or nil
    (path :reader path :initarg :path :initform nil)         ;; pathname to refer to the widget
-   ))
+   )
+  (:documentation "Base class for all widget types"))
 
 ;; creating of the tk widget after creating the clos object
 (defmethod initialize-instance :after ((w widget) &key)
@@ -2005,7 +2005,7 @@ set y [winfo y ~a]
 	 (ltk::*after-counter* 1)
 	 (ltk::*event-queue* nil))
      (start-wish)
-     (force-focus *tk*)
+     ;(force-focus *tk*)
      ,@body
      (mainloop)))
        
