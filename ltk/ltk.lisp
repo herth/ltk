@@ -129,6 +129,7 @@ wm                   x
 	   "DO-EXECUTE"
 	   "DO-MSG"
 	   "ENTRY"
+	   "ENTRY-SELECT"
 	   "EXIT-WISH"
 	   "FORGET-PANE"
 	   "FRAME"
@@ -182,6 +183,7 @@ wm                   x
 	   "PACK-FORGET"
 	   "PANE-CONFIGURE"
 	   "PANED-WINDOW"
+	   "PATH"
 	   "PHOTO-IMAGE"
 	   "POSTSCRIPT"
 	   "RADIO-BUTTON"
@@ -655,10 +657,14 @@ wm                   x
 ;;; panedwindow widget
 
 (defclass paned-window (widget)
-  ())
+  ((orient :accessor pane-orient :initarg :orient  :initform nil)))
 
 (defmethod create ((pw paned-window))
-  (send-w (format nil "panedwindow ~a" (path pw))))
+  (send-w (format nil "panedwindow ~a~a" (path pw)
+		  (if (pane-orient pw)
+		      (format nil " -orient ~a" (pane-orient pw))
+		    "")
+		  )))
 
 (defgeneric pane-configure (window option value))
 (defmethod pane-configure ((pw paned-window) option value)
