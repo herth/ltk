@@ -51,7 +51,7 @@ loadTk               -
 lower                x
 menu                 x
 menubutton           x
-message
+message              x 
 option               -
 options              -
 pack                 x
@@ -98,12 +98,16 @@ wm                   x
 	#+:sbcl "SB-EXT"
 	)
   (:export "TEST"
+	   "*CURSORS*"
+	   "*DEBUG-TK*"
+	   "*EXIT-MAINLOOP*"
+	   "*MB-ICONS*"
+	   "*TK*"
 	   "ADD-PANE"
-	   "FORGET-PANE"
 	   "AFTER"
 	   "APPEND-TEXT"
-	   "ASK-YESNO"
 	   "ASK-OKCANCEL"
+	   "ASK-YESNO"
 	   "BELL"
 	   "BIND"
 	   "BUTTON"
@@ -117,16 +121,18 @@ wm                   x
 	   "CREATE-IMAGE"
 	   "CREATE-LINE"
 	   "CREATE-MENU2"
+	   "CREATE-OVAL"
 	   "CREATE-POLYGON"
 	   "CREATE-TEXT"
-	   "*CURSORS*"
-	   "EXIT-WISH"
+	   "DEICONIFY"
 	   "DESTROY"
 	   "DO-EXECUTE"
 	   "DO-MSG"
 	   "ENTRY"
-	   "*EXIT-MAINLOOP*"
+	   "EXIT-WISH"
+	   "FORGET-PANE"
 	   "FRAME"
+	   "GEOMETRY"
 	   "GET-CONTENT"
 	   "GET-OPEN-FILE"
 	   "GET-SAVE-FILE"
@@ -135,6 +141,8 @@ wm                   x
 	   "GRID-COLUMNCONFIGURE"
 	   "GRID-CONFIGURE"
 	   "GRID-ROWCONFIGURE"
+	   "ICONIFY"
+	   "ICONWINDOW"
 	   "IMAGE-LOAD"
 	   "ITEMCONFIGURE"
 	   "LABEL"
@@ -149,50 +157,67 @@ wm                   x
 	   "MAKE-BUTTON"
 	   "MAKE-CANVAS"
 	   "MAKE-ENTRY"
-	   "MAKE-LABEL"
 	   "MAKE-FRAME"
 	   "MAKE-IMAGE"
+	   "MAKE-LABEL"
 	   "MAKE-MENU"
 	   "MAKE-MENUBAR"
 	   "MAKE-MENUBUTTON"
-	   "MAKE-SCROLLED-CANVAS"
 	   "MAKE-SCROLLBAR"
+	   "MAKE-SCROLLED-CANVAS"
 	   "MAKE-TEXT"
 	   "MAKE-TOPLEVEL"
-	   "*MB-ICONS*"
+	   "MAXSIZE"
 	   "MENU"
 	   "MENUBAR"
 	   "MENUBUTTON"
+	   "MESSAGE"
 	   "MESSAGE-BOX"
 	   "MINSIZE"
+	   "NORMALIZE"
+	   "ON-CLOSE"
+	   "ON-FOCUS"
 	   "PACK"
 	   "PACK-FORGET"
-	   "PANED-WINDOW"
 	   "PANE-CONFIGURE"
+	   "PANED-WINDOW"
 	   "PHOTO-IMAGE"
 	   "POSTSCRIPT"
 	   "RADIO-BUTTON"
 	   "RAISE"
 	   "SAVE-TEXT"
 	   "SCALE"
+	   "SCREEN-HEIGHT"
+	   "SCREEN-HEIGHT-MM"
+	   "SCREEN-MOUSE"
+	   "SCREEN-MOUSE-X"
+	   "SCREEN-MOUSE-Y"
+	   "SCREEN-WIDTH"
+	   "SCREEN-WIDTH-MM"
 	   "SCROLLBAR"
 	   "SCROLLED-CANVAS"
+	   "SCROLLED-LISTBOX"
 	   "SCROLLREGION"
 	   "SEE"
 	   "SET-CONTENT"
 	   "SET-COORDS"
+	   "SET-GEOMETRY"
 	   "SET-TEXT"
 	   "SPINBOX"
 	   "START-W"
 	   "TAG-BIND"
 	   "TAG-CONFIGURE"
 	   "TEXT"
-	   "*TK*"
 	   "TKOBJECT"
 	   "TOPLEVEL"
 	   "VALUE"
 	   "WIDGET"
+	   "WINDOW-HEIGHT"
+	   "WINDOW-WIDTH"
+	   "WINDOW-X"
+	   "WINDOW-Y"
 	   "WITH-LTK"
+	   "WITHDRAW"
 	   "WM-TITLE"
 	   ))
 
@@ -626,8 +651,10 @@ wm                   x
 
 (defclass listbox (widget)
   ((width  :accessor width  :initarg :width  :initform nil)
-   (height :accessor height :initarg :height :initform nil))
-  )
+   (height :accessor height :initarg :height :initform nil)
+   (xscroll :accessor xscroll :initarg :xscroll :initform nil)
+   (yscroll :accessor yscroll :initarg :yscroll :initform nil)
+   ))
 
 (defmethod create ((l listbox))
   (send-w (format nil "listbox ~a~a~a" (path l)
@@ -666,6 +693,43 @@ a list of numbers may be given"
       (send-w (format nil "~a selecttion set ~a" (path l) val)))))
 
 
+
+(defclass scrolled-listbox (frame)
+  ((listbox :accessor listbox)
+   (hscroll :accessor hscroll)
+   (vscroll :accessor vscroll)
+   ))
+
+(defmethod create ((sl scrolled-listbox))
+  (call-next-method)
+  (setf (hscroll sl) (make-scrollbar sl :orientation "horizontal"))
+  (setf (vscroll sl) (make-scrollbar sl))
+  (setf (listbox sl) (make-instance 'listbox :master sl :xscroll (hscroll sl) :yscroll (vscroll sl)))
+  (grid (listbox sl) 0 0 :sticky "news")
+  (grid (hscroll sl) 1 0 :sticky "we")
+  (grid (vscroll sl) 0 1 :sticky "ns")
+  (grid-columnconfigure sl 0 "weight" 1)
+  (grid-columnconfigure sl 1 "weight" 0)
+  (grid-rowconfigure sl 0 "weight" 1)
+  (grid-rowconfigure sl 1 "weight" 0)
+ 
+  (configure (hscroll sl) "command" (concatenate 'string (path (listbox sl)) " xview"))
+  (configure (vscroll sl) "command" (concatenate 'string (path (listbox sl)) " yview"))
+  (configure (listbox sl) "xscrollcommand" (concatenate 'string (path (hscroll sl)) " set"))
+  (configure (listbox sl) "yscrollcommand" (concatenate 'string (path (vscroll sl)) " set"))
+  (setf (created sl) t)
+  )
+
+(defmethod listbox-append ((l scrolled-listbox) values)
+  (listbox-append (listbox l) values))
+
+(defmethod listbox-get-selection ((l scrolled-listbox))
+  (listbox-get-selection (listbox l)))
+
+(defmethod listbox-select ((l scrolled-listbox) val)
+  (listbox-select (listbox l) val))
+
+  
 ;;; scale widget
 
 (defclass scale (widget)
@@ -752,6 +816,30 @@ a list of numbers may be given"
 
 (defun make-label (master text)
   (make-instance 'label :master master  :text text))
+
+;;; message widget
+
+(defclass message (widget)
+  ((text    :accessor text            :initarg :text    :initform "")
+   (aspect  :accessor message-aspect  :initarg :aspect  :initform nil)
+   (justify :accessor message-justify :initarg :justify :initform nil)
+   (width   :accessor message-width   :initarg :width   :initform nil)
+   ))
+
+(defmethod create ((m message))
+  (send-w (format nil "message ~A -text {~A} ~A~A~A"
+		  (path m) (text m)
+		  (if (message-aspect m)
+		      (format nil " -aspect {~a}" (message-aspect m))
+		    "")
+		  (if (message-justify m)
+		      (format nil " -justify {~a}" (message-justify m))
+		    "")
+		  (if (message-width m)
+		      (format nil " -width {~a}" (message-width m))
+		    "")))
+  (setf (created m) t)
+  )
 
 
 ;;; scrollbar
@@ -1009,7 +1097,7 @@ a list of numbers may be given"
 
 ;;; grid manager
 
-(defgeneric grid (w r c &key))
+(defgeneric grid (w r c &key sticky))
 (defmethod grid ((w widget) row column &key (sticky nil))
   (send-w (format nil "grid ~a -row ~a -column ~a ~a" (path w) row column
 		  (if sticky
@@ -1086,8 +1174,8 @@ a list of numbers may be given"
 
 (defgeneric set-geometry (w width height x y))
 (defmethod set-geometry ((tl toplevel) width height x y)
-  (send-w (format nil "wm geometry ~a ~ax~a+~a+~a" (path tl) width height x y))
-  (do-read-line))
+  (send-w (format nil "wm geometry ~a ~ax~a+~a+~a" (path tl) width height x y)))
+  ;(do-read-line))
 
 (defgeneric on-close (w fun))
 (defmethod on-close ((tl toplevel) fun)
@@ -1112,52 +1200,59 @@ a list of numbers may be given"
 ;;; winfo functions
 
 (defun screen-width (&optional (w nil))
+  "give the width of the screen in pixels (if w is given, of the screen the widget w is displayed on)"
   (send-w (format nil "puts [winfo screenwidth ~a]" (if w (path w) ".")))
-  (read *w*))
+  (read *w* nil nil))
 
 (defun screen-height (&optional (w nil))
+  "give the height of the screen in pixels (if w is given, of the screen the widget w is displayed on)"
   (send-w (format nil "puts [winfo screenheight ~a]" (if w (path w) ".")))
-  (read *w*))
+  (read *w* nil nil))
 
 (defun screen-width-mm (&optional (w nil))
+  "give the width of the screen in mm (if w is given, of the screen the widget w is displayed on)"
   (send-w (format nil "puts [winfo screenmmwidth ~a]" (if w (path w) ".")))
-  (read *w*))
+  (read *w* nil nil))
 
 (defun screen-heigth-mm (&optional (w nil))
+  "give the height of the screen in mm (if w is given, of the screen the widget w is displayed on)"
   (send-w (format nil "puts [winfo screenmmheigth ~a]" (if w (path w) ".")))
-  (read *w*))
+  (read *w* nil nil))
 
 (defun screen-mouse-x (&optional (w nil))
+  "give x position of the mouse on screen (if w is given, of the screen the widget w is displayed on)"
   (send-w (format nil "puts [winfo pointerx ~a]" (if w (path w) ".")))
-  (read *w*))
+  (read *w* nil nil))
 
 (defun screen-mouse-y (&optional (w nil))
+  "give y position of the mouse on screen (if w is given, of the screen the widget w is displayed on)"
   (send-w (format nil "puts [winfo pointery ~a]" (if w (path w) ".")))
-  (read *w*))
+  (read *w* nil nil))
 
 (defun screen-mouse (&optional (w nil))
+  "give the position of the mouse on screen as (x y) (if w is given, of the screen the widget w is displayed on)"
   (send-w (format nil "puts -nonewline {(};puts -nonewline [winfo pointerxy ~a];puts {)}" (if w (path w) ".")))
-  (read *w*))
+  (read *w* nil nil))
 
 (defun window-width (tl)
+  "give the width of the toplevel in pixels"
   (send-w (format nil "puts [winfo width ~a]" (path tl)))
   (read *w* nil nil))
 
 (defun window-height (tl)
+  "give the height of the toplevel in pixels"
   (send-w (format nil "puts [winfo height ~a]" (path tl)))
   (read *w* nil nil))
 
 (defun window-x (tl)
+  "give the x position of the toplevel in pixels"
   (send-w (format nil "puts [winfo rootx ~a]" (path tl)))
   (read *w* nil nil))
 
 (defun window-y (tl)
+  "give the y position of the toplevel in pixels"
   (send-w (format nil "puts [winfo rooty ~a]" (path tl)))
   (read *w* nil nil))
-
-
-
-
 
 
 
@@ -1437,48 +1532,32 @@ a list of numbers may be given"
   (setf *do-rotate* nil)
   )
 
+
+;;;; default ltk test
+
 (defun test()
   (wt)
 ;  (read-all *w*)
   (mainloop))
 
+;;;; radio button test
 
 (defun rbtest ()
   (with-ltk
    (let* ((buttons nil))
      (dotimes (i 20)
-       (push (make-instance 'radio-button :text (format nil "Radio ~a" i) :variable "radios" :value (format nil "R~a" i)) buttons))
+       (push (make-instance 'radio-button
+			    :text (format nil "Radio ~a" i)
+			    :variable "radios"
+			    :value (format nil "R~a" i)) buttons))
      (setf buttons (nreverse buttons))
      (dolist (b buttons)
        (pack b :side "top"))
      (setf (value (first buttons)) "R3")
      )))
 
-(defun ltk-eyes2 ()
-  (with-ltk
-   (let* ((*debug-tk* nil)
-	  (w (screen-width))
-	  (h (screen-height))
-	  (c (make-instance 'canvas :width 400 :height 300))
-	  (e1 (create-oval c 10 10 40 40))
-	  (e2 (create-oval c 10 10 40 40)))
-     (setf *debug-tk* nil)
-     (labels ((update ()
-		      (let* ((pos (screen-mouse))
-			     (x (truncate (* 300 (/ (first pos) w))))
-			     (y (truncate (* 200 (/ (second pos) h))))
-			     )
-					;(format t "x: ~a y: ~a~&" x y)
-			(force-output)
-			(setf *debug-tk* nil)
-			(set-coords c e1 (list (+ 10 x) (+ 10 y) (+ 10 30 x) (+ 10 30 y)))
-			(set-coords c e2 (list (+ 50 x) (+ 10 y) (+ 50 30 x) (+ 10 30 y))))
-		      (after 50 #'update)))
-     (pack c)
-     (itemconfigure c e1 "fill" "blue")
-     (itemconfigure c e2 "fill" "blue")
-     (after 100 #'update)
-     ))))
+
+;;;; the eyes :)
 
 (defun ltk-eyes ()
   (with-ltk
@@ -1530,7 +1609,6 @@ a list of numbers may be given"
      (itemconfigure c e2 "width" 10)
      (itemconfigure c p1 "fill" "blue")
      (itemconfigure c p2 "fill" "blue")
-     ;(iconwindow *tk* *tk*)
      (after 100 #'update)
      ))))
 	    
