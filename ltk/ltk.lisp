@@ -184,6 +184,8 @@ toplevel             x
 	   "EVENT-Y"
 	   "EVENT-KEYCODE"
 	   "EVENT-CHAR"
+	   "FOCUS"
+	   "FORCE-FOCUS"
 	   "FORGET-PANE"
 	   "FORMAT-WISH"
 	   "FRAME"
@@ -277,11 +279,9 @@ toplevel             x
 	   "SCROLLREGION"
 	   "SEE"
 	   "SEND-WISH"
-;	   "SET-CONTENT"
 	   "SET-COORDS"
 	   "SET-COORDS*"
 	   "SET-GEOMETRY"
-;	   "SET-TEXT"
 	   "SPINBOX"
 	   "START-WISH"
 	   "TAG-BIND"
@@ -353,7 +353,7 @@ toplevel             x
 		   (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* 0.863)
+(defvar *ltk-version* 0.864)
 ;;; global var for holding the communication stream
 (defvar *wish* nil)
 
@@ -420,15 +420,6 @@ toplevel             x
   (apply #'format *wish* control args)
   (format *wish* "~%")
   (force-output *wish*))
-
-#|
-;;; wrapper around read-line to compensate for slight differences between lisp versions
-(defun do-read-line()
-  (let ((c (read-line *wish*)))
-    #+:lispworks (setf c (string-right-trim '(#\Newline #\Return #\Linefeed) c))
-    c))
-|#
-
 
 ;; differences:
 ;; cmucl/sbcl READ expressions only if there is one more character in the stream, if
@@ -541,12 +532,6 @@ toplevel             x
 ;;; after <time> msec call function <fun> <label> is used to have
 ;;; several events scheduled at the same time
 
-;(defun after (time fun &optional label)
-;  (let ((name (format nil "after~@[~a~]" label)))
-;    (add-callback name fun)
-;    ;(format-wish "after ~a {puts -nonewline {(\"~A\") };flush stdout}" time name)))
-;    (format-wish "after ~a {callback ~A}" time name)))
-
 (defun after (time fun)
   (let ((name (format nil "after~a" (incf *after-counter*))))
     (ltk::add-callback name
@@ -562,9 +547,6 @@ toplevel             x
 			(funcall fun)
 			(remove-callback name)))
    (ltk::format-wish "after idle {callback ~A}" name)))
-
-
-
 
 ;; tool functions used by the objects
 
@@ -707,8 +689,6 @@ toplevel             x
 
 (defclass tkvariable ()
   ())
-
-;(defmethod init :after ((v tkvariable))
 
 (defmethod initialize-instance :around ((v tkvariable) &key)
   (call-next-method)
@@ -1734,6 +1714,7 @@ set y [winfo y ~a]
   (itemraise (canvas item) (handle item) (and above (handle above))))
 
 
+
 ;;; wm functions
 
 (defgeneric wm-title (widget title))
@@ -1846,6 +1827,14 @@ set y [winfo y ~a]
   "give the y position of the toplevel in pixels"
   (format-wish "senddata [winfo rooty ~a];flush stdout" (path tl))
   (read-data))
+
+;;; misc functions
+
+(defun focus (widget)
+  (format-wish "focus ~a" (path widget)))
+
+(defun force-focus (widget)
+  (format-wish "focus -force ~a" (path widget)))
 
 ;;; Dialog functions
 
@@ -2016,6 +2005,7 @@ set y [winfo y ~a]
 	 (ltk::*after-counter* 1)
 	 (ltk::*event-queue* nil))
      (start-wish)
+     (force-focus *tk*)
      ,@body
      (mainloop)))
        
