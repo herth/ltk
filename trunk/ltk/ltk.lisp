@@ -5,6 +5,10 @@
 ;;; this ist the only function to adapted to other lisps
 
 (defun do-execute (program args &optional (wt nil))
+  "execute program with args a list containing the arguments passed to the program
+   if wt is non-nil, the function will wait for the execution of the program to return.
+   returns a two way stream connected to stdin/stdout of the program"
+  
   (let ((fullstring program))
     (dolist (a args)
       (setf fullstring (concatenate 'string fullstring " " a)))
@@ -44,8 +48,8 @@
 
 ;;; start wish and set *w*
 (defun start-w ()
-  #+:sbcl (setf *w* (do-execute "/usr/bin/wish" '("-name" "w.lisp")))
-  #-:sbcl (setf *w* (do-execute "wish" '("-name" "w.lisp"))))
+  #+:sbcl (setf *w* (do-execute "/usr/bin/wish" '("-name" "LTK")))
+  #-:sbcl (setf *w* (do-execute "wish" '("-name" "LTK"))))
 
 ;;; send a string to wish
 (defun send-w(text)
@@ -392,12 +396,35 @@
   (make-instance 'text :master master :width width :height height )
   )
 
-(defmethod append-text ((txt text) text)
-  (send-w (format nil "~a insert end {~a}" (path txt) text))
-  )
-
+(defmethod append-text ((txt text) text &optional (tag nil))
+  (send-w (format nil "~a insert end {~a} ~a" (path txt) text (if tag
+								  tag
+								""))))
 (defmethod see((txt text) pos)
   (send-w (format nil "~a see ~a" (path txt) pos)))
+
+(defmethod tag-configure ((txt text) tag option value)
+  (send-w (format nil "~a tag configure ~a -~a {~a}" (path txt) tag option value)))
+
+(defmethod get-text((txt text))
+  (send-w (format nil "set file [open \"/tmp/ltk\" \"w\"];puts $file [~a get 1.0 end];close $file;puts \"asdf\"" (path txt)))
+  (read-line *w*)
+  (let (erg)
+    (with-open-file (stream "/tmp/ltk" :direction :input)
+      (setf erg (read-all stream)))
+    (delete-file "/tmp/ltk")
+    erg)
+  )
+
+(defmethod save-text((txt text) filename)
+  (send-w (format nil "set file [open {~a} \"w\"];puts $file [~a get 1.0 end];close $file;puts \"asdf\"" filename (path txt)))
+  (read-line *w*)
+  )
+
+(defmethod load-text((txt text) filename)
+  (send-w (format nil "set file [open {~a} \"r\"];~a delete 1.0 end;~a insert end [read $file];close $file;puts \"asdf\"" filename (path txt) (path txt)))
+  (read-line *w*)
+  )
 
 ;;; photo image object
 
@@ -638,6 +665,13 @@
   (send-w "exit"))
 
 
+(defmacro with-ltk (&rest body)
+  `(progn
+     (start-w)
+     ,@body
+     (mainloop)))
+       
+
 ;;;; testing functions
 
 (defvar *do-rotate* nil)
@@ -758,3 +792,32 @@
 ;  (read-all *w*)
   (mainloop))
 
+
+(defun wt2()
+  (start-w)
+  (let* ((text (make-text nil))
+	 (f (make-frame nil))
+	 (b (make-button f "get text" (lambda () (format t "=>~a<=~&" (get-text text)))))
+	 (b2 (make-button f "save text" (lambda () (save-text text "/tmp/ltktest.txt"))))
+	 (b3 (make-button f "load text" (lambda () (load-text text "ltk.lisp"))))
+	 )
+    (pack text :side "top" :expand 1 :fill "both")
+    (pack f :side "bottom"  :fill "x")
+    (pack b :side "left")
+    (pack b2 :side "left")
+    (pack b3 :side "left")
+    (configure text "font" "Courier 12")
+    (tag-configure text "t1" "font" "Courier 20")
+    (append-text text "asdf")
+    (append-text text #\Newline)    
+    (append-text text "xyz" "t1")
+    
+    ))
+
+(defun test2()
+  (wt2)
+  (mainloop))
+
+(defun hello-1()
+  (with-ltk
+   (pack (make-button nil "Press Me" (lambda () (format t "Hello World!~&"))))))
