@@ -206,3 +206,23 @@ o history-entry
     (setf (entries entry) (remove-nth index (entries entry)))
     (menu-delete (menu entry) index))
   )
+
+
+(defun demo ()
+  (with-ltk
+   (let* ((status '(("critical" 10 "red")
+		    ("severe"  20 "orange")
+		    ("normal" 50 "darkgreen")
+		    ))
+	  (f1 (make-instance 'frame))
+	  (lstatus (make-instance 'label :master f1 :text "Status: "))
+	  (bar (make-instance 'progress :master f1))
+	  (f2 (make-instance 'frame))
+	  (entry (make-instance 'menu-entry :master f2 :content (mapcar #'first status)))
+	  )
+     (pack f1 :side :top)
+     (pack lstatus :side :left)
+     (pack bar :side :left)
+     (pack f2 :side :top)
+     (pack entry :side :left)
+     )))

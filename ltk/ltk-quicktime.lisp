@@ -1,11 +1,13 @@
 ;;; quicktime specific extension to ltk
+;;; requires the QuickTimeTcl tk extension installed (the full distribution
+;;; of TkAqua includes it)
 
 (defpackage "LTK-QUICKTIME"
   (:use "COMMON-LISP"
 	"LTK"
 	)
   (:export
-   "MOVIE"
+   "QUICKTIME"
    "PLAY-MOVIE"
    "STOP-MOVIE"
    ))
@@ -18,20 +20,20 @@
 				   (send-wish "package require QuickTimeTcl"))
 				       ))))
 
-(defclass movie (widget)
+(defclass quicktime (widget)
   (
    ))
 
-(defmethod initialize-instance :after ((m movie) &key file url width height resizable)
+(defmethod initialize-instance :after ((m quicktime) &key file url width height resizable)
   (format-wish "movie ~a~@[ -file {~a}~]~@[ -url {~a}~]~@[ -width ~a~]~
                 ~@[ -height ~a~]~@[~* -resizable 1~]"
-	       (path m) file url width height resizable))
+	       (widget-path m) file url width height resizable))
 
-(defun play-movie (movie)
-  (format-wish "~a play" (path movie)))
+(defun play-movie (quicktime)
+  (format-wish "~a play" (widget-path quicktime)))
 
-(defun stop-movie (movie)
-  (format-wish "~a stop" (path movie)))
+(defun stop-movie (quicktime)
+  (format-wish "~a stop" (widget-path quicktime)))
 
 
 #|
