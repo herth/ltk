@@ -32,7 +32,7 @@
 	   (description inspector) description
 	   (elements inspector) elements)
      (configure (title inspector) "text" (format nil "inspecting: ~a ~s" (type-of value) value))
-     (set-text (desc inspector) description)
+     (setf (text (desc inspector)) description)
      (listbox-clear (fields inspector))
      (if named-p
 	 (listbox-append (fields inspector)
@@ -107,7 +107,7 @@
 
      (bind entry "<KeyPress-Return>"
 	   (lambda ()
-	     (let ((txt (get-content entry)))
+	     (let ((txt (text entry)))
 	       (multiple-value-bind (result condition)		   
 		   (ignore-errors 
 		     (with-input-from-string
@@ -120,7 +120,7 @@
 		      ))
 		 (declare (ignore condition))
 		 (unless result
-		   (set-content entry (format nil "Failed to evaluate: ~a" txt))
+		   (setf (text entry) (format nil "Failed to evaluate: ~a" txt))
 		   ))
 	       (entry-select entry 0 "end")
 	       )))
@@ -128,15 +128,15 @@
 	   (lambda ()
 	     (let ((val (nth (+ 1 history-pos) history)))
 	       (when val
-		 (set-content entry val)
+		 (setf (text entry) val)
 		 (incf history-pos)))))
      (bind entry "<KeyPress-Down>"
 	   (lambda ()
 	     (if (> history-pos 0)
 		 (progn
 		   (decf history-pos)
-		   (set-content entry (nth history-pos history)))
-	       (set-content entry ""))))
+		   (setf (text entry) (nth history-pos history)))
+	       (setf (text entry) ""))))
 
 	     
 
