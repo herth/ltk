@@ -679,12 +679,34 @@ wm                   x
 
 (defclass button (tktextvariable widget)
   ((command :accessor command :initarg :command :initform nil)
-   (text :accessor button-text :initarg :text :initform "")
+   ;(text :accessor button-text :initarg :text :initform "")
    ))
 
-(defmethod create ((bt button))
+;(defmethod create ((bt button))
+(defmethod initialize-instance :after ((bt button) &key (text "") activebackground
+				       activeforeground anchor background bitmap borderwidth cursor
+				       disabledforeground font foreground highlightbackground
+				       highlightcolor highlightthickness image justify padx pady
+				       relief repeatdelay repeatinterval takefocus underline
+				       wraplength compound default height overrelief state width)
   (add-callback (name bt) (command bt))
-  (format-wish "button ~A -text {~A} -command {puts -nonewline {(\"~A\")};flush stdout}" (path bt) (button-text bt) (name bt)))
+  (format-wish "button ~A -command {puts -nonewline {(\"~A\")};flush stdout} ~
+                    -text {~A}~@[ -activebackground ~(~a~)~]~@[ -activeforeground ~(~a~)~]~
+                     ~@[ -anchor ~(~a~)~]~@[ -background ~(~a~)~]~@[ -bitmap ~(~a~)~]~
+                     ~@[ -borderwidth ~(~a~)~]~@[ -cursor ~(~a~)~]~@[ -disabledforeground ~(~a~)~]~
+                     ~@[ -font {~a}~]~@[ -foreground ~(~a~)~]~@[ -highlightbackground ~(~a~)~]~
+                     ~@[ -highlightcolor ~(~a~)~]~@[ -highlightthickness ~(~a~)~]~@[ -image ~(~a~)~]~
+                     ~@[ -justify ~(~a~)~]~@[ -padx ~(~a~)~]~@[ -pady ~(~a~)~]~@[ -relief ~(~a~)~]~
+                     ~@[ -repeatdelay ~(~a~)~]~@[ -repeatinterval ~(~a~)~]~@[ -takefocus ~(~a~)~]~
+                     ~@[ -underline ~(~a~)~]~@[ -wraplength ~(~a~)~]~@[ -compound ~(~a~)~]~
+                     ~@[ -default ~(~a~)~]~@[ -height ~(~a~)~]~@[ -overrelief ~(~a~)~]~
+                     ~@[ -state ~(~a~)~]~@[ -width ~(~a~)~]"
+	       (path bt) (name bt) text activebackground activeforeground anchor background
+	       bitmap borderwidth cursor disabledforeground font foreground highlightbackground
+	       highlightcolor highlightthickness image justify padx pady relief repeatdelay
+	       repeatinterval takefocus
+	       underline wraplength compound default height overrelief state width
+	       ))
 
 (defun make-button (master text command)
   (let* ((b (make-instance 'button :master master :text text :command command)))

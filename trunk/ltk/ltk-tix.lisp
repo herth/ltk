@@ -13,9 +13,10 @@
 (in-package ltk-tix)
 
 (eval-when (:load-toplevel)
-  (setf *init-wish-hook* (cons (lambda ()
+  (setf *init-wish-hook* (append *init-wish-hook*
+				 (lambda ()
 				   (send-wish "package require Tix"))
-				 *init-wish-hook*)))
+				 )))
 
 (defclass balloon (widget)
   ())
