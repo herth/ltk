@@ -1,6 +1,6 @@
 #|
 
- This software is Copyright (c) 2003 Peter Herth <herth@peter-herth.de>
+ This software is Copyright (c) 2003, 2004, 2005  Peter Herth <herth@peter-herth.de>
 
  Peter Herth grants you the rights to distribute
  and use this software as governed by the terms
@@ -237,7 +237,7 @@ toplevel             x
 	   "MAKE-OVAL"
 	   "MAKE-POLYGON"
 	   "MAKE-RECTANGLE"
-	   
+	   "MASTER"
 	   "MAXSIZE"
 	   "MENU"
 	   "MENUBAR"
@@ -255,6 +255,7 @@ toplevel             x
 	   "ON-FOCUS"
 	   "PACK"
 	   "PACK-FORGET"
+	   "PACK-PROPAGATE"
 	   "PANE-CONFIGURE"
 	   "PANED-WINDOW"
 	   "PHOTO-IMAGE"
@@ -284,6 +285,8 @@ toplevel             x
 	   "SET-COORDS"
 	   "SET-COORDS*"
 	   "SET-GEOMETRY"
+	   "SET-GEOMETRY-WH"
+	   "SET-GEOMETRY-XY"
 	   "SPINBOX"
 	   "START-WISH"
 	   "TAG-BIND"
@@ -358,7 +361,7 @@ toplevel             x
 		   (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* 0.871)
+(defvar *ltk-version* 0.872)
 ;;; global var for holding the communication stream
 (defvar *wish* nil)
 
@@ -388,7 +391,8 @@ toplevel             x
   (send-wish "proc senddatastring {s} {puts \"(:data \\\"[escape $s]\\\")\";flush stdout} ")
   
   ;;; proc sendevent {s} {puts "(event \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
-  (send-wish "proc sendevent {s x y keycode char width height root_x root_y} {puts \"(:event \\\"$s\\\" $x $y $keycode $char $width $height $root_x $root_y)\"} ")
+  ;(send-wish "proc sendevent {s x y keycode char width height root_x root_y} {puts \"(:event \\\"$s\\\" $x $y $keycode $char $width $height $root_x $root_y)\"} ")
+  (send-wish "proc sendevent {s x y keycode char width height root_x root_y mouse_button} {puts \"(:event \\\"$s\\\" $x $y $keycode $char $width $height $root_x $root_y $mouse_button)\"} ")
   ;;; proc callback {s} {puts "(callback \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
 
   ;;; callback structure: (:callback "widgetname")          ;; for non-parameter callbacks
@@ -432,7 +436,7 @@ toplevel             x
 ;; be fully read from the stream - no character is discarded
 ;; so I am printing an additional space after every READable expression printed from tcl,
 ;; this has to be eaten for read-line from the stream in lispworks (which returns the line
-;; ending character, cmucl/sbcl dont
+;; ending character, cmucl/sbcl don't)
 
 (defun read-all(stream)
   (let ((c (read-char-no-hang stream nil nil))
@@ -662,6 +666,7 @@ toplevel             x
   height
   root-x
   root-y
+  mouse-button
   )
 
 (defun construct-tk-event (properties)
@@ -674,21 +679,27 @@ toplevel             x
    :height (sixth properties)
    :root-x (seventh properties)
    :root-y (eighth properties)
-   
+   :mouse-button (ninth properties)
    ))
 
-(defgeneric bind (w event fun))
-(defmethod bind ((w widget) event fun)
+(defgeneric bind (w event fun &key append))
+(defmethod bind ((w widget) event fun &key append)
   "bind fun to event of the widget w"
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K %w %h %X %Y}" (widget-path w) event name)))
+    ;(format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K %w %h %X %Y}" (widget-path w) event name)
+    (format-wish "bind  ~a ~a {~:[~;+~]sendevent ~A %x %y %k %K %w %h %X %Y %b}" 
+		 (widget-path w) event append name)
+))
 
-(defmethod bind (s event fun)
+(defmethod bind (s event fun &key append)
   "bind fun to event within context indicated by string ie. 'all' or 'Button'"
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K %w %h %X %Y}" s event name)))
+    ;;(format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K %w %h %X %Y}" s event name)
+    (format-wish "bind  ~a ~a {~:[~;+~]sendevent ~A %x %y %k %K %w %h %X %Y %b}" 
+		 s event append name)
+    ))
 
 
 (defvar *tk* (make-instance 'widget :name "." :path "."))
@@ -1635,6 +1646,15 @@ set y [winfo y ~a]
              ~@[ -pady ~A~]~@[ -ipadx ~A~]~@[ -ipady ~A~]~@[ -anchor ~(~A~)~]"
           (widget-path w) side fill expand (and after (widget-path after)) (and before (widget-path before)) padx pady ipadx ipady anchor))
 
+(defmethod pack ((list list) &rest rest)
+  (mapcar #'(lambda (w) (apply #'pack w rest))
+	  list))
+
+(defgeneric pack-propagate (widget flag))
+(defmethod pack-propagate ((w widget) flag)
+  (format-wish "pack propagate ~A ~A"
+	       (widget-path w)
+	       (if flag "true" "false")))
 
 (defgeneric pack-forget (widget))
 (defmethod pack-forget ((w widget))
@@ -1793,7 +1813,18 @@ set y [winfo y ~a]
 
 (defgeneric set-geometry (toplevel width height x y))
 (defmethod set-geometry ((tl widget) width height x y)
-  (format-wish "wm geometry ~a ~ax~a+~a+~a" (widget-path tl) width height x y))
+  ;;(format-wish "wm geometry ~a ~ax~a+~a+~a" (widget-path tl) width height x y)
+  (format-wish "wm geometry ~a ~ax~a~@D~@D" (widget-path tl) width height x y)
+  )
+
+(defgeneric set-geometry-wh (toplevel width height))
+(defmethod set-geometry-wh ((tl widget) width height)
+  (format-wish "wm geometry ~a ~ax~a" (widget-path tl) width height))
+
+(defgeneric set-geometry-xy (toplevel x y))
+(defmethod set-geometry-xy ((tl widget) x y)
+  (format-wish "wm geometry ~a ~@D~@D" (widget-path tl) x y))
+ 
 
 (defgeneric on-close (toplevel fun))
 (defmethod on-close ((tl toplevel) fun)
