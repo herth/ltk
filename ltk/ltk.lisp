@@ -55,7 +55,7 @@ options              -
 pack                 x
 panedwindow          x
 photo                - see image
-place                  geometry manager using coordinates
+place                x geometry manager using coordinates
 radiobutton          x
 raise                x
 scale                x 
@@ -145,6 +145,7 @@ wm                   x
 	   "ICONIFY"
 	   "ICONWINDOW"
 	   "IMAGE-LOAD"
+	   "INTERIOR"
 	   "ITEMCONFIGURE"
 	   "LABEL"
 	   "LABELFRAME"
@@ -187,6 +188,7 @@ wm                   x
 	   "PANED-WINDOW"
 	   "PATH"
 	   "PHOTO-IMAGE"
+	   "PLACE"
 	   "POSTSCRIPT"
 	   "RADIO-BUTTON"
 	   "RAISE"
@@ -201,6 +203,7 @@ wm                   x
 	   "SCREEN-WIDTH-MM"
 	   "SCROLLBAR"
 	   "SCROLLED-CANVAS"
+	   "SCROLLED-FRAME"
 	   "SCROLLED-LISTBOX"
 	   "SCROLLREGION"
 	   "SEE"
@@ -337,9 +340,10 @@ wm                   x
     (coerce s 'simple-string)
     ))
 
-;;; read a line from wish
+;;; read from wish
 (defun read-w()
-  (read-line *w* nil nil))
+  (let ((*read-eval* nil))
+    (read *w* nil nil)))
 
 
 ;;; sanitizing strings: lisp -> tcl (format *w* "{~a}" string)
@@ -522,7 +526,7 @@ wm                   x
 
 (defmethod value ((v tkvariable))
   (send-w (format nil "puts $~a;flush stdout" (name v)))
-  (read *w* nil nil))
+  (read-w))
 
 (defgeneric (setf value) (widget val))
 (defmethod (setf value) (val (v tkvariable))
@@ -541,10 +545,10 @@ wm                   x
 (defmethod text ((v tktextvariable))
   ;(send-w (format nil "puts -nonewline {\"};puts -nonewline $~a;puts {\"};flush stdout" (name v)))
   (send-w (format nil "puts \"\\\"$~a\\\"\";flush stdout" (name v)))
-
-  (read *w* nil nil))
+  (read-w))
 
 (defgeneric (setf text) (val variable))
+
 (defmethod (setf text) (val (v tktextvariable))
   (send-w (format nil "set ~a {~a}" (name v) val)))
 
@@ -1040,6 +1044,77 @@ a list of numbers may be given"
   )
 
 
+(defclass scrolled-frame (frame)
+  ((inner :accessor interior)
+   (hscroll :accessor hscroll)
+   (vscroll :accessor vscroll)
+   ))
+
+(defmethod create ((sf scrolled-frame))
+  (call-next-method)
+  (let ((f (make-instance 'frame :master sf)))
+    (setf (interior sf) (make-instance 'frame :master f))
+    (setf (hscroll sf) (make-instance 'scrollbar :master sf :orientation "horizontal"))
+    (setf (vscroll sf) (make-instance 'scrollbar :master sf :orientation "vertical"))
+    (grid f 0 0 :sticky "news")
+    (grid (hscroll sf) 1 0 :sticky "we")
+    (grid (vscroll sf) 0 1 :sticky "ns")
+    (grid-columnconfigure sf 0 "weight" 1)
+    (grid-columnconfigure sf 1 "weight" 0)
+    (grid-rowconfigure sf 0 "weight" 1)
+    (grid-rowconfigure sf 1 "weight" 0)
+    (place (interior sf) 0 0)
+    (send-w (format nil "~a set  0.1 0.5" (path (hscroll sf))))
+    (send-w (format nil "~a set  0.1 0.5" (path (vscroll sf))))
+    (send-w (format nil "~a configure -command ~axv" (path (hscroll sf)) (name sf)))
+    (send-w (format nil "~a configure -command ~ayv" (path (vscroll sf)) (name sf)))
+    (send-w (format nil "
+proc ~axv {{com moveto} {val 0} {unit 0}} {
+set x [winfo x ~a]
+set y [winfo y ~a]
+set wx [winfo width ~a]
+set w [winfo width ~a]
+if {$val < 0} {set val 0}
+if {$val > [expr 1.0*($wx-$w)/$wx]} {set val  [expr 1.0*($wx-$w)/$wx]}
+place ~a -x [expr -($val * $wx)] -y $y
+set x [winfo x ~a]
+~a set [expr -1.0*$x/$wx] [expr 1.0*($w-$x)/$wx]
+}
+proc ~ayv {{com moveto} {val 0} {unit 0}} {
+set x [winfo x ~a]
+set y [winfo y ~a]
+set wy [winfo height ~a]
+set h [winfo height ~a]
+if {$val < 0} {set val 0}
+if {$val > [expr 1.0*($wy-$h)/$wy]} {set val  [expr 1.0*($wy-$h)/$wy]}
+place ~a -x $x -y [expr -($val * $wy)]
+set y [winfo y ~a]
+~a set [expr -1.0*$y/$wy] [expr 1.0*($h-$y)/$wy]
+}
+
+"                   (name sf)
+		    (path (interior sf))
+		    (path (interior sf))
+		    (path (interior sf))
+		    (path f)
+		    (path (interior sf))
+		    (path (interior sf))		   
+		    (path (hscroll sf))
+
+		    (name sf)
+		    (path (interior sf))
+		    (path (interior sf))
+		    (path (interior sf))
+		    (path f)
+		    (path (interior sf))
+		    (path (interior sf))		   
+		    (path (vscroll sf))
+		    ))
+    ))
+ 
+    
+  
+
 ;;; canvas widget
 
 (defclass canvas (widget)
@@ -1240,6 +1315,13 @@ a list of numbers may be given"
 (defgeneric pack-forget (w))
 (defmethod pack-forget ((w widget))
   (send-w (format nil "pack forget ~A" (path w))))
+
+
+;;; place manager
+
+(defgeneric place (w x y))
+(defmethod place (widget x y)
+  (send-w (format nil "place ~A -x ~A -y ~A" (path widget) x y)))
 
 ;;; grid manager
 
