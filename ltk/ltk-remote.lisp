@@ -166,3 +166,49 @@
      )))
 
 
+(defun rlb-test2 ()
+  (with-remote-ltk 8080
+   (let* ((last nil)
+	  (l (make-instance 'listbox))
+	  (wf (make-instance 'frame))
+	  (lbl (make-instance 'label :master wf :text "Widget:"))
+	  (f (make-instance 'frame :master wf))
+	  (canv (make-instance 'canvas :master f :width 100 :height 100))
+	  (scanv (make-instance 'scrolled-canvas :master f))
+	  (widgets (list
+		    (make-instance 'button :master f :text "Button")
+		    (make-instance 'label :master f :text "Label")
+		    canv
+		    scanv
+		    ))
+	;  (b (make-instance 'button :text "Show" :command ))
+	  )
+     (bind l "<Button-1>" (lambda ()
+			    (let ((sel (listbox-selection l)))
+			      (format t "selection: ~a~%" sel)
+			      (force-output)
+			      (if (first sel)
+				  (let ((w (nth (first (listbox-selection l)) widgets)))
+				    (when last
+				      (pack-forget last))
+				    (pack w)
+				    (setf last w))))))
+     (pack l :expand 1 :fill "y")
+     (pack wf :expand 1 :fill "both")
+     ;(grid l 0 0)
+     ;(grid wf 0 1)
+
+     (pack lbl :side "top")
+     (pack f :expand 1 :fill "both")
+     (configure wf "borderwidth" 2)
+     (configure wf "relief" "sunken")
+     
+     ;(pack b)
+     (create-line canv (list 0 0 40 40 60 20 80 80 60 60 40 80 20 60 0 80 0 0))
+     (create-line (canvas scanv) (mapcar (lambda (x)
+					   (* x 10))
+					 (list 0 0 40 40 60 20 80 80 60 60 40 80 20 60 0 80 0 0)))
+     (scrollregion (canvas scanv) 0 0 800 800)
+     (listbox-append l (mapcar (lambda (x) (type-of x)) widgets))
+
+     )))
