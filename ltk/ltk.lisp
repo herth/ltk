@@ -1314,7 +1314,7 @@ set y [winfo y ~a]
 
 (defmethod canvas ((canvas canvas)) canvas)
 
-(defmethod initialize-instance :after ((c canvas) &key borderwidth cursor highlightbackground
+(defmethod initialize-instance :after ((c canvas) &key background borderwidth cursor highlightbackground
 				       highlightcolor
 				       highlightthickness insertbackground insertborderwidth
 				       insertofftime insertontime insertwidth relief
@@ -1322,7 +1322,7 @@ set y [winfo y ~a]
 				       takefocus xscrollcommand yscrollcommand closeenough
 				       confine  height scrollregion state width xscrollincrement
 				       yscrollincrement)
-  (format-wish "canvas ~A~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~
+  (format-wish "canvas ~A~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~
                 ~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~
                 ~@[ -highlightthickness ~(~A~)~]~@[ -insertbackground ~(~A~)~]~
                 ~@[ -insertborderwidth ~(~A~)~]~@[ -insertofftime ~(~A~)~]~
@@ -1333,7 +1333,7 @@ set y [winfo y ~a]
                 ~@[ -confine ~(~A~)~]~@[ -height ~(~A~)~]~@[ -scrollregion ~(~A~)~]~
                 ~@[ -state ~(~A~)~]~@[ -width ~(~A~)~]~@[ -xscrollincrement ~(~A~)~]~
                 ~@[ -yscrollincrement ~(~A~)~]"
-	       (path c)
+	       (path c) background
 	       borderwidth cursor highlightbackground highlightcolor highlightthickness
 	       insertbackground insertborderwidth insertofftime insertontime insertwidth
 	       relief selectbackground selectborderwidth selectforeground takefocus
@@ -1575,6 +1575,8 @@ set y [winfo y ~a]
   ()
   )
 
+(defmethod path ((photo photo-image))
+  (name photo))
 ;(defmethod create ((p photo-image))
 (defmethod initialize-instance :after ((p photo-image) &key width height)
   (setf (name p) (create-name))
@@ -1583,7 +1585,7 @@ set y [winfo y ~a]
 (defun make-image ()
   (let* ((name (create-name))
 	 (i (make-instance 'photo-image :name name)))
-    (create i)
+    ;(create i)
     i))
 
 (defgeneric image-load (p filename))
