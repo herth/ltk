@@ -333,7 +333,7 @@ wm                   x
   (send-wish "proc senddatastring {s} {puts \"(:data \\\"[escape $s]\\\")\";flush stdout} ")
   
   ;;; proc sendevent {s} {puts "(event \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
-  (send-wish "proc sendevent {s} {puts \"(:event \\\"[regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]\\\")\"} ")
+  (send-wish "proc sendevent {s x y keycode char} {puts \"(:event $s $x $y $keycode $char)\"} ")
   ;;; proc callback {s} {puts "(callback \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
 
   ;;; callback structure: (:callback "widgetname")          ;; for non-parameter callbacks
@@ -428,7 +428,7 @@ wm                   x
       (format t "postponing event: ~a ~%" d)
       (force-output)
       (setf d (read-wish)))
-    (format t "readdata: ~a~%" d) (force-output)
+    (format t "readdata: ~s~%" d) (force-output)
     (second d)))
 
 ;;; sanitizing strings: lisp -> tcl (format *wish* "{~a}" string)
@@ -487,7 +487,8 @@ wm                   x
 (defun after(time fun &optional label)
   (let ((name (format nil "after~@[~a~]" label)))
     (add-callback name fun)
-  (format-wish "after ~a {puts -nonewline {(\"~A\") };flush stdout}" time name)))
+    ;(format-wish "after ~a {puts -nonewline {(\"~A\") };flush stdout}" time name)))
+    (format-wish "after ~a {callback ~A}" time name)))
 
 ;; tool functions used by the objects
 
@@ -576,12 +577,23 @@ wm                   x
 (defmethod create ((w widget))
   )
 
+(defstruct event
+  x
+  y
+  keycode
+  char
+  
+
+  )
+
 (defgeneric bind (w event fun))
 (defmethod bind ((w widget) event fun)
   "bind fun to event of the widget w"
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "bind  ~a ~a {puts -nonewline {(\"~A\")};flush stdout}" (path w) event name )))
+    ;(format-wish "bind  ~a ~a {puts -nonewline {(\"~A\")};flush stdout}" (path w) event name )
+    (format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K}" (path w) event name )
+    ))
 
 (defvar *tk* (make-instance 'widget :name "." :path "."))
 
@@ -681,7 +693,8 @@ wm                   x
 ;(defmethod create ((m menubutton))
 (defmethod initialize-instance :after ((m menubutton) &key)
    (add-callback (name m) (command m))
-   (format-wish "~A add command -label {~A}  -command {puts -nonewline {(\"~A\")};flush stdout}" (path (master m)) (text m) (name m))
+   ;(format-wish "~A add command -label {~A}  -command {puts -nonewline {(\"~A\")};flush stdout}" (path (master m)) (text m) (name m))
+   (format-wish "~A add command -label {~A}  -command {callback ~A}" (path (master m)) (text m) (name m))
    )
 
 (defun make-menubutton(menu text command)
@@ -696,11 +709,10 @@ wm                   x
 (defmethod initialize-instance :after ((m menucheckbutton) &key)
   (when (command m)
     (add-callback (name m) (command m)))
-  (format-wish "~A add checkbutton -label {~A} -variable ~a ~a"
-		  (path (master m)) (text m) (name m) 
-		  (if (command m)
-		      (format nil "-command {puts -nonewline {(\"~A\")};flush stdout}" (name m))
-		    "")))
+  ;(format-wish "~A add checkbutton -label {~A} -variable ~a ~a" (path (master m)) (text m) (name m) (if (command m)  (format nil "-command {puts -nonewline {(\"~A\")};flush stdout}" (name m)) ""))
+  (format-wish "~A add checkbutton -label {~A} -variable ~a ~@[ -command {callback ~a}~]"
+	       (path (master m)) (text m) (name m) (and (command m) (name m)))
+  )
 
 
 (defmethod value ((cb menucheckbutton))
@@ -724,11 +736,15 @@ wm                   x
   (unless (group m)
     (setf (group m)
 	  (name m)))
-  (format-wish "~A add radiobutton -label {~A} -value ~a -variable ~a ~a"
+;    (format-wish "~A add radiobutton -label {~A} -value ~a -variable ~a ~a"
+;	    (path (master m)) (text m) (name m) (group m)
+;	    (if (command m)
+;		(format nil "-command {puts -nonewline {(\"~A\")};flush stdout}" (name m))
+;	      ""))
+      (format-wish "~A add radiobutton -label {~A} -value ~a -variable ~a ~@[ -command {callback ~a}~]"
 	    (path (master m)) (text m) (name m) (group m)
-	    (if (command m)
-		(format nil "-command {puts -nonewline {(\"~A\")};flush stdout}" (name m))
-	      "")))
+	    (and (command m) (name m)))
+)
    
 
 (defmethod value ((cb menuradiobutton))
@@ -756,7 +772,7 @@ wm                   x
 				       relief repeatdelay repeatinterval takefocus underline
 				       wraplength compound default height overrelief state width)
   (add-callback (name bt) (command bt))
-  (format-wish "button ~A -command {puts -nonewline {(\"~A\")};flush stdout} ~
+  (format-wish "button ~A -command {callback ~A} ~
                     -text {~A}~@[ -activebackground ~(~a~)~]~@[ -activeforeground ~(~a~)~]~
                      ~@[ -anchor ~(~a~)~]~@[ -background ~(~a~)~]~@[ -bitmap ~(~a~)~]~
                      ~@[ -borderwidth ~(~a~)~]~@[ -cursor ~(~a~)~]~@[ -disabledforeground ~(~a~)~]~
@@ -810,15 +826,11 @@ wm                   x
 
 ;:(defmethod create ((rb radio-button))
 (defmethod initialize-instance :after ((rb radio-button) &key)
-  (format-wish "radiobutton ~A -text {~A}~@[ -value ~A~]~@[ -variable ~A~] ~A"
+  (format-wish "radiobutton ~A -text {~A}~@[ -value ~A~]~@[ -variable ~A~]~@[ -command {callback ~a}~]"
 	    (path rb) (text rb)
 	    (radio-button-value rb)
 	    (radio-button-variable rb)
-	    (if (command rb)
-		(progn
-		  (add-callback (name rb) (command rb))
-		  (format nil "-command {puts -nonewline {(\"~A\")};flush stdout}" (name rb)))
-	      "")))
+	    (and (command rb) (name rb))))
 
 (defmethod value ((rb radio-button))
   "reads the content of the shared variable of the radio button set"
@@ -1016,13 +1028,11 @@ a list of numbers may be given"
     (format-wish "proc ~a-command {val} {callbackval ~a $val}" (name sc) (name sc))
     )
   
-  (format-wish "scale ~a -variable ~a~@[ -from ~a~]~@[ -to ~a~]~@[ -orient ~(~a~)~] ~a" (path sc) (name sc)
+  (format-wish "scale ~a -variable ~a~@[ -from ~a~]~@[ -to ~a~]~@[ -orient ~(~a~)~] ~@[ -command ~a-command ~]" (path sc) (name sc)
 	       (scale-from sc)
 	       (scale-to sc)
 	       (scale-orient sc)
-	       (if (command sc)
-		   (format nil "-command ~a-command" (name sc) )
-		 "")
+	       (and (command sc) (name sc))
 	       ))
 
 (defmethod value ((sc scale))
@@ -1374,8 +1384,9 @@ set y [winfo y ~a]
   "bind fun to event of the tag of the text widget txt"
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "~a tag bind ~a ~a {puts -nonewline {(\"~A\")};flush stdout}"
-	      (path txt) tag event name)))
+    ;(format-wish "~a tag bind ~a ~a {puts -nonewline {(\"~A\")};flush stdout}" (path txt) tag event name)
+    (format-wish "~a tag bind ~a ~a {callback ~A}" (path txt) tag event name)
+    ))
 
 (defmethod text ((text text))
   ;(format-wish "esc [~a get 1.0 end]" (path text))
@@ -1493,7 +1504,7 @@ set y [winfo y ~a]
 
 ;;; for tkobjects, the name of the widget is taken
 (defmethod configure (wid option (value tkobject) &rest others)
-  (format-wish "~A configure -~(~A~) {~A}" (path wid) option (path value)))
+  (format-wish "~A configure -~(~A~) {~A} ~{ -~(~a~) {~(~a~)}~}" (path wid) option (path value) others))
 
 (defgeneric cget (w o))
 (defmethod cget ((widget widget) option)
@@ -1587,13 +1598,13 @@ set y [winfo y ~a]
 (defmethod on-close ((tl toplevel) fun)
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "wm protocol ~a WM_DELETE_WINDOW {puts -nonewline {(\"~A\")};flush stdout}" (path tl) name)))
+    (format-wish "wm protocol ~a WM_DELETE_WINDOW {callback ~A}" (path tl) name)))
 
 (defgeneric on-focus (w fun))
 (defmethod on-focus ((tl toplevel) fun)
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "wm protocol WM_TAKE_FOCUS {puts -nonewline {(\"~A\")};flush stdout}"
+    (format-wish "wm protocol WM_TAKE_FOCUS {callback ~A}"
 	      name)))
 
 (defun iconwindow (tl wid)
@@ -1808,7 +1819,7 @@ set y [winfo y ~a]
     (let* ((l (read-event))) ;((l (read-preserving-whitespace *wish* nil nil)))
       (when (null l) (return))
       (if *debug-tk*
-	  (format t "l:~A<=~%" l))
+	  (format t "l:~s<=~%" l))
       (force-output)
       (if (listp l)
 	  (if (eq (first l) :callback)
@@ -1842,7 +1853,8 @@ set y [winfo y ~a]
 (defmacro with-ltk (&rest body)
   `(let ((*wish* nil)
 	 (*callbacks* (make-hash-table :test #'equal))
-	 (*counter* 1))
+	 (*counter* 1)
+	 (*event-queue* nil))
      (start-wish)
      ,@body
      (mainloop)))

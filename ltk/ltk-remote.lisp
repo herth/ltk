@@ -81,7 +81,8 @@
 		 (lambda ()
 		   (let ((ltk::*wish* stream)
 			 (*callbacks* (make-hash-table :test #'equal))
-			 (*counter* 1))
+			 (*counter* 1)
+			 (*event-queue* nil))
 		     ,@body
 		     (mainloop)
 		     (format t "closing connection~&")
@@ -143,7 +144,8 @@
 	    (make-thread (lambda ()
 			   (let ((ltk::*wish* stream)
 				 (*callbacks* (make-hash-table :test #'equal))
-				 (*counter* 1))
+				 (*counter* 1)
+				 (*event-queue* nil))
 			     ,@body
 			     (mainloop)
 			     
@@ -180,7 +182,8 @@
                                                             (lambda ()
                                                              (let ((ltk::*wish* stream)
 								   (*callbacks* (make-hash-table :test #'equal))
-								   (*counter* 1))
+								   (*counter* 1)
+								   (*event-queue* nil))
                                                                ,@body
                                                                (mainloop)
                                                                (close stream)
