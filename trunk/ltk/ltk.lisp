@@ -137,7 +137,7 @@ toplevel             x
 	   "AFTER"
 	   "AFTER-IDLE"	   
 	   "APPEND-TEXT"
-	   "APPEND-TEXT-NewLINE"
+	   "APPEND-NEWLINE"
 	   "ASK-OKCANCEL"
 	   "ASK-YESNO"
 	   "BACKGROUND"
@@ -184,6 +184,8 @@ toplevel             x
 	   "EVENT-Y"
 	   "EVENT-KEYCODE"
 	   "EVENT-CHAR"
+	   "EVENT-ROOT-X"
+	   "EVENT-ROOT-Y"
 	   "FOCUS"
 	   "FORCE-FOCUS"
 	   "FORGET-PANE"
@@ -244,6 +246,7 @@ toplevel             x
 	   "MENURADIOBUTTON"
 	   "MESSAGE"
 	   "MESSAGE-BOX"
+	   
 	   "MINSIZE"
 	   "MOVE"
 	   "NORMALIZE"
@@ -253,10 +256,10 @@ toplevel             x
 	   "PACK-FORGET"
 	   "PANE-CONFIGURE"
 	   "PANED-WINDOW"
-	   "PATH"
 	   "PHOTO-IMAGE"
 	   "PLACE"
 	   "PLACE-FORGET"
+	   "POPUP"
 	   "POSTSCRIPT"
 	   "RADIO-BUTTON"
 	   "RAISE"
@@ -290,6 +293,7 @@ toplevel             x
 	   "TOPLEVEL"
 	   "VALUE"
 	   "WIDGET"
+	   "WIDGET-PATH"
 	   "WINDOW-HEIGHT"
 	   "WINDOW-WIDTH"
 	   "WINDOW-X"
@@ -334,12 +338,13 @@ toplevel             x
              )
     #+:lispworks (system:open-pipe fullstring :direction :io)
     #+:allegro (let ((proc (excl:run-shell-command
-                         (apply #'vector program program args)
-                         :input :stream :output :stream :wait wt)))
-		(unless proc
-		  (error "Cannot create process."))   
-		proc
-		)
+			    #+:mswindows fullstring
+			    #-:mswindows (apply #'vector program program args)
+			    :input :stream :output :stream :wait wt)))
+		 (unless proc
+		   (error "Cannot create process."))
+		 proc
+		 )
     #+:ecl(ext:run-program program args :input :stream :output :stream
 :error :output)
      #+:openmcl (let ((proc (ccl:run-program program args :input
@@ -351,7 +356,7 @@ toplevel             x
 		   (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* 0.864)
+(defvar *ltk-version* 0.865)
 ;;; global var for holding the communication stream
 (defvar *wish* nil)
 
@@ -381,7 +386,7 @@ toplevel             x
   (send-wish "proc senddatastring {s} {puts \"(:data \\\"[escape $s]\\\")\";flush stdout} ")
   
   ;;; proc sendevent {s} {puts "(event \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
-  (send-wish "proc sendevent {s x y keycode char width height} {puts \"(:event \\\"$s\\\" $x $y $keycode $char $width $height)\"} ")
+  (send-wish "proc sendevent {s x y keycode char width height root_x root_y} {puts \"(:event \\\"$s\\\" $x $y $keycode $char $width $height $root_x $root_y)\"} ")
   ;;; proc callback {s} {puts "(callback \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
 
   ;;; callback structure: (:callback "widgetname")          ;; for non-parameter callbacks
@@ -523,7 +528,7 @@ toplevel             x
   "perform the call of the function associated with sym and the args arg"
   (let ((fun (gethash sym *callbacks*)))
     ;(format t "sym:~A fun:~A~%" sym fun)
-    (force-output)
+    ;(force-output)
     (when fun
       (apply fun arg))))
 
@@ -560,7 +565,7 @@ toplevel             x
 ;; create pathname from master widget <master> and widget name <name>
 (defun create-path (master name)
   (let ((master-path (if master
-			 (path master)
+			 (widget-path master)
 		       "")))
     (format nil "~A.~A" master-path name)))
 
@@ -586,7 +591,7 @@ toplevel             x
   (send-wish (format nil "bell")))
 
 (defun destroy (widget)
-  (send-wish (format nil "destroy ~a" (path widget))))
+  (send-wish (format nil "destroy ~a" (widget-path widget))))
 
 (defun clipboard-clear ()
   (send-wish "clipboard clear"))
@@ -605,13 +610,13 @@ toplevel             x
    )
   (:documentation "Base class for every Tk object"))
 
-(defgeneric path (w))
-(defmethod path ((w (eql nil))) nil)
+(defgeneric widget-path (w))
+(defmethod widget-path ((w (eql nil))) nil)
 
 ;; basic class for all widgets 
 (defclass widget(tkobject)
   ((master :accessor master :initarg :master :initform nil) ;; parent widget or nil
-   (path :reader path :initarg :path :initform nil)         ;; pathname to refer to the widget
+   (widget-path :reader widget-path :initarg :path :initform nil)         ;; pathname to refer to the widget
    )
   (:documentation "Base class for all widget types"))
 
@@ -619,8 +624,8 @@ toplevel             x
 (defmethod initialize-instance :after ((w widget) &key)
   (unless (name w)			; generate name if not given 
     (setf (name w) (create-name)))
-  (unless (path w)			; and pathname
-    (setf (slot-value w 'path) (create-path (master w) (name w))))
+  (unless (widget-path w)			; and pathname
+    (setf (slot-value w 'widget-path) (create-path (master w) (name w))))
   (create w)				; call the widget specific creation method - every 
   )					; widget class needs to overload that
 
@@ -639,11 +644,11 @@ toplevel             x
 
 (defgeneric lower (widget &optional other))
 (defmethod lower ((widget widget) &optional other)
-  (send-wish (format nil "lower ~a~@[ ~a~]" (path widget) (and other (path other)))))
+  (send-wish (format nil "lower ~a~@[ ~a~]" (widget-path widget) (and other (widget-path other)))))
 
 (defgeneric raise (widget &optional above))
 (defmethod raise ((widget widget) &optional above)
-  (send-wish (format nil "raise ~a~@[ ~a~]" (path widget) (and above (path above)))))
+  (send-wish (format nil "raise ~a~@[ ~a~]" (widget-path widget) (and above (widget-path above)))))
 
 
 (defstruct event
@@ -653,6 +658,8 @@ toplevel             x
   char
   width
   height
+  root-x
+  root-y
   )
 
 (defun construct-tk-event (properties)
@@ -662,20 +669,24 @@ toplevel             x
    :keycode (third properties)
    :char (fourth properties)
    :width (fifth properties)
-   :height (sixth properties)))
+   :height (sixth properties)
+   :root-x (seventh properties)
+   :root-y (eighth properties)
+   
+   ))
 
 (defgeneric bind (w event fun))
 (defmethod bind ((w widget) event fun)
   "bind fun to event of the widget w"
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K %w %h}" (path w) event name)))
+    (format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K %w %h %X %Y}" (widget-path w) event name)))
 
 (defmethod bind (s event fun)
   "bind fun to event within context indicated by string ie. 'all' or 'Button'"
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K %w %h}" s event name)))
+    (format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K %w %h %X %Y}" s event name)))
 
 
 (defvar *tk* (make-instance 'widget :name "." :path "."))
@@ -692,7 +703,7 @@ toplevel             x
 
 (defmethod initialize-instance :around ((v tkvariable) &key)
   (call-next-method)
-  (format-wish "~a configure -variable ~a" (path v) (name v)))
+  (format-wish "~a configure -variable ~a" (widget-path v) (name v)))
 
 (defmethod value ((v tkvariable))
   (format-wish "senddata $~a" (name v))
@@ -711,7 +722,7 @@ toplevel             x
 
 (defmethod initialize-instance :around ((v tktextvariable) &key)
   (call-next-method)
-  (format-wish "~a configure -textvariable text_~a" (path v) (name v)))
+  (format-wish "~a configure -textvariable text_~a" (widget-path v) (name v)))
 
 (defmethod text ((v tktextvariable))
   (format-wish "senddatastring $text_~a" (name v))
@@ -732,11 +743,11 @@ toplevel             x
 
 ;(defmethod create ((mb menubar))
 (defmethod initialize-instance :after ((mb menubar) &key)
-  (format-wish "menu ~a -tearoff 0 -type menubar" (path mb))
+  (format-wish "menu ~a -tearoff 0 -type menubar" (widget-path mb))
   (format-wish "~a configure -menu ~a" (if (master mb)
-					(path (master mb))
+					(widget-path (master mb))
 				      ".")
-	    (path mb)))
+	    (widget-path mb)))
 
 ;;; menues
 
@@ -750,15 +761,15 @@ toplevel             x
 (defmethod initialize-instance :after ((m menu) &key underline)
   (when (menu-help m) ;; special treatment for help menu
     (setf (name m) "help")
-    (setf (slot-value m 'path) (create-path (master m) (name m))))
-  (format-wish "menu ~A -tearoff 0" (path m))
-  (format-wish "~A add cascade -label {~A} -menu ~a~@[ -underline ~a ~]" (path (master m)) (text m) (path m) underline))
+    (setf (slot-value m 'widget-path) (create-path (master m) (name m))))
+  (format-wish "menu ~A -tearoff 0" (widget-path m))
+  (when (master m) (format-wish "~A add cascade -label {~A} -menu ~a~@[ -underline ~a ~]" (widget-path (master m)) (text m) (widget-path m) underline)))
 
 (defun make-menu(menu text &key underline)
   (make-instance 'menu :master menu :text text :underline underline))
 
 (defun add-separator (menu)
-   (format-wish "~A add separator" (path menu)))
+   (format-wish "~A add separator" (widget-path menu)))
 
 ;;; menu button
 
@@ -770,7 +781,7 @@ toplevel             x
    (when command
      (add-callback (name m) command))
    (format-wish "~A add command -label {~A}  -command {callback ~A}~@[ -underline ~a ~]~@[ -accelerator {~a} ~]"
-		(path (master m)) (text m) (name m) underline accelerator)
+		(widget-path (master m)) (text m) (name m) underline accelerator)
    )
 
 (defun make-menubutton(menu text command &key underline accelerator)
@@ -786,7 +797,7 @@ toplevel             x
   (when (command m)
     (add-callback (name m) (command m)))
   (format-wish "~A add checkbutton -label {~A} -variable ~a ~@[ -command {callback ~a}~]"
-	       (path (master m)) (text m) (name m) (and (command m) (name m)))
+	       (widget-path (master m)) (text m) (name m) (and (command m) (name m)))
   )
 
 
@@ -809,7 +820,7 @@ toplevel             x
     (setf (group m)
 	  (name m)))
       (format-wish "~A add radiobutton -label {~A} -value ~a -variable ~a ~@[ -command {callback ~a}~]"
-	    (path (master m)) (text m) (name m) (group m)
+	    (widget-path (master m)) (text m) (name m) (group m)
 	    (and (command m) (name m))))
    
 
@@ -820,6 +831,12 @@ toplevel             x
 (defmethod (setf value) (val (cb menuradiobutton))
   (format-wish "set ~a ~a" (group cb) val))
 
+
+;;; method to pop up a menue at the root window coordinates x and y
+
+(defgeneric popup (menu x y))
+(defmethod popup ((menu menu) x y)
+  (format-wish "tk_popup ~A ~A ~A" (widget-path menu) x y))
 
 ;;; standard button widget
 
@@ -845,16 +862,16 @@ toplevel             x
                      ~@[ -underline ~(~a~)~]~@[ -wraplength ~(~a~)~]~@[ -compound ~(~a~)~]~
                      ~@[ -default ~(~a~)~]~@[ -height ~(~a~)~]~@[ -overrelief ~(~a~)~]~
                      ~@[ -state ~(~a~)~]~@[ -width ~(~a~)~]"
-	       (path bt) (name bt) text activebackground activeforeground anchor background
+	       (widget-path bt) (name bt) text activebackground activeforeground anchor background
 	       bitmap borderwidth cursor disabledforeground font foreground highlightbackground
-	       highlightcolor highlightthickness image justify padx pady relief repeatdelay
+	       highlightcolor highlightthickness (and image (name image)) justify padx pady relief repeatdelay
 	       repeatinterval takefocus
 	       underline wraplength compound default height overrelief state width
 	       ))
 
 (defmethod (setf command) (val (button button))
   (add-callback (name button) val)
-  (format-wish "~a configure -command {callback ~a}" (path button) (name button)))
+  (format-wish "~a configure -command {callback ~a}" (widget-path button) (name button)))
 
 (defun make-button (master text command)
   (let* ((b (make-instance 'button :master master :text text :command command)))
@@ -867,13 +884,13 @@ toplevel             x
    ))
 
 (defmethod initialize-instance :after ((cb check-button) &key command activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image indicatoron justify offrelief offvalue onvalue overrelief padx pady relief selectcolor selectimage state takefocus text underline width wraplength)
-  (format-wish "checkbutton ~A ~@[ -activebackground ~(~A~)~]~@[ -activeforeground ~(~A~)~]~@[ -anchor ~(~A~)~]~@[ -background ~(~A~)~]~@[ -bitmap ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -height ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -image ~(~A~)~]~@[ -indicatoron ~(~A~)~]~@[ -justify ~(~A~)~]~@[ -offrelief ~(~A~)~]~@[ -offvalue ~(~A~)~]~@[ -onvalue ~(~A~)~]~@[ -overrelief ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -selectcolor ~(~A~)~]~@[ -selectimage ~(~A~)~]~@[ -state ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text {~A}~]~@[ -underline ~(~A~)~]~@[ -width ~(~A~)~]~@[ -wraplength ~(~A~)~]" (path cb) activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image indicatoron justify offrelief offvalue onvalue overrelief padx pady relief selectcolor selectimage state takefocus text underline width wraplength)
+  (format-wish "checkbutton ~A ~@[ -activebackground ~(~A~)~]~@[ -activeforeground ~(~A~)~]~@[ -anchor ~(~A~)~]~@[ -background ~(~A~)~]~@[ -bitmap ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -height ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -image ~(~A~)~]~@[ -indicatoron ~(~A~)~]~@[ -justify ~(~A~)~]~@[ -offrelief ~(~A~)~]~@[ -offvalue ~(~A~)~]~@[ -onvalue ~(~A~)~]~@[ -overrelief ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -selectcolor ~(~A~)~]~@[ -selectimage ~(~A~)~]~@[ -state ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text {~A}~]~@[ -underline ~(~A~)~]~@[ -width ~(~A~)~]~@[ -wraplength ~(~A~)~]" (widget-path cb) activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness (and image (name image)) indicatoron justify offrelief offvalue onvalue overrelief padx pady relief selectcolor selectimage state takefocus text underline width wraplength)
   (when command
     (setf (command cb) command)))
 
 (defmethod (setf command) (val (check-button check-button))
   (add-callback (name check-button) val)
-  (format-wish "~a configure -command {callbackval ~a $~a}" (path check-button)
+  (format-wish "~a configure -command {callbackval ~a $~a}" (widget-path check-button)
 	       (name check-button) (name check-button)))
 
 ;;; radio button widget
@@ -887,10 +904,10 @@ toplevel             x
 
 (defmethod initialize-instance :after ((rb radio-button) &key command activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image indicatoron justify offrelief overrelief padx pady relief selectcolor selectimage state takefocus text underline width wraplength)
   (format-wish "radiobutton ~A ~@[ -value ~A~]~@[ -variable ~A~]~@[ -activebackground ~(~A~)~]~@[ -activeforeground ~(~A~)~]~@[ -anchor ~(~A~)~]~@[ -background ~(~A~)~]~@[ -bitmap ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -height ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -image ~(~A~)~]~@[ -indicatoron ~(~A~)~]~@[ -justify ~(~A~)~]~@[ -offrelief ~(~A~)~]~@[ -overrelief ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -selectcolor ~(~A~)~]~@[ -selectimage ~(~A~)~]~@[ -state ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text {~A}~]~@[ -underline ~(~A~)~]~@[ -width ~(~A~)~]~@[ -wraplength ~(~A~)~]"
-	    (path rb) 
+	    (widget-path rb) 
 	    (radio-button-value rb)
 	    (radio-button-variable rb)	    
-	    activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image indicatoron justify offrelief overrelief padx pady relief selectcolor selectimage state takefocus text underline width wraplength)
+	    activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness (and image (name image)) indicatoron justify offrelief overrelief padx pady relief selectcolor selectimage state takefocus text underline width wraplength)
   (when command
     (setf (command rb) command)))
 
@@ -913,7 +930,7 @@ toplevel             x
 
 (defmethod (setf command) (val (rb radio-button))
   (add-callback (name rb) val)
-  (format-wish "~a configure -command {callbackval ~a $~a}" (path rb) (name rb) (radio-button-variable rb)))
+  (format-wish "~a configure -command {callbackval ~a $~a}" (widget-path rb) (name rb) (radio-button-variable rb)))
 
 
 ;; text entry widget
@@ -924,7 +941,7 @@ toplevel             x
   )
 
 (defmethod initialize-instance :after ((e entry) &key background borderwidth cursor exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth justify relief selectbackground selectborderwidth selectforeground takefocus xscrollcommand disabledbackground disabledforeground invalidcommand readonlybackground show state validate validatecommand width)
-  (format-wish "entry ~A ~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -exportselection ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -insertbackground ~(~A~)~]~@[ -insertborderwidth ~(~A~)~]~@[ -insertofftime ~(~A~)~]~@[ -insertontime ~(~A~)~]~@[ -insertwidth ~(~A~)~]~@[ -justify ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -selectbackground ~(~A~)~]~@[ -selectborderwidth ~(~A~)~]~@[ -selectforeground ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -xscrollcommand ~(~A~)~]~@[ -disabledbackground ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -invalidcommand ~(~A~)~]~@[ -readonlybackground ~(~A~)~]~@[ -show ~(~A~)~]~@[ -state ~(~A~)~]~@[ -validate ~(~A~)~]~@[ -validatecommand ~(~A~)~]~@[ -width ~(~A~)~]" (path e)
+  (format-wish "entry ~A ~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -exportselection ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -insertbackground ~(~A~)~]~@[ -insertborderwidth ~(~A~)~]~@[ -insertofftime ~(~A~)~]~@[ -insertontime ~(~A~)~]~@[ -insertwidth ~(~A~)~]~@[ -justify ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -selectbackground ~(~A~)~]~@[ -selectborderwidth ~(~A~)~]~@[ -selectforeground ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -xscrollcommand ~(~A~)~]~@[ -disabledbackground ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -invalidcommand ~(~A~)~]~@[ -readonlybackground ~(~A~)~]~@[ -show {~(~A~)}~]~@[ -state ~(~A~)~]~@[ -validate ~(~A~)~]~@[ -validatecommand ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path e)
 	       background borderwidth cursor exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth justify relief selectbackground selectborderwidth selectforeground takefocus xscrollcommand disabledbackground disabledforeground invalidcommand readonlybackground show state validate validatecommand width
 	       ))
 
@@ -932,14 +949,14 @@ toplevel             x
   (make-instance 'entry :master master))
 
 (defun entry-select (e from to)
-  (format-wish "~a selection range ~a ~a" (path e) from to))
+  (format-wish "~a selection range ~a ~a" (widget-path e) from to))
 
 ;;; frame widget 
 
 (defclass frame (widget)  ())
 
 (defmethod initialize-instance :after ((f frame) &key borderwidth cursor highlightbackground highlightcolor highlightthickness padx pady relief takefocus background class colormap container height visual width)
-   (format-wish "frame ~A~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -background ~(~A~)~]~@[ -class ~(~A~)~]~@[ -colormap ~(~A~)~]~@[ -container ~(~A~)~]~@[ -height ~(~A~)~]~@[ -visual ~(~A~)~]~@[ -width ~(~A~)~]" (path f)	borderwidth cursor highlightbackground highlightcolor highlightthickness padx pady relief takefocus background class colormap container height visual width))
+   (format-wish "frame ~A~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -background ~(~A~)~]~@[ -class ~(~A~)~]~@[ -colormap ~(~A~)~]~@[ -container ~(~A~)~]~@[ -height ~(~A~)~]~@[ -visual ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path f)	borderwidth cursor highlightbackground highlightcolor highlightthickness padx pady relief takefocus background class colormap container height visual width))
 
 (defun make-frame (master)
   (make-instance 'frame :master master))
@@ -951,10 +968,10 @@ toplevel             x
    ))
 
 (defmethod initialize-instance :after ((l labelframe) &key borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness padx pady relief takefocus text background class colormap container height labelanchor labelwidget visual width)  
-  (format-wish "labelframe ~A ~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text ~A~]~@[ -background ~(~A~)~]~@[ -class ~(~A~)~]~@[ -colormap ~(~A~)~]~@[ -container ~(~A~)~]~@[ -height ~(~A~)~]~@[ -labelanchor ~(~A~)~]~@[ -labelwidget ~(~A~)~]~@[ -visual ~(~A~)~]~@[ -width ~(~A~)~]" (path l) borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness padx pady relief takefocus text background class colormap container height labelanchor labelwidget visual width))
+  (format-wish "labelframe ~A ~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text ~A~]~@[ -background ~(~A~)~]~@[ -class ~(~A~)~]~@[ -colormap ~(~A~)~]~@[ -container ~(~A~)~]~@[ -height ~(~A~)~]~@[ -labelanchor ~(~A~)~]~@[ -labelwidget ~(~A~)~]~@[ -visual ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path l) borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness padx pady relief takefocus text background class colormap container height labelanchor labelwidget visual width))
 
 (defmethod (setf text) :after (val (l labelframe))
-  (format-wish "~a configure -text {~a}" (path l) val))
+  (format-wish "~a configure -text {~a}" (widget-path l) val))
 
 ;;; panedwindow widget
 
@@ -963,19 +980,19 @@ toplevel             x
    ))
 
 (defmethod initialize-instance :after ((pw paned-window) &key background borderwidth cursor handlepad handlesize height opaqueresize orient relief sashcursor sashpad sashrelief sashwidth showhandle width)  
-  (format-wish "panedwindow ~a ~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -handlepad ~(~A~)~]~@[ -handlesize ~(~A~)~]~@[ -height ~(~A~)~]~@[ -opaqueresize ~(~A~)~]~@[ -orient ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -sashcursor ~(~A~)~]~@[ -sashpad ~(~A~)~]~@[ -sashrelief ~(~A~)~]~@[ -sashwidth ~(~A~)~]~@[ -showhandle ~(~A~)~]~@[ -width ~(~A~)~]" (path pw) background borderwidth cursor handlepad handlesize height opaqueresize orient relief sashcursor sashpad sashrelief sashwidth showhandle width))
+  (format-wish "panedwindow ~a ~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -handlepad ~(~A~)~]~@[ -handlesize ~(~A~)~]~@[ -height ~(~A~)~]~@[ -opaqueresize ~(~A~)~]~@[ -orient ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -sashcursor ~(~A~)~]~@[ -sashpad ~(~A~)~]~@[ -sashrelief ~(~A~)~]~@[ -sashwidth ~(~A~)~]~@[ -showhandle ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path pw) background borderwidth cursor handlepad handlesize height opaqueresize orient relief sashcursor sashpad sashrelief sashwidth showhandle width))
 
 (defgeneric pane-configure (window option value))
 (defmethod pane-configure ((pw paned-window) option value)
-  (format-wish "~a paneconfigure ~a {~a}" (path pw) option value))
+  (format-wish "~a paneconfigure ~a {~a}" (widget-path pw) option value))
 
 (defgeneric add-pane (window widget))
 (defmethod add-pane ((pw paned-window) (w widget))
-  (format-wish "~a add ~a" (path pw) (path w)))
+  (format-wish "~a add ~a" (widget-path pw) (widget-path w)))
 
 (defgeneric forget-pane (window widget))
 (defmethod forget-pane ((pw paned-window) (w widget))
-  (format-wish "~a forget ~a" (path pw) (path w)))
+  (format-wish "~a forget ~a" (widget-path pw) (widget-path w)))
 
 ;;; listbox widget
 
@@ -988,23 +1005,23 @@ toplevel             x
 
 (defmethod initialize-instance :after ((l listbox) &key activestyle background borderwidth cursor disabledforeground exportselection font foreground height highlightbackground highlightcolor highlightthickness relief selectbackground selectborderwidth selectforeground setgrid state takefocus width xscrollcommand yscrollcommand listvariable selectmode)
   (format-wish "listbox ~a ~@[ -activestyle ~(~A~)~]~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -exportselection ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -height ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -selectbackground ~(~A~)~]~@[ -selectborderwidth ~(~A~)~]~@[ -selectforeground ~(~A~)~]~@[ -setgrid ~(~A~)~]~@[ -state ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -width ~(~A~)~]~@[ -xscrollcommand ~(~A~)~]~@[ -yscrollcommand ~(~A~)~]~@[ -listvariable ~(~A~)~]~@[ -selectmode ~(~A~)~]" 
-	    (path l) activestyle background borderwidth cursor disabledforeground exportselection font foreground height highlightbackground highlightcolor highlightthickness relief selectbackground selectborderwidth selectforeground setgrid state takefocus width xscrollcommand yscrollcommand listvariable selectmode))
+	    (widget-path l) activestyle background borderwidth cursor disabledforeground exportselection font foreground height highlightbackground highlightcolor highlightthickness relief selectbackground selectborderwidth selectforeground setgrid state takefocus width xscrollcommand yscrollcommand listvariable selectmode))
 
 (defmethod (setf command) (val (listbox listbox))
   (add-callback (name listbox) val)
-  (format-wish "bind ~a <<ListboxSelect>> {callbackval ~a ([~a curselection])}" (path listbox) (name listbox)
-	       (path listbox)))
+  (format-wish "bind ~a <<ListboxSelect>> {callbackval ~a ([~a curselection])}" (widget-path listbox) (name listbox)
+	       (widget-path listbox)))
 
 (defgeneric listbox-append (l vals))
 (defmethod listbox-append ((l listbox) values)
   "append values (which may be a list) to the list box"
   (if (listp values)
-      (format-wish "~a insert end ~{ \{~a\}~}" (path l) values)
-    (format-wish "~a insert end \{~a\}" (path l) values)))
+      (format-wish "~a insert end ~{ \{~a\}~}" (widget-path l) values)
+    (format-wish "~a insert end \{~a\}" (widget-path l) values)))
 
 (defgeneric listbox-get-selection (l))
 (defmethod listbox-get-selection ((l listbox))
-  (format-wish "puts -nonewline {(};puts -nonewline [~a curselection];puts {)};flush stdout" (path l))
+  (format-wish "puts -nonewline {(};puts -nonewline [~a curselection];puts {)};flush stdout" (widget-path l))
   (read *wish*))
 
 (defgeneric listbox-select (l val))
@@ -1013,15 +1030,15 @@ toplevel             x
 if a number is given the corresponding element is selected, alternatively
 a list of numbers may be given"
   (if (null val)
-      (format-wish "~a selection clear 0 end" (path l))
+      (format-wish "~a selection clear 0 end" (widget-path l))
     (if (listp val)
-	(format-wish "~a selecttion set ~{ ~a~}" (path l) val)
-      (format-wish "~a selecttion set ~a" (path l) val))))
+	(format-wish "~a selecttion set ~{ ~a~}" (widget-path l) val)
+      (format-wish "~a selecttion set ~a" (widget-path l) val))))
 
 (defgeneric listbox-clear (l))
 
 (defmethod listbox-clear ((l listbox))
-  (format-wish "~a delete 0 end" (path l)))
+  (format-wish "~a delete 0 end" (widget-path l)))
 
 (defclass scrolled-listbox (frame)
   ((listbox :accessor listbox)
@@ -1041,10 +1058,10 @@ a list of numbers may be given"
   (grid-rowconfigure sl 0 :weight 1)
   (grid-rowconfigure sl 1 :weight 0)
  
-  (configure (hscroll sl) "command" (concatenate 'string (path (listbox sl)) " xview"))
-  (configure (vscroll sl) "command" (concatenate 'string (path (listbox sl)) " yview"))
-  (configure (listbox sl) "xscrollcommand" (concatenate 'string (path (hscroll sl)) " set"))
-  (configure (listbox sl) "yscrollcommand" (concatenate 'string (path (vscroll sl)) " set"))
+  (configure (hscroll sl) "command" (concatenate 'string (widget-path (listbox sl)) " xview"))
+  (configure (vscroll sl) "command" (concatenate 'string (widget-path (listbox sl)) " yview"))
+  (configure (listbox sl) "xscrollcommand" (concatenate 'string (widget-path (hscroll sl)) " set"))
+  (configure (listbox sl) "yscrollcommand" (concatenate 'string (widget-path (vscroll sl)) " set"))
   )
 
 (defmethod listbox-append ((l scrolled-listbox) values)
@@ -1076,23 +1093,23 @@ a list of numbers may be given"
   (grid-rowconfigure st 0 :weight 1)
   (grid-rowconfigure st 1 :weight 0)
  
-  (configure (hscroll st) "command" (concatenate 'string (path (textbox st)) " xview"))
-  (configure (vscroll st) "command" (concatenate 'string (path (textbox st)) " yview"))
-  (configure (textbox st) "xscrollcommand" (concatenate 'string (path (hscroll st)) " set"))
-  (configure (textbox st) "yscrollcommand" (concatenate 'string (path (vscroll st)) " set"))
+  (configure (hscroll st) "command" (concatenate 'string (widget-path (textbox st)) " xview"))
+  (configure (vscroll st) "command" (concatenate 'string (widget-path (textbox st)) " yview"))
+  (configure (textbox st) "xscrollcommand" (concatenate 'string (widget-path (hscroll st)) " set"))
+  (configure (textbox st) "yscrollcommand" (concatenate 'string (widget-path (vscroll st)) " set"))
   )
 
 (defgeneric append-text (txt text &optional tag))
 (defmethod append-text ((txt scrolled-text) text &optional (tag nil))
-  (format-wish "~a insert end {~a}~@[ ~(~a~)~]" (path (textbox txt)) text tag))
+  (format-wish "~a insert end {~a}~@[ ~(~a~)~]" (widget-path (textbox txt)) text tag))
 
 (defgeneric insert-object (txt object))
 (defmethod insert-object ((txt scrolled-text) obj)
-  (format-wish "~a window create end -window ~a" (path (textbox txt)) (path obj)))
+  (format-wish "~a window create end -window ~a" (widget-path (textbox txt)) (widget-path obj)))
 
 (defgeneric see (txt pos))
 (defmethod see ((txt scrolled-text) pos)
-  (format-wish "~a see ~a" (path (textbox txt)) pos))
+  (format-wish "~a see ~a" (widget-path (textbox txt)) pos))
 
 ;;; scale widget
 
@@ -1100,14 +1117,14 @@ a list of numbers may be given"
   ())
 
 (defmethod initialize-instance :after ((sc scale) &key command activebackground background bigincrement borderwidth cursor digits font foreground from highlightbackground highlightcolor highlightthickness label length orient relief repeatdelay repeatinterval resolution showvalue sliderlength sliderrelief state takefocus tickinterval to troughcolor width)
-  (format-wish "scale ~a ~@[ -activebackground ~(~A~)~]~@[ -background ~(~A~)~]~@[ -bigincrement ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -digits ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -from ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -label ~(~A~)~]~@[ -length ~(~A~)~]~@[ -orient ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -repeatdelay ~(~A~)~]~@[ -repeatinterval ~(~A~)~]~@[ -resolution ~(~A~)~]~@[ -showvalue ~(~A~)~]~@[ -sliderlength ~(~A~)~]~@[ -sliderrelief ~(~A~)~]~@[ -state ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -tickinterval ~(~A~)~]~@[ -to ~(~A~)~]~@[ -troughcolor ~(~A~)~]~@[ -width ~(~A~)~]" (path sc) activebackground background bigincrement borderwidth cursor digits font foreground from highlightbackground highlightcolor highlightthickness label length orient relief repeatdelay repeatinterval resolution showvalue sliderlength sliderrelief state takefocus tickinterval to troughcolor width)
+  (format-wish "scale ~a ~@[ -activebackground ~(~A~)~]~@[ -background ~(~A~)~]~@[ -bigincrement ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -digits ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -from ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -label ~(~A~)~]~@[ -length ~(~A~)~]~@[ -orient ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -repeatdelay ~(~A~)~]~@[ -repeatinterval ~(~A~)~]~@[ -resolution ~(~A~)~]~@[ -showvalue ~(~A~)~]~@[ -sliderlength ~(~A~)~]~@[ -sliderrelief ~(~A~)~]~@[ -state ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -tickinterval ~(~A~)~]~@[ -to ~(~A~)~]~@[ -troughcolor ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path sc) activebackground background bigincrement borderwidth cursor digits font foreground from highlightbackground highlightcolor highlightthickness label length orient relief repeatdelay repeatinterval resolution showvalue sliderlength sliderrelief state takefocus tickinterval to troughcolor width)
   (when command
     (setf (command sc) command)))
 
 (defmethod (setf command) (val (scale scale))
   (add-callback (name scale) val)					
   (format-wish "proc ~a-command {val} {callbackval ~a $val}" (name scale) (name scale))
-  (format-wish "~a configure -command ~a-command" (path scale) (name scale)))
+  (format-wish "~a configure -command ~a-command" (widget-path scale) (name scale)))
 
 ;;; spinbox widget
 
@@ -1116,7 +1133,7 @@ a list of numbers may be given"
 
 (defmethod initialize-instance :after ((sp spinbox) &key  command activebackground background borderwidth cursor exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth justify relief repeatdelay repeatinterval selectbackground selectborderwidth selectforeground takefocus textvariable xscrollcommand buttonbackground buttondownrelief buttonuprelief disabledbackground disabledforeground format from invalidcommand increment readonlybackground state to validate validatecommand values width wrap )
   (format-wish "spinbox ~a ~@[ -activebackground ~(~A~)~]~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -exportselection ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -insertbackground ~(~A~)~]~@[ -insertborderwidth ~(~A~)~]~@[ -insertofftime ~(~A~)~]~@[ -insertontime ~(~A~)~]~@[ -insertwidth ~(~A~)~]~@[ -justify ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -repeatdelay ~(~A~)~]~@[ -repeatinterval ~(~A~)~]~@[ -selectbackground ~(~A~)~]~@[ -selectborderwidth ~(~A~)~]~@[ -selectforeground ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -textvariable ~(~A~)~]~@[ -xscrollcommand ~(~A~)~]~@[ -buttonbackground ~(~A~)~]~@[ -buttondownrelief ~(~A~)~]~@[ -buttonuprelief ~(~A~)~]~@[ -disabledbackground ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -format ~(~A~)~]~@[ -from ~(~A~)~]~@[ -invalidcommand ~(~A~)~]~@[ -increment ~(~A~)~]~@[ -readonlybackground ~(~A~)~]~@[ -state ~(~A~)~]~@[ -to ~(~A~)~]~@[ -validate ~(~A~)~]~@[ -validatecommand ~(~A~)~]~@[ -values ~(~A~)~]~@[ -width ~(~A~)~]~@[ -wrap ~(~A~)~]"
-	       (path sp) activebackground background borderwidth cursor exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth justify relief repeatdelay repeatinterval selectbackground selectborderwidth selectforeground takefocus textvariable xscrollcommand buttonbackground buttondownrelief buttonuprelief disabledbackground disabledforeground format from invalidcommand increment readonlybackground state to validate validatecommand values width wrap)
+	       (widget-path sp) activebackground background borderwidth cursor exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth justify relief repeatdelay repeatinterval selectbackground selectborderwidth selectforeground takefocus textvariable xscrollcommand buttonbackground buttondownrelief buttonuprelief disabledbackground disabledforeground format from invalidcommand increment readonlybackground state to validate validatecommand values width wrap)
   (when command
     (setf (command sp) command)))
 
@@ -1124,7 +1141,7 @@ a list of numbers may be given"
 
 (defmethod (setf command) (val (sp spinbox))
   (add-callback (name sp) val)					
-  (format-wish "~a configure -command {callbackstring ~a %s}" (path sp) (name sp)))
+  (format-wish "~a configure -command {callbackstring ~a %s}" (widget-path sp) (name sp)))
 
 ;;; toplevel (window) widget 
 
@@ -1134,10 +1151,10 @@ a list of numbers may be given"
 
 (defmethod initialize-instance :after ((w toplevel) &key borderwidth cursor highlightbackground highlightcolor highlightthickness padx pady relief takefocus background class colormap containerheight menu screen use visual width)
   (format-wish "toplevel ~A ~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -background ~(~A~)~]~@[ -class ~(~A~)~]~@[ -colormap ~(~A~)~]~@[ -containerheight ~(~A~)~]~@[ -menu ~(~A~)~]~@[ -screen ~(~A~)~]~@[ -use ~(~A~)~]~@[ -visual ~(~A~)~]~@[ -width ~(~A~)~]"
-	       (path w) borderwidth cursor highlightbackground highlightcolor highlightthickness padx pady relief takefocus background class colormap containerheight menu screen use visual width
+	       (widget-path w) borderwidth cursor highlightbackground highlightcolor highlightthickness padx pady relief takefocus background class colormap containerheight menu screen use visual width
 )
   (unless (protocol-destroy w)
-    (format-wish "wm protocol ~a WM_DELETE_WINDOW {wm withdraw ~a}" (path w) (path w))))
+    (format-wish "wm protocol ~a WM_DELETE_WINDOW {wm withdraw ~a}" (widget-path w) (widget-path w))))
 
 
 (defun make-toplevel (master)
@@ -1150,7 +1167,7 @@ a list of numbers may be given"
    ))
 
 (defmethod initialize-instance :after ((l label) &key activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground highlightbackground highlightcolor highlightthickness image justify padx pady relief takefocus text underline wraplength compound height state width)
-  (format-wish "label ~A ~@[ -activebackground ~(~A~)~]~@[ -activeforeground ~(~A~)~]~@[ -anchor ~(~A~)~]~@[ -background ~(~A~)~]~@[ -bitmap ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -image ~(~A~)~]~@[ -justify ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text ~A~]~@[ -underline ~(~A~)~]~@[ -wraplength ~(~A~)~]~@[ -compound ~(~A~)~]~@[ -height ~(~A~)~]~@[ -state ~(~A~)~]~@[ -width ~(~A~)~]" (path l) activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground highlightbackground highlightcolor highlightthickness image justify padx pady relief takefocus text underline wraplength compound height state width))
+  (format-wish "label ~A ~@[ -activebackground ~(~A~)~]~@[ -activeforeground ~(~A~)~]~@[ -anchor ~(~A~)~]~@[ -background ~(~A~)~]~@[ -bitmap ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -image ~(~A~)~]~@[ -justify ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text ~A~]~@[ -underline ~(~A~)~]~@[ -wraplength ~(~A~)~]~@[ -compound ~(~A~)~]~@[ -height ~(~A~)~]~@[ -state ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path l) activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground highlightbackground highlightcolor highlightthickness (and image (name image)) justify padx pady relief takefocus text underline wraplength compound height state width))
 
 (defun make-label (master text)
   (make-instance 'label :master master  :text text))
@@ -1162,7 +1179,7 @@ a list of numbers may be given"
 
 (defmethod initialize-instance :after ((m message) &key text aspect justify width)
   (format-wish "message ~A ~@[ -text {~A}~]~@[ -aspect ~A~]~@[ -justify ~(~A~)~]~@[ -width ~A~]"
-	    (path m) text aspect justify width))
+	    (widget-path m) text aspect justify width))
 
 ;;; scrollbar
 
@@ -1174,7 +1191,7 @@ a list of numbers may be given"
   (make-instance 'scrollbar :master master :orientation orientation))
 
 (defmethod initialize-instance :after ((sb scrollbar) &key orientation activebackground activerelief background borderwidth command cursor elementborderwidth highlightbackground highlightcolor highlightthickness jump relief repeatdelay repeatinterval takefocus troughcolor width)
-  (send-wish (format nil "scrollbar ~a~@[ -orient ~(~A~)~]~@[ -activebackground ~(~A~)~]~@[ -activerelief ~(~A~)~]~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -command ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -elementborderwidth ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -jump ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -repeatdelay ~(~A~)~]~@[ -repeatinterval ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -troughcolor ~(~A~)~]~@[ -width ~(~A~)~]" (path sb) orientation activebackground activerelief background borderwidth command cursor elementborderwidth highlightbackground highlightcolor highlightthickness jump relief repeatdelay repeatinterval takefocus troughcolor width)))
+  (send-wish (format nil "scrollbar ~a~@[ -orient ~(~A~)~]~@[ -activebackground ~(~A~)~]~@[ -activerelief ~(~A~)~]~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -command ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -elementborderwidth ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -jump ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -repeatdelay ~(~A~)~]~@[ -repeatinterval ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -troughcolor ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path sb) orientation activebackground activerelief background borderwidth command cursor elementborderwidth highlightbackground highlightcolor highlightthickness jump relief repeatdelay repeatinterval takefocus troughcolor width)))
 
 (defclass scrolled-canvas (frame)
   ((canvas :accessor canvas)
@@ -1199,10 +1216,10 @@ a list of numbers may be given"
   (grid-rowconfigure sc 0 :weight 1)
   (grid-rowconfigure sc 1 :weight 0)
  
-  (configure (hscroll sc) "command" (concatenate 'string (path (canvas sc)) " xview"))
-  (configure (vscroll sc) "command" (concatenate 'string (path (canvas sc)) " yview"))
-  (configure (canvas sc) "xscrollcommand" (concatenate 'string (path (hscroll sc)) " set"))
-  (configure (canvas sc) "yscrollcommand" (concatenate 'string (path (vscroll sc)) " set"))
+  (configure (hscroll sc) "command" (concatenate 'string (widget-path (canvas sc)) " xview"))
+  (configure (vscroll sc) "command" (concatenate 'string (widget-path (canvas sc)) " yview"))
+  (configure (canvas sc) "xscrollcommand" (concatenate 'string (widget-path (hscroll sc)) " set"))
+  (configure (canvas sc) "yscrollcommand" (concatenate 'string (widget-path (vscroll sc)) " set"))
   )
 
 
@@ -1227,10 +1244,10 @@ a list of numbers may be given"
     (grid-rowconfigure sf 0 "weight" 1)
     (grid-rowconfigure sf 1 "weight" 0)
     (place (interior sf) 0 0)
-    (send-wish (format nil "~a set  0.1 0.5" (path (hscroll sf))))
-    (send-wish (format nil "~a set  0.1 0.5" (path (vscroll sf))))
-    (send-wish (format nil "~a configure -command ~axv" (path (hscroll sf)) (name sf)))
-    (send-wish (format nil "~a configure -command ~ayv" (path (vscroll sf)) (name sf)))
+    (send-wish (format nil "~a set  0.1 0.5" (widget-path (hscroll sf))))
+    (send-wish (format nil "~a set  0.1 0.5" (widget-path (vscroll sf))))
+    (send-wish (format nil "~a configure -command ~axv" (widget-path (hscroll sf)) (name sf)))
+    (send-wish (format nil "~a configure -command ~ayv" (widget-path (vscroll sf)) (name sf)))
     (send-wish (format nil "
 proc ~axv {{com moveto} {val 0} {unit 0}} {
 set x [winfo x ~a]
@@ -1256,22 +1273,22 @@ set y [winfo y ~a]
 }
 
 "                   (name sf)
-		    (path (interior sf))
-		    (path (interior sf))
-		    (path (interior sf))
-		    (path f)
-		    (path (interior sf))
-		    (path (interior sf))		   
-		    (path (hscroll sf))
+		    (widget-path (interior sf))
+		    (widget-path (interior sf))
+		    (widget-path (interior sf))
+		    (widget-path f)
+		    (widget-path (interior sf))
+		    (widget-path (interior sf))		   
+		    (widget-path (hscroll sf))
 
 		    (name sf)
-		    (path (interior sf))
-		    (path (interior sf))
-		    (path (interior sf))
-		    (path f)
-		    (path (interior sf))
-		    (path (interior sf))		   
-		    (path (vscroll sf))
+		    (widget-path (interior sf))
+		    (widget-path (interior sf))
+		    (widget-path (interior sf))
+		    (widget-path f)
+		    (widget-path (interior sf))
+		    (widget-path (interior sf))		   
+		    (widget-path (vscroll sf))
 		    ))
     ))
 
@@ -1313,7 +1330,7 @@ set y [winfo y ~a]
                 ~@[ -confine ~(~A~)~]~@[ -height ~(~A~)~]~@[ -scrollregion ~(~A~)~]~
                 ~@[ -state ~(~A~)~]~@[ -width ~(~A~)~]~@[ -xscrollincrement ~(~A~)~]~
                 ~@[ -yscrollincrement ~(~A~)~]"
-	       (path c) background
+	       (widget-path c) background
 	       borderwidth cursor highlightbackground highlightcolor highlightthickness
 	       insertbackground insertborderwidth insertofftime insertontime insertwidth
 	       relief selectbackground selectborderwidth selectforeground takefocus
@@ -1329,7 +1346,7 @@ set y [winfo y ~a]
   "bind fun to event of the widget w"
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "~a bind ~a ~a {sendevent ~A %x %y %k %K %w %h}" (path canvas) item event name)))
+    (format-wish "~a bind ~a ~a {sendevent ~A %x %y %k %K %w %h}" (widget-path canvas) item event name)))
 
 (defgeneric scrollregion (canvas x0 y0 x1 y1))
 (defmethod scrollregion ((c canvas) x0 y0 x1 y1)
@@ -1341,7 +1358,7 @@ set y [winfo y ~a]
 
 (defgeneric itemmove (canvas item dx dy))
 (defmethod itemmove ((canvas canvas) item dx dy)
-  (format-wish "~a move ~a ~a ~a" (path canvas) item dx dy))
+  (format-wish "~a move ~a ~a ~a" (widget-path canvas) item dx dy))
 
 (defgeneric move (item dx dy))
 (defmethod move ((item canvas-item) dx dy)
@@ -1349,11 +1366,11 @@ set y [winfo y ~a]
 
 (defgeneric clear (widget))
 (defmethod clear ((canvas canvas))
-  (format-wish "~a delete all" (path canvas)))
+  (format-wish "~a delete all" (widget-path canvas)))
 ;; canvas item functions
 
 (defun create-line (canvas coords)
-  (format-wish "senddata [~a create line~{ ~a~}]" (path canvas) coords)
+  (format-wish "senddata [~a create line~{ ~a~}]" (widget-path canvas) coords)
   (read-data))
 
 (defun create-line* (canvas &rest coords)
@@ -1370,7 +1387,7 @@ set y [winfo y ~a]
 
 
 (defun create-polygon (canvas coords)
-  (format-wish "senddata [~a create polygon~{ ~a~}]" (path canvas) coords)
+  (format-wish "senddata [~a create polygon~{ ~a~}]" (widget-path canvas) coords)
   (read-data))
 
 (defclass canvas-polygon (canvas-item)
@@ -1384,7 +1401,7 @@ set y [winfo y ~a]
 
 
 (defun create-oval (canvas x0 y0 x1 y1)
-  (format-wish "senddata [~a create oval ~a ~a ~a ~a]" (path canvas) x0 y0 x1 y1)
+  (format-wish "senddata [~a create oval ~a ~a ~a ~a]" (widget-path canvas) x0 y0 x1 y1)
   (read-data))
 
 (defclass canvas-oval (canvas-item)
@@ -1398,7 +1415,7 @@ set y [winfo y ~a]
 
 
 (defun create-rectangle (canvas x0 y0 x1 y1)
-  (format-wish "senddata [~a create rectangle ~a ~a ~a ~a]" (path canvas) x0 y0 x1 y1)
+  (format-wish "senddata [~a create rectangle ~a ~a ~a ~a]" (widget-path canvas) x0 y0 x1 y1)
   (read-data))
 
 (defclass canvas-rectangle (canvas-item)
@@ -1413,7 +1430,7 @@ set y [winfo y ~a]
 
 
 (defun create-text (canvas x y text)
-  (format-wish "senddata [~a create text ~a ~a -anchor nw -text {~a}]" (path canvas) x y text)
+  (format-wish "senddata [~a create text ~a ~a -anchor nw -text {~a}]" (widget-path canvas) x y text)
   (read-data))
 
 (defclass canvas-text (canvas-item)
@@ -1424,7 +1441,7 @@ set y [winfo y ~a]
 
 
 (defun create-image (canvas x y &key image)
-  (format-wish "senddata [~a create image ~a ~a -anchor nw~@[ -image ~a~]]" (path canvas) x y
+  (format-wish "senddata [~a create image ~a ~a -anchor nw~@[ -image ~a~]]" (widget-path canvas) x y
 	       (and image (name image)))
   (read-data))
 
@@ -1438,14 +1455,14 @@ set y [winfo y ~a]
   (format-wish "~A put {~{{~:{#~2,'0X~2,'0X~2,'0X ~} } ~} } -to ~a ~a~@[ ~a~]~@[ ~a~]" (name image) data x y x2 y2))
 
 (defun create-bitmap (canvas x y &key (bitmap nil))
-  (format-wish "senddata [~a create image ~a ~a -anchor nw~@[ -bitmap ~a~]]" (path canvas) x y
+  (format-wish "senddata [~a create image ~a ~a -anchor nw~@[ -bitmap ~a~]]" (widget-path canvas) x y
 	       (and bitmap (name bitmap)))
   (read-data))
 
 
 (defun create-arc (canvas x0 y0 x1 y1 &key (start 0) (extent 180) (style "pieslice"))
   (format-wish "senddata [~a create arc ~a ~a ~a ~a -start ~a -extent ~a -style ~a]"
-	       (path canvas) x0 y0 x1 y1 start extent style)
+	       (widget-path canvas) x0 y0 x1 y1 start extent style)
   (read-data))
 
 (defclass canvas-arc (canvas-item)
@@ -1457,14 +1474,27 @@ set y [winfo y ~a]
 
 (defun create-window (canvas x y widget)
   (format-wish "senddata [~a create window ~a ~a -anchor nw -window ~a]"
-	       (path canvas) x y (path widget))
+	       (widget-path canvas) x y (widget-path widget))
   (read-data))
 
-(defun set-coords (canvas item coords)
-  (format-wish "~a coords ~a~{ ~a~}" (path canvas) item coords))
 
-(defun set-coords* (canvas item &rest coords)
+(defgeneric set-coords (canvas item coords))
+
+(defmethod set-coords (canvas item coords)
+  (format-wish "~a coords ~a~{ ~a~}" (widget-path canvas) item coords))
+
+(defmethod set-coords ((canvas canvas) (item canvas-item) (coords list))
+  (set-coords canvas (handle item) coords))
+
+(defgeneric set-coords* (canvas item &rest coords))
+
+(defmethod set-coords* (canvas item &rest coords)
   (funcall #'set-coords canvas item coords))
+
+(defmethod set-coords* ((canvas canvas) (item canvas-item) &rest coords)
+  (funcall #'set-coords canvas (handle item) coords))
+
+
 
 (defun postscript (canvas filename)
   (if (and (scrollregion-x0 canvas)
@@ -1472,12 +1502,12 @@ set y [winfo y ~a]
 	   (scrollregion-y0 canvas)
 	   (scrollregion-y1 canvas))
       (format-wish "~a postscript -file ~a -x ~a -y ~a -width ~a -height ~a"
-		(path canvas) filename
+		(widget-path canvas) filename
 		(scrollregion-x0 canvas) (scrollregion-y0 canvas)
 		(- (scrollregion-x1 canvas) (scrollregion-x0 canvas))
 		(- (scrollregion-y1 canvas) (scrollregion-y0 canvas))
 		)
-    (format-wish "~a postscript -file ~a" (path canvas) filename)))
+    (format-wish "~a postscript -file ~a" (widget-path canvas) filename)))
 
 ;;; text widget
 
@@ -1491,16 +1521,16 @@ set y [winfo y ~a]
 (defmethod textbox ((text text)) text)
 
 (defmethod initialize-instance :after ((txt text) &key background borderwidth cursor exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth padx pady relief selectbackground selectborderwidth selectforeground setgrid takefocus xscrollcommand yscrollcommand autoseparators height maxundo spacing1 spacing2 spacing3 state tabs undo width wrap)
-  (format-wish "text ~a ~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -exportselection ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -insertbackground ~(~A~)~]~@[ -insertborderwidth ~(~A~)~]~@[ -insertofftime ~(~A~)~]~@[ -insertontime ~(~A~)~]~@[ -insertwidth ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -selectbackground ~(~A~)~]~@[ -selectborderwidth ~(~A~)~]~@[ -selectforeground ~(~A~)~]~@[ -setgrid ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -xscrollcommand ~(~A~)~]~@[ -yscrollcommand ~(~A~)~]~@[ -autoseparators ~(~A~)~]~@[ -height ~(~A~)~]~@[ -maxundo ~(~A~)~]~@[ -spacing1 ~(~A~)~]~@[ -spacing2 ~(~A~)~]~@[ -spacing3 ~(~A~)~]~@[ -state ~(~A~)~]~@[ -tabs ~(~A~)~]~@[ -undo ~(~A~)~]~@[ -width ~(~A~)~]~@[ -wrap ~(~A~)~]" (path txt) background borderwidth cursor exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth padx pady relief selectbackground selectborderwidth selectforeground setgrid takefocus xscrollcommand yscrollcommand autoseparators height maxundo spacing1 spacing2 spacing3 state tabs undo width wrap))
+  (format-wish "text ~a ~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -exportselection ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -insertbackground ~(~A~)~]~@[ -insertborderwidth ~(~A~)~]~@[ -insertofftime ~(~A~)~]~@[ -insertontime ~(~A~)~]~@[ -insertwidth ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -selectbackground ~(~A~)~]~@[ -selectborderwidth ~(~A~)~]~@[ -selectforeground ~(~A~)~]~@[ -setgrid ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -xscrollcommand ~(~A~)~]~@[ -yscrollcommand ~(~A~)~]~@[ -autoseparators ~(~A~)~]~@[ -height ~(~A~)~]~@[ -maxundo ~(~A~)~]~@[ -spacing1 ~(~A~)~]~@[ -spacing2 ~(~A~)~]~@[ -spacing3 ~(~A~)~]~@[ -state ~(~A~)~]~@[ -tabs ~(~A~)~]~@[ -undo ~(~A~)~]~@[ -width ~(~A~)~]~@[ -wrap ~(~A~)~]" (widget-path txt) background borderwidth cursor exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth padx pady relief selectbackground selectborderwidth selectforeground setgrid takefocus xscrollcommand yscrollcommand autoseparators height maxundo spacing1 spacing2 spacing3 state tabs undo width wrap))
 
 (defun make-text (master &key (width nil) (height nil))
   (make-instance 'text :master master :width width :height height))
 
 (defmethod append-text ((txt text) text &optional (tag nil))
-  (format-wish "~a insert end {~a}~@[ ~(~a~)~]" (path txt) text tag))
+  (format-wish "~a insert end {~a}~@[ ~(~a~)~]" (widget-path txt) text tag))
 
 (defmethod insert-object ((txt text) obj)
-  (format-wish "~a window create end -window ~a" (path txt) (path obj)))
+  (format-wish "~a window create end -window ~a" (widget-path txt) (widget-path obj)))
 
 (defun append-newline (text)
   (append-text text (coerce '(#\Linefeed) 'string)))
@@ -1508,14 +1538,14 @@ set y [winfo y ~a]
 
 (defgeneric clear-text (txt))
 (defmethod clear-text ((txt text))
-  (format-wish "~A delete 0.0 end" (path txt)))
+  (format-wish "~A delete 0.0 end" (widget-path txt)))
 
 (defmethod see((txt text) pos)
-  (format-wish "~a see ~a" (path txt) pos))
+  (format-wish "~a see ~a" (widget-path txt) pos))
 
 (defgeneric tag-configure (txt tag option value))
 (defmethod tag-configure ((txt text) tag option value)
-  (format-wish "~a tag configure ~a -~(~a~) {~(~a~)}" (path txt)
+  (format-wish "~a tag configure ~a -~(~a~) {~(~a~)}" (widget-path txt)
 	       (if (stringp tag)
 		   tag
 		 (format nil "~(~a~)" tag))
@@ -1526,27 +1556,27 @@ set y [winfo y ~a]
   "bind fun to event of the tag of the text widget txt"
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "~a tag bind ~a ~a {callback ~A}" (path txt) tag event name)
+    (format-wish "~a tag bind ~a ~a {callback ~A}" (widget-path txt) tag event name)
     ))
 
 (defmethod text ((text text))
-  (format-wish "senddatastring [~a get 1.0 end]" (path text))
+  (format-wish "senddatastring [~a get 1.0 end]" (widget-path text))
   (read-data))
 
 (defmethod (setf text) (val (text text))
-  (format-wish "~A delete 0.0 end;~A insert end {~A}" (path text) (path text) val))
+  (format-wish "~A delete 0.0 end;~A insert end {~A}" (widget-path text) (widget-path text) val))
 
 (defgeneric save-text (txt filename))
 (defmethod save-text ((txt text) filename)
   "save the content of the text widget into the file <filename>"
-  (format-wish "set file [open {~a} \"w\"];puts $file [~a get 1.0 end];close $file;puts \"asdf\"" filename (path txt))
+  (format-wish "set file [open {~a} \"w\"];puts $file [~a get 1.0 end];close $file;puts \"asdf\"" filename (widget-path txt))
   (read-line *wish*)
   )
 
 (defgeneric load-text (txt filename))
 (defmethod load-text((txt text) filename)
   "load the content of the file <filename>"
-  (format-wish "set file [open {~a} \"r\"];~a delete 1.0 end;~a insert end [read $file];close $file;puts \"asdf\"" filename (path txt) (path txt))
+  (format-wish "set file [open {~a} \"r\"];~a delete 1.0 end;~a insert end [read $file];close $file;puts \"asdf\"" filename (widget-path txt) (widget-path txt))
   (read-line *wish*))
 
 ;;; photo image object
@@ -1555,7 +1585,7 @@ set y [winfo y ~a]
   ()
   )
 
-(defmethod path ((photo photo-image))
+(defmethod widget-path ((photo photo-image))
   (name photo))
 ;(defmethod create ((p photo-image))
 (defmethod initialize-instance :after ((p photo-image) &key width height)
@@ -1594,23 +1624,23 @@ set y [winfo y ~a]
   (format-wish "pack ~A -side ~(~A~) -fill ~(~A~)~@[~* -expand 1~]~
              ~@[ -after ~A~]~@[ -before ~A~]~@[ -padx ~A~]~
              ~@[ -pady ~A~]~@[ -ipadx ~A~]~@[ -ipady ~A~]~@[ -anchor ~(~A~)~]"
-          (path w) side fill expand (and after (path after)) (and before (path before)) padx pady ipadx ipady anchor))
+          (widget-path w) side fill expand (and after (widget-path after)) (and before (widget-path before)) padx pady ipadx ipady anchor))
 
 
 (defgeneric pack-forget (widget))
 (defmethod pack-forget ((w widget))
-  (format-wish "pack forget ~A" (path w)))
+  (format-wish "pack forget ~A" (widget-path w)))
 
 
 ;;; place manager
 
 (defgeneric place (widget x y &key width height))
 (defmethod place (widget x y &key width height)
-  (format-wish "place ~A -x ~A -y ~A~@[ -width ~a~]~@[ -height ~a~]" (path widget) x y width height))
+  (format-wish "place ~A -x ~A -y ~A~@[ -width ~a~]~@[ -height ~a~]" (widget-path widget) x y width height))
 
 (defgeneric place-forget (widget))
 (defmethod place-forget ((w widget))
-  (format-wish "place forget ~A" (path w)))
+  (format-wish "place forget ~A" (widget-path w)))
 
 ;;; grid manager
 
@@ -1618,19 +1648,19 @@ set y [winfo y ~a]
 (defmethod grid ((w widget) row column &key columnspan ipadx ipady padx pady rowspan sticky)
   (format-wish "grid ~a -row ~a -column ~a~@[ -columnspan ~a~]~@[ -ipadx ~a~]~
              ~@[ -ipady ~a~]~@[ -padx ~a~]~@[ -pady ~a~]~@[ -rowspan ~a~]~
-             ~@[ -sticky ~(~a~)~]" (path w) row column columnspan ipadx ipady padx pady rowspan  sticky))
+             ~@[ -sticky ~(~a~)~]" (widget-path w) row column columnspan ipadx ipady padx pady rowspan  sticky))
 
 (defgeneric grid-columnconfigure (widget c o v))
 (defmethod grid-columnconfigure (widget column option value)
-  (format-wish "grid columnconfigure ~a ~a -~(~a~) {~a}" (path widget) column option value))
+  (format-wish "grid columnconfigure ~a ~a -~(~a~) {~a}" (widget-path widget) column option value))
 
 (defgeneric grid-rowconfigure (widget r o v))
 (defmethod grid-rowconfigure (widget row option value)
-  (format-wish "grid rowconfigure ~a ~a -~(~a~) {~a}" (path widget) row option value))
+  (format-wish "grid rowconfigure ~a ~a -~(~a~) {~a}" (widget-path widget) row option value))
 
 (defgeneric grid-configure (widget o v))
 (defmethod grid-configure (widget option value)
-  (format-wish "grid configure ~a -~(~a~) {~a}" (path widget) option value))
+  (format-wish "grid configure ~a -~(~a~) {~a}" (widget-path widget) option value))
 
 
 ;;; configure a widget parameter
@@ -1638,19 +1668,20 @@ set y [winfo y ~a]
 (defgeneric configure (widget option value &rest others))
 (defmethod configure (widget option value &rest others)
   ;(format t "normal config~&")
-  (format-wish "~A configure -~(~A~) {~A} ~{ -~(~a~) {~(~a~)}~}" (path widget) option 
+  (format-wish "~A configure -~(~A~) {~A} ~{ -~(~a~) {~(~a~)}~}" (widget-path widget) option 
 	    (if (stringp value) ;; There may be values that need to be passed as
 		value           ;; unmodified strings, so do not downcase strings
 	      (format nil "~(~a~)" value)) ;; if its not a string, print it downcased (eg. symbols)
-	    others
+	    others)
+  widget)
 
-	    ))
 (defmethod configure ((item canvas-item) option value &rest others)
-  (format-wish "~A itemconfigure ~A -~(~A~) {~A}~{ -~(~a~) {~(~a~)}~}" (path (canvas item)) (handle item) option
+  (format-wish "~A itemconfigure ~A -~(~A~) {~A}~{ -~(~a~) {~(~a~)}~}" (widget-path (canvas item)) (handle item) option
 	       (if (stringp value) ;; There may be values that need to be passed as
 		   value           ;; unmodified strings, so do not downcase strings
 		 (format nil "~(~a~)" value))
-	       others))
+	       others)
+  item)
 
   
 
@@ -1659,11 +1690,12 @@ set y [winfo y ~a]
 
 ;;; for tkobjects, the name of the widget is taken
 (defmethod configure (widget option (value tkobject) &rest others)
-  (format-wish "~A configure -~(~A~) {~A} ~{ -~(~a~) {~(~a~)}~}" (path widget) option (path value) others))
+  (format-wish "~A configure -~(~A~) {~A} ~{ -~(~a~) {~(~a~)}~}" (widget-path widget) option (widget-path value) others)
+  widget)
 
 (defgeneric cget (widget option))
 (defmethod cget ((widget widget) option)
-  (format-wish "senddatastring [~a cget -~(~a~)]" (path widget) option)
+  (format-wish "senddatastring [~a cget -~(~a~)]" (widget-path widget) option)
   (read-data))
 
 (defun background (widget)
@@ -1686,7 +1718,7 @@ set y [winfo y ~a]
 (defgeneric itemconfigure (widget item option value))
 
 (defmethod itemconfigure ((widget canvas) item option value)
-  (format-wish "~A itemconfigure ~A -~(~A~) {~A}" (path widget) item option
+  (format-wish "~A itemconfigure ~A -~(~A~) {~A}" (widget-path widget) item option
 	    (if (stringp value) ;; There may be values that need to be passed as
 		value           ;; unmodified strings, so do not downcase strings
 	      (format nil "~(~a~)" value)))) ;; if its not a string, print it downcased
@@ -1694,11 +1726,11 @@ set y [winfo y ~a]
 
 ;;; for tkobjects, the name of the widget is taken
 (defmethod itemconfigure ((widget canvas) item option (value tkobject))
-  (format-wish "~A itemconfigure ~A -~(~A~) {~A}" (path widget) item option (path value)))
+  (format-wish "~A itemconfigure ~A -~(~A~) {~A}" (widget-path widget) item option (widget-path value)))
 
 (defgeneric itemlower (w i &optional below))
 (defmethod itemlower ((widget canvas) item &optional below)
-  (format-wish "~A lower ~A ~@[~A~]" (path widget)
+  (format-wish "~A lower ~A ~@[~A~]" (widget-path widget)
 	       item below))
 
 (defmethod lower ((item canvas-item) &optional below)
@@ -1707,7 +1739,7 @@ set y [winfo y ~a]
 
 (defgeneric itemraise (w i &optional above))
 (defmethod itemraise ((widget canvas) item &optional above)
-  (format-wish "~A raise ~A ~@[~A~]" (path widget)
+  (format-wish "~A raise ~A ~@[~A~]" (widget-path widget)
 	       item above))
 
 (defmethod raise ((item canvas-item) &optional above)
@@ -1719,46 +1751,46 @@ set y [winfo y ~a]
 
 (defgeneric wm-title (widget title))
 (defmethod wm-title ((w widget) title)
-  (format-wish "wm title ~a {~a}" (path w) title))
+  (format-wish "wm title ~a {~a}" (widget-path w) title))
 
 (defgeneric minsize (widget x y))
 (defmethod minsize ((w widget) x y)
-  (format-wish "wm minsize ~a ~a ~a" (path w) x y))
+  (format-wish "wm minsize ~a ~a ~a" (widget-path w) x y))
 
 (defgeneric maxsize (widget x y))
 (defmethod maxsize ((w widget) x y)
-  (format-wish "wm maxsize ~a ~a ~a" (path w) x y))
+  (format-wish "wm maxsize ~a ~a ~a" (widget-path w) x y))
 
 (defgeneric withdraw (toplevel))
 (defmethod withdraw ((tl toplevel))
-  (format-wish "wm withdraw ~a" (path tl)))
+  (format-wish "wm withdraw ~a" (widget-path tl)))
 
 (defgeneric normalize (toplevel))
 (defmethod normalize ((tl toplevel))
-  (format-wish "wm state ~a normal" (path tl)))
+  (format-wish "wm state ~a normal" (widget-path tl)))
 
 (defgeneric iconify (toplevel))
 (defmethod iconify ((tl toplevel))
-  (format-wish "wm iconify ~a" (path tl)))
+  (format-wish "wm iconify ~a" (widget-path tl)))
 
 (defgeneric deiconify (toplevel))
 (defmethod deiconify ((tl toplevel))
-  (format-wish "wm deiconify ~a" (path tl)))
+  (format-wish "wm deiconify ~a" (widget-path tl)))
 
 (defgeneric geometry (toplevel))
 (defmethod geometry ((tl widget))
-  (format-wish "senddatastring [wm geometry ~a]" (path tl))
+  (format-wish "senddatastring [wm geometry ~a]" (widget-path tl))
   (read-data))
 
 (defgeneric set-geometry (toplevel width height x y))
 (defmethod set-geometry ((tl widget) width height x y)
-  (format-wish "wm geometry ~a ~ax~a+~a+~a" (path tl) width height x y))
+  (format-wish "wm geometry ~a ~ax~a+~a+~a" (widget-path tl) width height x y))
 
 (defgeneric on-close (toplevel fun))
 (defmethod on-close ((tl toplevel) fun)
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "wm protocol ~a WM_DELETE_WINDOW {callback ~A}" (path tl) name)))
+    (format-wish "wm protocol ~a WM_DELETE_WINDOW {callback ~A}" (widget-path tl) name)))
 
 (defgeneric on-focus (toplevel fun))
 (defmethod on-focus ((tl toplevel) fun)
@@ -1768,73 +1800,73 @@ set y [winfo y ~a]
 	      name)))
 
 (defun iconwindow (tl wid)
-  (format-wish "wm iconwindow ~a ~a" (path tl) (path wid)))  
+  (format-wish "wm iconwindow ~a ~a" (widget-path tl) (widget-path wid)))  
 
 ;;; winfo functions
 
 (defun screen-width (&optional (w nil))
   "give the width of the screen in pixels (if w is given, of the screen the widget w is displayed on)"
-  (format-wish "senddata [winfo screenwidth ~a]" (if w (path w) "."))
+  (format-wish "senddata [winfo screenwidth ~a]" (if w (widget-path w) "."))
   (read-data))
 
 (defun screen-height (&optional (w nil))
   "give the height of the screen in pixels (if w is given, of the screen the widget w is displayed on)"
-  (format-wish "senddata [winfo screenheight ~a]" (if w (path w) "."))
+  (format-wish "senddata [winfo screenheight ~a]" (if w (widget-path w) "."))
   (read-data))
 
 (defun screen-width-mm (&optional (w nil))
   "give the width of the screen in mm (if w is given, of the screen the widget w is displayed on)"
-  (format-wish "senddata [winfo screenmmwidth ~a]" (if w (path w) "."))
+  (format-wish "senddata [winfo screenmmwidth ~a]" (if w (widget-path w) "."))
   (read-data))
 
 (defun screen-height-mm (&optional (w nil))
   "give the height of the screen in mm (if w is given, of the screen the widget w is displayed on)"
-  (format-wish "senddata [winfo screenmmheight ~a]" (if w (path w) "."))
+  (format-wish "senddata [winfo screenmmheight ~a]" (if w (widget-path w) "."))
   (read-data))
 
 (defun screen-mouse-x (&optional (w nil))
   "give x position of the mouse on screen (if w is given, of the screen the widget w is displayed on)"
-  (format-wish "senddata [winfo pointerx ~a]" (if w (path w) "."))
+  (format-wish "senddata [winfo pointerx ~a]" (if w (widget-path w) "."))
   (read-data))
 
 (defun screen-mouse-y (&optional (w nil))
   "give y position of the mouse on screen (if w is given, of the screen the widget w is displayed on)"
-  (format-wish "senddata [winfo pointery ~a]" (if w (path w) "."))
+  (format-wish "senddata [winfo pointery ~a]" (if w (widget-path w) "."))
   (read-data))
 
 (defun screen-mouse (&optional (w nil))
   "give the position of the mouse on screen as (x y) (if w is given, of the screen the widget w is displayed on)"
-  (format-wish "senddata \"([winfo pointerxy ~a])\"" (if w (path w) "."))
+  (format-wish "senddata \"([winfo pointerxy ~a])\"" (if w (widget-path w) "."))
   (let ((vals (read-data)))
     (values (first vals) (second vals))))
 
 (defun window-width (tl)
   "give the width of the toplevel in pixels"
-  (format-wish "senddata [winfo width ~a]" (path tl))
+  (format-wish "senddata [winfo width ~a]" (widget-path tl))
   (read-data))
 
 (defun window-height (tl)
   "give the height of the toplevel in pixels"
-  (format-wish "senddata [winfo height ~a]" (path tl))
+  (format-wish "senddata [winfo height ~a]" (widget-path tl))
   (read-data))
 
 (defun window-x (tl)
   "give the x position of the toplevel in pixels"
-  (format-wish "senddata [winfo rootx ~a]" (path tl))
+  (format-wish "senddata [winfo rootx ~a]" (widget-path tl))
   (read-data))
 
 (defun window-y (tl)
   "give the y position of the toplevel in pixels"
-  (format-wish "senddata [winfo rooty ~a];flush stdout" (path tl))
+  (format-wish "senddata [winfo rooty ~a];flush stdout" (widget-path tl))
   (read-data))
 
 ;;; misc functions
 
 (defun focus (widget)
-  (format-wish "focus ~a" (path widget)))
+  (format-wish "focus ~a" (widget-path widget)))
 
 (defun force-focus (widget)
-  (format-wish "focus -force ~a" (path widget)))
+  (format-wish "focus -force ~a" (widget-path widget)))
 
 ;;; Dialog functions
 
@@ -1919,25 +1951,25 @@ set y [winfo y ~a]
 
 ;;;
 
-(defun cm (tree path)
+(defun cm (tree widget-path)
   (cond
    ((eq tree :separator)
-    (send-wish (format nil "~A add separator" path)))
+    (send-wish (format nil "~A add separator" widget-path)))
    ((listp (second tree))
-    (let ((newpath (format nil "~A.~A" path (create-name))))
-      (when (and (equal path ".menubar")
+    (let ((newpath (format nil "~A.~A" widget-path (create-name))))
+      (when (and (equal widget-path ".menubar")
 		 (or (equal (first tree) "Help")
 		     (equal (first tree) "help")
 		     (equal (first tree) "Hilfe")))
 	(setf newpath ".menubar.help"))
       (send-wish (format nil "menu ~A -tearoff 0" newpath))
-      (send-wish (format nil "~a add cascade -label \"~a\" -menu ~a" path (first tree) newpath))
+      (send-wish (format nil "~a add cascade -label \"~a\" -menu ~a" widget-path (first tree) newpath))
       (dolist (entry (second tree))
 	(cm entry newpath))))
    (t
     (let* ((name (create-name)))
       (add-callback name (second tree))		     
-      (send-wish (format nil "~A add command -label {~A} -command {puts -nonewline  {(\"~A\")};flush stdout}" path (first tree) name))
+      (send-wish (format nil "~A add command -label {~A} -command {puts -nonewline  {(\"~A\")};flush stdout}" widget-path (first tree) name))
       ))))
 
 (defun create-menu2 (menutree)
@@ -2005,7 +2037,7 @@ set y [winfo y ~a]
 	 (ltk::*after-counter* 1)
 	 (ltk::*event-queue* nil))
      (start-wish)
-     ;(force-focus *tk*)
+    ;(force-focus *tk*)
      ,@body
      (mainloop)))
        
@@ -2019,89 +2051,98 @@ set y [winfo y ~a]
 ;;;; default ltk test
 (defun ltktest()
   (with-ltk
-   (let* ((bar (make-instance 'frame))
-	  (fr (make-instance 'frame :master bar))
-	  (lr (make-instance 'label :master fr :text "Rotation:"))
-	  (bstart (make-instance 'button :master fr :text "Start" :command 'start-rotation))
-	  (bstop  (make-instance 'button :master fr :text "Stop"  :command 'stop-rotation))
-	  (b1 (make-instance 'button :master bar :text "Hallo"
-			     :command (lambda ()
-					(format T "Hallo~%")
-					(force-output))))
-	  (b2 (make-instance 'button :master bar :text  "Welt!"
-			     :command (lambda ()
-					(format T "Welt~%")
-					(force-output))))
-	  (f (make-instance 'frame :master bar))
-	  (l (make-instance 'label :master f :text "Test:"))
-	  (b3 (make-instance 'button :master f :text  "Ok." :command 'test-rotation))
-	  (e (make-instance 'entry :master bar))
-	  (b4 (make-instance 'button :master bar :text "get!"
-			     :command (lambda ()
-					(format T "content of entry:~A~%" (text e))
-					(force-output))))
-	  (b5 (make-instance 'button :master bar :text "set!"
-			     :command (lambda () (setf (text e) "test of set"))))
-	  (sc (make-instance 'scrolled-canvas :borderwidth 2 :relief :raised))
-	  (c (canvas sc))
-	  (lines nil)
-	  mb mfile mf-load mf-save mf-export mfe-jpg mfe-gif mf-exit mf-print
-	  )
-     (setf mb (make-menubar))
-     (setf mfile (make-menu mb "File" ))
-     (setf mf-load (make-menubutton mfile "Load" (lambda ()
-						   (format t "Load pressed~&")
-						   (force-output))
-				    :underline 1))
-     (setf mf-save (make-menubutton mfile "Save" (lambda ()
-						   (format t "Save pressed~&")
-						   (force-output))
-				    :underline 1))
-     (add-separator mfile)
-     (setf mf-export (make-menu mfile "Export..."))
-     (add-separator mfile)
-     (setf mf-print (make-menubutton mfile "Print" (lambda () (postscript c "wt.ps"))))
-     (add-separator mfile)
-     (setf mfe-jpg (make-menubutton mf-export "jpeg" (lambda ()
-						       (format t "Jpeg pressed~&")
-						       (force-output))))
-     (setf mfe-gif (make-menubutton mf-export "png" (lambda ()
-						      (format t "Png pressed~&")
-						      (force-output))))
-     (setf mf-exit (make-menubutton mfile "Exit" (lambda () (setf *exit-mainloop* t))
-				    :underline 1
-				    :accelerator "Alt Q"))
+      (let* ((bar (make-instance 'frame))
+	     (fr (make-instance 'frame :master bar))
+	     (lr (make-instance 'label :master fr :text "Rotation:"))
+	     (bstart (make-instance 'button :master fr :text "Start" :command 'start-rotation))
+	     (bstop  (make-instance 'button :master fr :text "Stop"  :command 'stop-rotation))
+	     (b1 (make-instance 'button :master bar :text "Hallo"
+				:command (lambda ()
+					   (format T "Hallo~%")
+					   (force-output))))
+	     (b2 (make-instance 'button :master bar :text  "Welt!"
+				:command (lambda ()
+					   (format T "Welt~%")
+					   (force-output))))
+	     (f (make-instance 'frame :master bar))
+	     (l (make-instance 'label :master f :text "Test:"))
+	     (b3 (make-instance 'button :master f :text  "Ok." :command 'test-rotation))
+	     (e (make-instance 'entry :master bar))
+	     (b4 (make-instance 'button :master bar :text "get!"
+				:command (lambda ()
+					   (format T "content of entry:~A~%" (text e))
+					   (force-output))))
+	     (b5 (make-instance 'button :master bar :text "set!"
+				:command (lambda () (setf (text e) "test of set"))))
+	     (sc (make-instance 'scrolled-canvas :borderwidth 2 :relief :raised))
+	     (c (canvas sc))
+	     (lines nil)
+	     (mb (make-menubar))
+	     (mfile (make-menu mb "File" ))
+	     (mf-load (make-menubutton mfile "Load" (lambda ()
+						      (format t "Load pressed~&")
+						      (force-output))
+				       :underline 1))
+	     (mf-save (make-menubutton mfile "Save" (lambda ()
+						      (format t "Save pressed~&")
+						      (force-output))
+				       :underline 1))
+	     (sep1 (add-separator mfile))
+	     (mf-export (make-menu mfile "Export..."))
+	     (sep2 (add-separator mfile))
+	     (mf-print (make-menubutton mfile "Print" (lambda () (postscript c "wt.ps"))))
+	     (sep3 (add-separator mfile))
+	     (mfe-jpg (make-menubutton mf-export "jpeg" (lambda ()
+							  (format t "Jpeg pressed~&")
+							  (force-output))))
+	     (mfe-gif (make-menubutton mf-export "png" (lambda ()
+							 (format t "Png pressed~&")
+							 (force-output))))
+	     (mf-exit (make-menubutton mfile "Exit" (lambda () (setf *exit-mainloop* t))
+				       :underline 1
+				       :accelerator "Alt Q"))
+	     (mp (make-menu nil "Popup"))
+	     (mp-1 (make-menubutton mp "Option 1" (lambda () (format t "Popup 1~&") (force-output))))
+	     (mp-2 (make-menubutton mp "Option 2" (lambda () (format t "Popup 2~&") (force-output))))
+	     (mp-3 (make-menubutton mp "Option 3" (lambda () (format t "Popup 3~&") (force-output))))
+	     )
+	(declare (ignore mf-print mf-exit mfe-gif mfe-jpg mf-save mf-load sep1 sep2 sep3 mp-1 mp-2 mp-3)) 
 
-     (bind *tk* "<Alt-q>" (lambda (event) (declare (ignore event)) (setf *exit-mainloop* t)))
-     (configure c :borderwidth 2 :relief :sunken)
-     (pack sc :side :top :fill :both :expand t)
-     (pack bar :side :bottom)
-     (scrollregion c 0 0 500 400)
-     (pack fr :side :left)
-     (pack lr :side :left)
-     (configure fr :borderwidth 2 :relief :sunken)
-     (pack bstart :side :left)
-     (pack bstop :side :left)
-     (pack b1 :side :left)
-     (pack b2 :side :left)
-     (configure f :borderwidth 2 :relief :sunken)
-     (pack f :fill :x :side :left)
-     (pack l :side :left)
-     (pack b3 :side :left)
-     (pack e :side :left)
-     (pack b4 :side :left)
-     (pack b5 :side :left)
-     (dotimes (i 100)
-       (let ((w (* i 2.8001)))
-	 (let ((x (+ 250 (* 150.0 (sin w))))
-	       (y (+ 200 (* 150.0 (cos w)))))
-	   (push y lines)
-	   (push x lines)
-	   )))
-     (setf *demo-line* (create-line c lines))
-     (setf *demo-canvas* c)
-     (create-text c 10 10 "Ltk Demonstration")
-    )))
+
+	
+
+	(bind *tk* "<Alt-q>" (lambda (event) (declare (ignore event)) (setf *exit-mainloop* t)))
+
+	(bind c "<1>" (lambda (event) (popup mp (event-root-x event) (event-root-y event))))
+	(configure c :borderwidth 2 :relief :sunken)
+	(pack sc :side :top :fill :both :expand t)
+	(pack bar :side :bottom)
+	(scrollregion c 0 0 500 400)
+	(pack fr :side :left)
+	(pack lr :side :left)
+	(configure fr :borderwidth 2 :relief :sunken)
+	(pack bstart :side :left)
+	(pack bstop :side :left)
+	(pack b1 :side :left)
+	(pack b2 :side :left)
+	(configure f :borderwidth 2 :relief :sunken)
+	(pack f :fill :x :side :left)
+	(pack l :side :left)
+	(pack b3 :side :left)
+	(pack e :side :left)
+	(pack b4 :side :left)
+	(pack b5 :side :left)
+	(dotimes (i 100)
+	  (let ((w (* i 2.8001)))
+	    (let ((x (+ 250 (* 150.0 (sin w))))
+		  (y (+ 200 (* 150.0 (cos w)))))
+	      (push y lines)
+	      (push x lines)
+	      )))
+	(setf *demo-line* (create-line c lines))
+	(setf *demo-canvas* c)
+	(create-text c 10 10 "Ltk Demonstration")
+	)))
 
 (defvar *angle* 0)
 (defvar *angle2* 0)
