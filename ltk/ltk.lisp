@@ -54,6 +54,20 @@
   (format *w* "~A~%" text)
   (force-output *w*))
 
+;;; wrapper around read-line to compensate for slight differences between lisp versions
+(defun do-read-line()
+  (let ((c (read-line *w*)))
+    #+:lispworks (setf c (string-right-trim '(#\Newline #\Return #\Linefeed) c))
+    c))
+
+;; differences:
+;; cmucl/sbcl READ expressions only if there is one more character in the stream, if
+;; it is a whitespace its discarded. Lispworks READs the expression as soon as it can
+;; be fully read from the stream - no character is discarded
+;; so I am printing an additional space after every READable expression printed from tcl,
+;; this has to be eaten for read-line from the stream in lispworks (which returns the line
+;; ending character, cmucl/sbcl dont
+
 (defun read-all(stream)
   (let ((c (read-char-no-hang stream nil nil))
         (s (make-array 256 :adjustable t :element-type 'character :fill-pointer 0)))
@@ -94,7 +108,7 @@
 
 (defun after(time fun)
   (add-callback "after" fun)
-  (send-w (format nil "after ~a {puts {(\"~A\")};flush stdout}" time "after")))
+  (send-w (format nil "after ~a {puts -nonewline {(\"~A\") };flush stdout}" time "after")))
 
 ;; tool functions used by the objects
 
@@ -136,7 +150,7 @@
 
 (defmethod bind ((w widget) tag fun)
   (add-callback (name w) fun)
-  (send-w (format nil "bind  ~a ~a {puts {(\"~A\")};flush stdout}" (path w) tag (name w)))
+  (send-w (format nil "bind  ~a ~a {puts -nonewline {(\"~A\")};flush stdout}" (path w) tag (name w)))
   )
 
 
@@ -177,7 +191,7 @@
 
 (defmethod create ((m menubutton))
    (add-callback (name m) (command m))
-   (send-w (format nil "~A add command -label {~A} -command {puts {(\"~A\")};flush stdout}" (path (master m)) (text m) (name m)))
+   (send-w (format nil "~A add command -label {~A} -command {puts -nonewline {(\"~A\")};flush stdout}" (path (master m)) (text m) (name m)))
    )
 
 (defun make-menubutton(menu text command)
@@ -191,7 +205,7 @@
 
 (defmethod create ((bt button))
   (add-callback (name bt) (command bt))
-  (send-w (format nil "button ~A -text {~A} -command {puts {(\"~A\")};flush stdout}" (path bt) (text bt) (name bt)))
+  (send-w (format nil "button ~A -text {~A} -command {puts -nonewline {(\"~A\")};flush stdout}" (path bt) (text bt) (name bt)))
   (setf (created bt) t))
 
 (defun make-button (master text command)
@@ -211,13 +225,10 @@
 
 (defmethod get-content ((e entry))  
   (send-w (format nil "puts [~A get]; flush stdout" (path e)))
-  #+:sbcl (read-all *w*)
-  #+:lispworks (progn (read-line *w*)    (string-trim '(#\Newline #\Return #\Linefeed) (read-line *w*)))
-  #+:cmu (let ((c (read-line *w*)))
-    (if *debug-tk*
-	(format t "gc: =>~a<=~&" c))
-    ;(read-w)
-    (string-trim '(#\Newline #\Return #\Linefeed) c))
+  ;#+:sbcl (read-line *w*)
+  ;#+:lispworks (read-line *w*)
+  (let ((c (do-read-line)))
+    c)
   )
 
 (defmethod set-content ((e entry) txt)
@@ -491,8 +502,8 @@
 	  (format s "{{~a} {~a}} " name wildcard)))
       (format s "}"))
     (send-w (format nil "puts [tk_getOpenFile -filetypes ~a]"  files))
-    (read-all *w*)
-    (string-trim '(#\Newline #\Return #\Linefeed) (read-line *w*))
+    ;(read-all *w*)
+    (do-read-line)
   ))
 
 
@@ -510,15 +521,16 @@
 	  (format s "{{~a} {~a}} " name wildcard)))
       (format s "}"))
     (send-w (format nil "puts [tk_getSaveFile -filetypes ~a]"  files))
-    (read-all *w*)
-    (string-trim '(#\Newline #\Return #\Linefeed) (read-line *w*))
+    (do-read-line)
+    ;(read-all *w*)
+    ;(string-trim '(#\Newline #\Return #\Linefeed) (read-line *w*))
   ))
 
 ;;; see make-string-output-string/get-output-stream-string
 (defun message-box (message title type icon)
   ;;; tk_messageBox function
   (send-w (format nil "puts [tk_messageBox -message {~a} -title {~a} -type {~a} -icon {~a}]" message title type icon))
-  (read-line *w*)
+  (do-read-line)
 ;  (read *w* nil nil)
   )
 
@@ -584,7 +596,7 @@
    (t
     (let* ((name (create-name)))
       (add-callback name (second tree))		     
-      (send-w (format nil "~A add command -label {~A} -command {puts {(\"~A\")};flush stdout}" path (first tree) name))
+      (send-w (format nil "~A add command -label {~A} -command {puts -nonewline  {(\"~A\")};flush stdout}" path (first tree) name))
       ))))
 
 (defun create-menu2 (menutree)
@@ -602,7 +614,7 @@
 (defun mainloop()
   (setf *exit-mainloop* nil)
   (loop
-    (let* ((l (read *w* nil nil)))
+    (let* ((l (read-preserving-whitespace *w* nil nil)))
       (when (null l) (return))
       (if *debug-tk*
 	  (format t "l:~A<=~%" l))
