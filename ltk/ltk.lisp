@@ -135,7 +135,8 @@
 ;;; global var for holding the communication stream
 (defvar *w* nil)
 
-;;; verbosity of debug messages
+;;; verbosity of debug messages, if true, then all communication
+;;; with tk is echoed to stdout
 (defvar *debug-tk* t)
 
 ;;; start wish and set *w*
@@ -201,20 +202,23 @@
     (when fun
       (apply fun arg))))
 
-
+;;; after <time> msec call function <fun>
 (defun after(time fun)
   (add-callback "after" fun)
   (send-w (format nil "after ~a {puts -nonewline {(\"~A\") };flush stdout}" time "after")))
 
 ;; tool functions used by the objects
 
+;; incremental counter to create unique numbers
 (let ((counter 1))
   (defun get-counter()
     (incf counter)))
 
+;; create unique widget name, append unique number to "w"
 (defun create-name ()
   (format nil "w~A" (get-counter)))
 
+;; create pathname from master widget <master> and widget name <name>
 (defun create-path (master name)
   (let ((master-path (if master
 			 (path master)
@@ -223,41 +227,45 @@
 
 ;;; the library implementation 
 
+;; basic tk object
 (defclass tkobject ()
   ((name :accessor name :initarg :name :initform nil)
    (created :accessor created :initform nil))
   )
 
+;; basic class for all widgets 
 (defclass widget(tkobject)
-  ((master :accessor master :initarg :master :initform nil)
-   (path :reader path :initarg :path :initform nil)
+  ((master :accessor master :initarg :master :initform nil) ;; parent widget or nil
+   (path :reader path :initarg :path :initform nil)         ;; pathname to refer to the widget
    ))
 
+;; creating of the tk widget after creating the clos object
 (defmethod initialize-instance :after ((w widget) &key)
-  (unless (name w)
+  (unless (name w)			; generate name if not given 
     (setf (name w) (create-name)))
-  (unless (path w)
+  (unless (path w)			; and pathname
     (setf (slot-value w 'path) (create-path (master w) (name w))))
-  (create w)
-  )
+  (create w)				; call the widget specific creation method - every 
+  )					; widget class needs to overload that
 
 (defmethod create ((w widget))
   )
 
 (defmethod bind ((w widget) tag fun)
   (add-callback (name w) fun)
-  (send-w (format nil "bind  ~a ~a {puts -nonewline {(\"~A\")};flush stdout}" (path w) tag (name w)))
-  )
+  (send-w (format nil "bind  ~a ~a {puts -nonewline {(\"~A\")};flush stdout}"
+		  (path w) tag (name w))))
 
 
 (defvar *tk* (make-instance 'widget :name "." :path "."))
+
+;;; window menu bar
 
 (defclass menubar(widget)
   ())
 
 (defun make-menubar(&optional (master nil))
  (make-instance 'menubar :master master :name "menubar"))
-
 
 (defmethod create ((mb menubar))
   (send-w (format nil "menu ~a -tearoff 0 -type menubar" (path mb)))
@@ -266,6 +274,8 @@
 						".")
 		  (path mb)))
   (setf (created mb) t))
+
+;;; menues
 
 (defclass menu(widget)
   ((text :accessor text :initarg :text))
@@ -281,6 +291,8 @@
 (defun add-separator (menu)
    (send-w (format nil "~A add separator" (path menu))))
 
+;;; menu button
+
 (defclass menubutton(widget)
   ((text :accessor text :initarg :text)
    (command :accessor command :initarg :command :initform nil)))
@@ -293,6 +305,8 @@
 (defun make-menubutton(menu text command)
   (let* ((mb (make-instance 'menubutton :master menu :text text :command command)))
     mb))
+
+;;; standard button widget
 
 (defclass button(widget)
   ((command :accessor command :initarg :command :initform nil)
@@ -367,6 +381,7 @@
 (defun make-label (master text)
   (make-instance 'label :master master  :text text))
 
+
 ;;; scrollbar
 
 (defclass scrollbar (widget)
@@ -417,6 +432,10 @@
    (height :accessor height :initarg :height :initform nil)
    (xscroll :accessor xscroll :initarg :xscroll :initform nil)
    (yscroll :accessor yscroll :initarg :yscroll :initform nil)
+   (scrollregion-x0 :accessor scrollregion-x0 :initform nil)
+   (scrollregion-y0 :accessor scrollregion-y0 :initform nil)
+   (scrollregion-x1 :accessor scrollregion-x1 :initform nil)
+   (scrollregion-y1 :accessor scrollregion-y1 :initform nil)
    ))
 
 (defmethod create ((c canvas))
@@ -434,6 +453,10 @@
   (make-instance 'canvas :master master :width width :height height :xscroll xscroll :yscroll yscroll))
 
 (defmethod scrollregion ((c canvas) x0 y0 x1 y1)
+  (setf (scrollregion-x0 c) x0)
+  (setf (scrollregion-y0 c) y0)
+  (setf (scrollregion-x1 c) x1)
+  (setf (scrollregion-y1 c) y1)
   (configure c "scrollregion" (format nil "~a ~a ~a ~a" x0 y0 x1 y1)))
 ;; canvas item functions
 
@@ -466,7 +489,17 @@
   )
 
 (defun postscript (canvas filename)
-  (send-w (format nil "~a postscript -file ~a" (path canvas) filename)))
+  (if (and (scrollregion-x0 canvas)
+	   (scrollregion-x1 canvas)
+	   (scrollregion-y0 canvas)
+	   (scrollregion-y1 canvas))
+      (send-w (format nil "~a postscript -file ~a -x ~a -y ~a -width ~a -height ~a"
+		      (path canvas) filename
+		      (scrollregion-x0 canvas) (scrollregion-y0 canvas)
+		      (- (scrollregion-x1 canvas) (scrollregion-x0 canvas))
+		      (- (scrollregion-y1 canvas) (scrollregion-y0 canvas))
+		      ))
+    (send-w (format nil "~a postscript -file ~a" (path canvas) filename))))
 
 ;;; text widget
 (defclass text (widget)
@@ -510,11 +543,13 @@
   )
 
 (defmethod save-text((txt text) filename)
+  "save the content of the text widget into the file <filename>"
   (send-w (format nil "set file [open {~a} \"w\"];puts $file [~a get 1.0 end];close $file;puts \"asdf\"" filename (path txt)))
   (read-line *w*)
   )
 
 (defmethod load-text((txt text) filename)
+  "load the content of the file <filename>"
   (send-w (format nil "set file [open {~a} \"r\"];~a delete 1.0 end;~a insert end [read $file];close $file;puts \"asdf\"" filename (path txt) (path txt)))
   (read-line *w*)
   )
@@ -564,7 +599,6 @@
 
 ;;; grid manager
 
-
 (defmethod grid ((w widget) row column &key (sticky nil))
   (send-w (format nil "grid ~a -row ~a -column ~a ~a" (path w) row column
 		  (if sticky
@@ -576,7 +610,6 @@
 
 (defmethod grid-rowconfigure (widget row option value)
   (send-w (format nil "grid rowconfigure ~a ~a -~a {~a}" (path widget) row option value)))
-
 
 
 ;;; configure a widget parameter
@@ -598,8 +631,6 @@
 (defmethod itemconfigure (widget item option (value tkobject))
   ;(format t "itemconfig widget~&")
   (send-w (format nil "~A itemconfigure ~A -~A {~A}" (path widget) item option (name value))))
-
-
 
 
 ;;; wm functions
@@ -625,8 +656,6 @@
     ;(read-all *w*)
     (string-right-trim '(#\Newline #\Return #\Linefeed) (do-read-line))
   ))
-
-
 
 
 (defun get-save-file(&optional (options '(("All Files" "*"))))
@@ -741,23 +770,25 @@
       (force-output)
       (callback (first l) (rest l))
 ;      (ignore-errors   (callback (first l) (rest l))	    )
-      (multiple-value-bind (erg cond)
-	  (ignore-errors
+;      (multiple-value-bind (erg cond)
+;	  (ignore-errors
 	    ;(callback (first l) (rest l))
-	    t)
-	;(format t "erg:~a cond:~s<=" erg cond)
-	(if (not erg)
-	    (format t "error while executing callback:~s~&" cond)))
+;	    t)
+					;(format t "erg:~a cond:~s<=" erg cond)
+;	(if (not erg)
+;	    (format t "error while executing callback:~s~&" cond)))
       (when *exit-mainloop*
 	(send-w "exit")
 	(return)))))
 
-;;; another way to terminate the running app
+;;; another way to terminate the running app, send exit command to wish
 
 (defun exit-wish()
   (send-w "exit"))
 
 
+;;; wrapper macro - initializes everything, calls body and then mainloop
+;;; since 
 (defmacro with-ltk (&rest body)
   `(progn
      (start-w)
