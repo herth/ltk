@@ -213,8 +213,10 @@ wm                   x
 	   "SCROLLED-CANVAS"
 	   "SCROLLED-FRAME"
 	   "SCROLLED-LISTBOX"
+	   "SCROLLED-TEXT"
 	   "SCROLLREGION"
 	   "SEE"
+	   "SEND-WISH"
 ;	   "SET-CONTENT"
 	   "SET-COORDS"
 	   "SET-COORDS*"
@@ -225,6 +227,7 @@ wm                   x
 	   "TAG-BIND"
 	   "TAG-CONFIGURE"
 	   "TEXT"
+	   "TEXTBOX"
 	   "TKOBJECT"
 	   "TOPLEVEL"
 	   "VALUE"
@@ -701,15 +704,6 @@ wm                   x
 	(format-wish "checkbutton ~A -text {~A} -variable ~A -command {puts -nonewline {(\"~A\")};flush stdout}" (path cb) (text cb) (name cb) (name cb)))
     (format-wish "checkbutton ~A -text {~A} -variable ~A" (path cb) (cb-text cb) (name cb))))
 
-#|
-(defmethod value ((cb check-button))
-  (send-wish (format nil "puts $~a;flush stdout" (name cb)))
-  (read *wish* nil nil))
-
-(defmethod (setf value) (val (cb check-button))
-  (send-wish (format nil "set ~a ~a" (name cb) val)))
-|#
-
 ;;; radio button widget
 
 (defclass radio-button (widget)
@@ -756,32 +750,8 @@ wm                   x
 (defun make-entry (master)
   (make-instance 'entry :master master))
 
-#|
-(defgeneric get-content (e))
-(defmethod get-content ((e entry))  
-  (send-wish (format nil "puts [~A get]; flush stdout" (path e)))
-  ;#+:sbcl (read-line *wish*)
-  ;#+:lispworks (read-line *wish*)
-  (let ((c (do-read-line)))
-    c)
-  )
-
-(defgeneric set-content (e txt))
-(defmethod set-content ((e entry) txt)
-  (send-wish (format nil "~A delete 0 end;~A insert end {~A}" (path e) (path e) txt)))
-|#
-
 (defun entry-select (e from to)
   (format-wish "~a selection range ~a ~a" (path e) from to))
-
-#|
-(defmethod value ((e entry))
-  (send-wish (format nil "puts \"\\\"$~a\\\"\";flush stdout" (name e)))
-  (read *wish* nil nil))
-
-(defmethod (setf value) (val (e entry))
-  (send-wish (format nil "set ~a {~a}" (name e) val)))
-|#
 
 ;;; frame widget 
 
@@ -789,10 +759,6 @@ wm                   x
 
 (defmethod initialize-instance :after ((f frame) &key borderwidth relief)
    (format-wish "frame ~A~@[ -borderwidth ~a~]~@[ -relief ~(~a~)~]" (path f) borderwidth relief))
-
-
-;(defmethod create ((f frame))
-;  (format-wish "frame ~A " (path f)))
 
 (defun make-frame (master)
   (make-instance 'frame :master master))
@@ -809,7 +775,6 @@ wm                   x
 (defmethod (setf text) :after (val (l labelframe))
   (format-wish "~a configure -text {~a}" (path l) val))
 
-
 ;;; panedwindow widget
 
 (defclass paned-window (widget)
@@ -818,11 +783,9 @@ wm                   x
 (defmethod create ((pw paned-window))
   (format-wish "panedwindow ~a~@[ -orient ~(~a~)~]" (path pw) (pane-orient pw)))
 
-
 (defgeneric pane-configure (window option value))
 (defmethod pane-configure ((pw paned-window) option value)
   (format-wish "~a paneconfigure ~a {~a}" (path pw) option value))
-  
 
 (defgeneric add-pane (window widget))
 (defmethod add-pane ((pw paned-window) (w widget))
@@ -844,7 +807,6 @@ wm                   x
 (defmethod create ((l listbox))
   (format-wish "listbox ~a~@[ -width ~a~]~@[ -height ~a~]"
 	    (path l) (width l) (height l)))
-
 
 (defgeneric listbox-append (l vals))
 (defmethod listbox-append ((l listbox) values)
@@ -880,8 +842,6 @@ a list of numbers may be given"
    (vscroll :accessor vscroll)
    ))
 
-;(defmethod create ((sl scrolled-listbox))
-;  (call-next-method)
 (defmethod initialize-instance :after ((sl scrolled-listbox) &key)
   (setf (hscroll sl) (make-scrollbar sl :orientation "horizontal"))
   (setf (vscroll sl) (make-scrollbar sl))
@@ -909,7 +869,32 @@ a list of numbers may be given"
 (defmethod listbox-select ((l scrolled-listbox) val)
   (listbox-select (listbox l) val))
 
-  
+;;; scrolled-text
+
+(defclass scrolled-text (frame)
+  ((textbox :accessor textbox)
+   (hscroll :accessor hscroll)
+   (vscroll :accessor vscroll)
+   ))
+
+(defmethod initialize-instance :after ((st scrolled-text) &key)
+  (setf (hscroll st) (make-scrollbar st :orientation "horizontal"))
+  (setf (vscroll st) (make-scrollbar st))
+  (setf (textbox st) (make-instance 'text :master st :xscroll (hscroll st) :yscroll (vscroll st)))
+  (grid (textbox st) 0 0 :sticky "news")
+  (grid (hscroll st) 1 0 :sticky "we")
+  (grid (vscroll st) 0 1 :sticky "ns")
+  (grid-columnconfigure st 0 :weight 1)
+  (grid-columnconfigure st 1 :weight 0)
+  (grid-rowconfigure st 0 :weight 1)
+  (grid-rowconfigure st 1 :weight 0)
+ 
+  (configure (hscroll st) "command" (concatenate 'string (path (textbox st)) " xview"))
+  (configure (vscroll st) "command" (concatenate 'string (path (textbox st)) " yview"))
+  (configure (textbox st) "xscrollcommand" (concatenate 'string (path (hscroll st)) " set"))
+  (configure (textbox st) "yscrollcommand" (concatenate 'string (path (vscroll st)) " set"))
+  )
+
 ;;; scale widget
 
 (defclass scale (widget)
@@ -944,14 +929,6 @@ a list of numbers may be given"
 	    (spinbox-from sp)
 	    (spinbox-to sp)))
 
-#|
-(defmethod value ((sp spinbox))
-  (send-wish (format nil "puts $~a;flush stdout" (name sp)))
-  (read *wish* nil nil))
-
-(defmethod (setf value) (val (sp spinbox))
-  (send-wish (format nil "set ~a ~a" (name sp) val)))
-|#
 ;;; toplevel (window) widget 
 
 (defclass toplevel (widget)
@@ -965,7 +942,6 @@ a list of numbers may be given"
 
 (defun make-toplevel (master)
   (make-instance 'toplevel :master master))
-
 
 ;;; label widget
 
@@ -1108,9 +1084,6 @@ set y [winfo y ~a]
 		    (path (vscroll sf))
 		    ))
     ))
- 
-    
-  
 
 ;;; canvas widget
 
@@ -1211,8 +1184,10 @@ set y [winfo y ~a]
 
 (defclass text (widget)
   ((width  :accessor width  :initarg :width  :initform nil)
-   (height :accessor height :initarg :height :initform nil))
-  )
+   (height :accessor height :initarg :height :initform nil)
+   (xscroll :accessor xscroll :initarg :xscroll :initform nil)
+   (yscroll :accessor yscroll :initarg :yscroll :initform nil)
+  ))
 
 (defmethod create ((txt text))
   (format-wish "text ~a~@[ -width ~a~]~@[ -height ~a~]" (path txt)
@@ -1223,7 +1198,7 @@ set y [winfo y ~a]
 
 (defgeneric append-text (txt text &optional tag))
 (defmethod append-text ((txt text) text &optional (tag nil))
-  (format-wish "~a insert end {~a}~@[ ~a~]" (path txt) text tag))
+  (format-wish "~a insert end {~a}~@[ ~(~a~)~]" (path txt) text tag))
 
 (defgeneric clear-text (txt))
 (defmethod clear-text ((txt text))
@@ -1239,7 +1214,11 @@ set y [winfo y ~a]
 
 (defgeneric tag-configure (txt tag option value))
 (defmethod tag-configure ((txt text) tag option value)
-  (format-wish "~a tag configure ~a -~a {~a}" (path txt) tag option value))
+  (format-wish "~a tag configure ~a -~(~a~) {~(~a~)}" (path txt)
+	       (if (stringp tag)
+		   tag
+		 (format nil "~(~a~)" tag))
+	       option value))
 
 (defgeneric tag-bind (txt tag event fun))
 (defmethod tag-bind ((txt text) tag event fun)
@@ -1249,29 +1228,12 @@ set y [winfo y ~a]
     (format-wish "~a tag bind ~a ~a {puts -nonewline {(\"~A\")};flush stdout}"
 	      (path txt) tag event name)))
 
-;(defgeneric get-text (txt))
-;(defmethod get-text((txt text))
-;  (send-wish (format nil "set file [open \"/tmp/ltk\" \"w\"];puts $file [~a get 1.0 end];close $file;puts \"asdf\"" (path txt)))
-;  (read-line *wish*)
-;  (let (erg)
-;    (with-open-file (stream "/tmp/ltk" :direction :input)
-;      (setf erg (read-all stream)))
-;    (delete-file "/tmp/ltk")
-;    erg)
-;  )
-
-;(defmethod get-text((txt text))
-;  (format-wish "esc [~a get 1.0 end]" (path txt))
-;  (read-wish))
-
 (defmethod text ((text text))
   (format-wish "esc [~a get 1.0 end]" (path text))
   (read-wish))
 
 (defmethod (setf text) (val (text text))
   (format-wish "~A delete 0.0 end;~A insert end {~A}" (path text) (path text) val))
-
-
 
 (defgeneric save-text (txt filename))
 (defmethod save-text ((txt text) filename)
@@ -1676,7 +1638,6 @@ set y [winfo y ~a]
 (defun exit-wish()
   (send-wish "exit"))
 
-
 ;;; wrapper macro - initializes everything, calls body and then mainloop
 ;;; since 
 (defmacro with-ltk (&rest body)
@@ -1819,3 +1780,58 @@ set y [winfo y ~a]
   (setf *do-rotate* nil)
   )
 
+
+;;;; the eyes :)
+
+(defun ltk-eyes ()
+  (with-ltk
+   (let* ((*debug-tk* nil)
+	  (w (screen-width))
+	  (h (screen-height))
+	  (c (make-instance 'canvas :width 400 :height 300))
+	  (e1 (create-oval c 10 10 190 290))
+	  (e2 (create-oval c 210 10 390 290))
+	  (p1 (create-oval c 10 10 40 40))
+	  (p2 (create-oval c 10 10 40 40))
+	  (old-x 0)
+	  (old-y 0))
+     (setf *debug-tk* nil)
+     (labels ((update ()
+		      (multiple-value-bind (pos-x pos-y) (screen-mouse)
+			(let* ((wx (window-x *tk*))
+			       (wy (window-y *tk*))
+			       (width (window-width *tk*))
+			       (height (window-height *tk*))
+			       (mx pos-x)
+			       (my pos-y)
+			       (x (truncate (* width (/ mx w))))
+			       (y (truncate (* height (/ my h))))
+			       (diam (truncate width 8))
+			       (dx1 (- mx (+ wx (truncate width 4))))
+			       (dy1 (- my (+ wy (truncate height 2))))
+			       (dx2 (- mx (+ wx (* 3 (truncate width 4)))))
+			       (dy2 (- my (+ wy (truncate height 2))))
+			       (p1x (+ (- (truncate width 4)  (truncate diam 2)) (truncate (* width  dx1) (* 4.5 w))))
+			       (p1y (+ (- (truncate height 2) (truncate diam 2)) (truncate (* height dy1) (* 2.3 h))))
+			       (p2x (+ (- (* 3 (truncate width 4))  (truncate diam 2)) (truncate (*  width  dx2) (* 4.5 w))))
+			       (p2y (+ (- (truncate height 2) (truncate diam 2)) (truncate (* height dy2) (* 2.3 h))))
+			       
+			       )
+			  (setf *debug-tk* nil)
+			  (unless (and (= x old-x)
+				       (= y old-y))
+			    (set-coords c e1 (list 10 10 (- (truncate width 2) 10) (- height 10)))
+			    (set-coords c e2 (list (+ (truncate width 2) 10) 10  (- width 10) (- height 10)))
+			    (set-coords c p1 (list p1x p1y (+ diam p1x) (+ diam p1y)))
+			    (set-coords c p2 (list p2x p2y (+ diam p2x) (+ diam p2y)))
+			    (setf old-x x
+				  old-y y))
+			  ))
+			(after 100 #'update)))
+     (pack c :expand 1 :fill :both)
+     (itemconfigure c e1 "width" 10)
+     (itemconfigure c e2 "width" 10)
+     (itemconfigure c p1 "fill" "blue")
+     (itemconfigure c p2 "fill" "blue")
+     (after 100 #'update)
+     ))))
