@@ -20,6 +20,7 @@
 (defpackage "LTK"
   (:use "COMMON-LISP"
 	#+:cmu "EXT"
+	#+:sbcl "SB-EXT"
 	)
   (:export "TEST"
 	   "AFTER"
@@ -120,7 +121,7 @@
                (error "Cannot create process."))
 	     proc
              )
-    #+:sbcl (let ((proc (run-program program args :input :stream :output :stream :wait wt)))
+    #+:sbcl (let ((proc (sb-ext:run-program program args :input :stream :output :stream :wait wt)))
              (unless proc
                (error "Cannot create process."))
 	     (make-two-way-stream 
@@ -382,10 +383,11 @@
 (defclass scrolled-canvas (frame)
   ((canvas :accessor canvas)
    (hscroll :accessor hscroll)
-   (vscroll :accessor vscroll)))
+   (vscroll :accessor vscroll)
+   ))
 
-(defun make-scrolled-canvas (master &key )
-  (make-instance 'scrolled-canvas :master master  ))
+(defun make-scrolled-canvas (master &key  )
+  (make-instance 'scrolled-canvas :master master ))
 
 (defmethod create ((sc scrolled-canvas))
   (call-next-method)
@@ -928,4 +930,16 @@
      (pack b2)
      (configure f "borderwidth" 3)
      (configure f "relief" "sunken")
+     )))
+
+(defun canvastest()
+  (with-ltk
+   (let* ((sc (make-scrolled-canvas nil))
+	  (c (canvas sc))
+	  (line (create-line c  (list 100 100 400 50 700 150)))
+	  (polygon (create-polygon c (list 50 150  250 160 250 300 50 330 )))
+	  (text (create-text c 260 250 "Canvas test"))
+	  )
+     (pack sc :expand 1 :fill "both")
+     (scrollregion c 0 0 800 800)
      )))
