@@ -253,7 +253,7 @@ wm                   x
               (ext:process-output proc)
               (ext:process-input proc))
              )
-    #+:clisp (let ((proc (run-program program :arguments args :input :stream :output :stream :wait t)))
+    #+:clisp (let ((proc (ext:run-program program :arguments args :input :stream :output :stream :wait t)))
              (unless proc
                (error "Cannot create process."))
 	     proc
@@ -265,7 +265,14 @@ wm                   x
 	      (process-output proc)              
 	      (process-input proc))	     
              )
-    #+:lispworks(system:open-pipe fullstring :direction :io)
+    #+:lispworks (system:open-pipe fullstring :direction :io)
+    #+:allegro (let ((proc (excl:run-shell-command
+                         (apply #'vector program program args)
+                         :input :stream :output :stream :wait wt)))
+		(unless proc
+		  (error "Cannot create process."))   
+		proc
+		)
     ))
 
 
