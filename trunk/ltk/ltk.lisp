@@ -25,12 +25,12 @@
                (error "Cannot create process."))
 	     proc
              )
-    #+:sbcl (let ((proc (run-program program args :input :stream :output :stream :pty t :error :output :wait wt)))
+    #+:sbcl (let ((proc (run-program program args :input :stream :output :stream :wait wt)))
              (unless proc
                (error "Cannot create process."))
-             (make-two-way-stream
-              (process-pty proc)
-              (process-pty proc))
+	     (make-two-way-stream 
+	      (process-output proc)              
+	      (process-input proc))	     
              )
     #+:lispworks(system:open-pipe fullstring :direction :io)
     ))
