@@ -122,6 +122,7 @@ wm                   x
 	   "CLIPBOARD-APPEND"
 	   "CLIPBOARD-CLEAR"
 	   "CLIPBOARD-GET"
+	   "COMMAND"
 	   "CONFIGURE"
 	   "CREATE-ARC"
 	   "CREATE-BITMAP"
@@ -141,6 +142,11 @@ wm                   x
 	   "ENTRY"
 	   "ENTRY-SELECT"
 	   "EXIT-WISH"
+	   "EVENT"
+	   "EVENT-X"
+	   "EVENT-Y"
+	   "EVENT-KEYCODE"
+	   "EVENT-CHAR"
 	   "FORGET-PANE"
 	   "FORMAT-WISH"
 	   "FRAME"
@@ -334,7 +340,7 @@ wm                   x
   (send-wish "proc senddatastring {s} {puts \"(:data \\\"[escape $s]\\\")\";flush stdout} ")
   
   ;;; proc sendevent {s} {puts "(event \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
-  (send-wish "proc sendevent {s x y keycode char} {puts \"(:event $s $x $y $keycode $char)\"} ")
+  (send-wish "proc sendevent {s x y keycode char} {puts \"(:event \\\"$s\\\" $x $y $keycode $char)\"} ")
   ;;; proc callback {s} {puts "(callback \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
 
   ;;; callback structure: (:callback "widgetname")          ;; for non-parameter callbacks
@@ -346,9 +352,7 @@ wm                   x
   (send-wish "proc callbackstring {s val} {puts \"(:callback \\\"$s\\\" \\\"[escape $val]\\\")\"} ")
 
   (dolist (fun *init-wish-hook*)	; run init hook funktions 
-    (funcall fun))
-  )
-
+    (funcall fun)))
 
 ;;; start wish and set *wish*
 (defun start-wish ()
@@ -408,7 +412,6 @@ wm                   x
   (let ((*read-eval* nil))
     (read *wish* nil nil)))
 
-
 (defvar *event-queue* nil)
 
 (defun read-event ()
@@ -422,7 +425,7 @@ wm                   x
 
 (defun read-data ()
   (let ((d (read-wish)))
-    (if (listp d)
+    (if (listp d) ; paranoia check when we do not read a list eg. error messages from wish
 	(progn
 	  (loop while (not (equal (first d) :data))
 	    do
@@ -433,7 +436,7 @@ wm                   x
 					;(format t "readdata: ~s~%" d) (force-output)
 	  (second d))
       (format t "read-data:~a~a~%" d (read-all *wish*)))
-))
+    ))
 
 ;;; sanitizing strings: lisp -> tcl (format *wish* "{~a}" string)
 ;;; in string escaped : {} mit \{ bzw \}  und \ mit \\
@@ -474,7 +477,8 @@ wm                   x
 
 (defun add-callback (sym fun)
   "create a callback sym is the name to use for storage, fun is the function to call"
-  ;(format t "add-callback (~A ~A)~%" sym fun)
+  (when *debug-tk*
+    (format t "add-callback (~A ~A)~%" sym fun))
   (setf (gethash sym *callbacks*) fun))
 
 (defun callback (sym arg)
@@ -581,13 +585,19 @@ wm                   x
 (defmethod create ((w widget))
   )
 
+
+(defgeneric (setf command) (value widget))
+(defgeneric command (widget))
+
+(defmethod command ((widget widget))
+  (gethash (name widget) *callbacks*))
+
+
 (defstruct event
   x
   y
   keycode
   char
-  
-
   )
 
 (defgeneric bind (w event fun))
@@ -595,9 +605,7 @@ wm                   x
   "bind fun to event of the widget w"
   (let ((name (create-name)))
     (add-callback name fun)
-    ;(format-wish "bind  ~a ~a {puts -nonewline {(\"~A\")};flush stdout}" (path w) event name )
-    (format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K}" (path w) event name )
-    ))
+    (format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K}" (path w) event name)))
 
 (defvar *tk* (make-instance 'widget :name "." :path "."))
 
@@ -618,11 +626,8 @@ wm                   x
   (format-wish "~a configure -variable ~a" (path v) (name v)))
 
 (defmethod value ((v tkvariable))
-  ;(format-wish "puts $~a;flush stdout" (name v))
   (format-wish "senddata $~a" (name v))
-  ;(read-wish)
-  (read-data)
-  )
+  (read-data))
 
 (defgeneric (setf value) (widget val))
 (defmethod (setf value) (val (v tkvariable))
@@ -637,18 +642,16 @@ wm                   x
 
 (defmethod initialize-instance :around ((v tktextvariable) &key)
   (call-next-method)
-  (format-wish "~a configure -textvariable ~a" (path v) (name v)))
+  (format-wish "~a configure -textvariable text_~a" (path v) (name v)))
 
 (defmethod text ((v tktextvariable))
-  ;(format-wish "esc $~a; flush stdout" (name v))
-  (format-wish "senddatastring $~a" (name v))
-  ;(read-wish)
+  (format-wish "senddatastring $text_~a" (name v))
   (read-data))
 
 (defgeneric (setf text) (val variable))
 
 (defmethod (setf text) (val (v tktextvariable))
-  (format-wish "set ~a {~a}" (name v) val))
+  (format-wish "set text_~a {~a}" (name v) val))
 
 ;;; window menu bar
 
@@ -671,7 +674,7 @@ wm                   x
 (defclass menu(widget)
   ((text :accessor text :initarg :text)
    (help :accessor menu-help :initarg :help :initform nil)
-  ))
+   ))
 
 ;(defmethod create ((m menu))
 
@@ -692,12 +695,11 @@ wm                   x
 
 (defclass menubutton(widget) 
   ((text :accessor text :initarg :text)
-   (command :accessor command :initarg :command :initform nil)))
+   ))
 
-;(defmethod create ((m menubutton))
-(defmethod initialize-instance :after ((m menubutton) &key)
-   (add-callback (name m) (command m))
-   ;(format-wish "~A add command -label {~A}  -command {puts -nonewline {(\"~A\")};flush stdout}" (path (master m)) (text m) (name m))
+(defmethod initialize-instance :after ((m menubutton) &key command)
+   (when command
+     (add-callback (name m) command))
    (format-wish "~A add command -label {~A}  -command {callback ~A}" (path (master m)) (text m) (name m))
    )
 
@@ -709,19 +711,15 @@ wm                   x
   ((text :accessor text :initarg :text)
    (command :accessor command :initarg :command :initform nil)))
 
-;(defmethod create ((m menucheckbutton))
 (defmethod initialize-instance :after ((m menucheckbutton) &key)
   (when (command m)
     (add-callback (name m) (command m)))
-  ;(format-wish "~A add checkbutton -label {~A} -variable ~a ~a" (path (master m)) (text m) (name m) (if (command m)  (format nil "-command {puts -nonewline {(\"~A\")};flush stdout}" (name m)) ""))
   (format-wish "~A add checkbutton -label {~A} -variable ~a ~@[ -command {callback ~a}~]"
 	       (path (master m)) (text m) (name m) (and (command m) (name m)))
   )
 
 
 (defmethod value ((cb menucheckbutton))
-;  (format-wish "puts $~a;flush stdout" (name cb))
-;  (read-wish))
   (format-wish "senddata $~a" (name cb))
   (read-data))
 
@@ -733,27 +731,18 @@ wm                   x
    (command :accessor command :initarg :command :initform nil)
    (group :accessor group :initarg :group :initform nil)))
 
-;(defmethod create ((m menuradiobutton))
 (defmethod initialize-instance :after ((m menuradiobutton) &key)
   (when (command m)
     (add-callback (name m) (command m)))
   (unless (group m)
     (setf (group m)
 	  (name m)))
-;    (format-wish "~A add radiobutton -label {~A} -value ~a -variable ~a ~a"
-;	    (path (master m)) (text m) (name m) (group m)
-;	    (if (command m)
-;		(format nil "-command {puts -nonewline {(\"~A\")};flush stdout}" (name m))
-;	      ""))
       (format-wish "~A add radiobutton -label {~A} -value ~a -variable ~a ~@[ -command {callback ~a}~]"
 	    (path (master m)) (text m) (name m) (group m)
-	    (and (command m) (name m)))
-)
+	    (and (command m) (name m))))
    
 
 (defmethod value ((cb menuradiobutton))
-;  (format-wish "puts $~a;flush stdout" (group cb))
-;  (read-wish))
   (format-wish "senddata $~a" (group cb))
   (read-data))
 
@@ -764,18 +753,16 @@ wm                   x
 ;;; standard button widget
 
 (defclass button (tktextvariable widget)
-  ((command :accessor command :initarg :command :initform nil)
-   (text :accessor button-text :initarg :text :initform "")
+  ((text :accessor button-text :initarg :text :initform "")
    ))
 
-;(defmethod create ((bt button))
-(defmethod initialize-instance :after ((bt button) &key (text "") activebackground
+(defmethod initialize-instance :after ((bt button) &key (text "") activebackground command
 				       activeforeground anchor background bitmap borderwidth cursor
 				       disabledforeground font foreground highlightbackground
 				       highlightcolor highlightthickness image justify padx pady
 				       relief repeatdelay repeatinterval takefocus underline
 				       wraplength compound default height overrelief state width)
-  (add-callback (name bt) (command bt))
+  (when command (add-callback (name bt) command))
   (format-wish "button ~A -command {callback ~A} ~
                     -text {~A}~@[ -activebackground ~(~a~)~]~@[ -activeforeground ~(~a~)~]~
                      ~@[ -anchor ~(~a~)~]~@[ -background ~(~a~)~]~@[ -bitmap ~(~a~)~]~
@@ -794,11 +781,9 @@ wm                   x
 	       underline wraplength compound default height overrelief state width
 	       ))
 
-;(defmethod create ((bt button))
-; (add-callback (name bt) (command bt))
-; (format-wish "button ~A -command {puts -nonewline {(\"~A\")};flush stdout} ~
-;                    -text {~A}" (path bt) (name bt) (button-text bt))
-; )
+(defmethod (setf command) (val (button button))
+  (add-callback (name button) val)
+  (format-wish "~a configure -command {callback ~a}" (path button) (name button)))
 
 (defun make-button (master text command)
   (let* ((b (make-instance 'button :master master :text text :command command)))
@@ -807,17 +792,18 @@ wm                   x
 ;;; check button widget
 
 (defclass check-button (tktextvariable tkvariable widget)
-  ((command :accessor command :initarg :command :initform nil)
-   (text :accessor cb-text :initarg :text :initform "")
+  ((text :accessor cb-text :initarg :text :initform "")
    ))
 
-;(defmethod create ((cb check-button))
-(defmethod initialize-instance :after ((cb check-button) &key)
-  (if (command cb)
-      (progn
-	(add-callback (name cb) (command cb))
-	(format-wish "checkbutton ~A -text {~A} -variable ~A -command {puts -nonewline {(\"~A\")};flush stdout}" (path cb) (text cb) (name cb) (name cb)))
-    (format-wish "checkbutton ~A -text {~A} -variable ~A" (path cb) (cb-text cb) (name cb))))
+(defmethod initialize-instance :after ((cb check-button) &key command)
+  (format-wish "checkbutton ~A -text {~A} -variable ~A" (path cb) (cb-text cb) (name cb))
+  (when command
+    (setf (command cb) command)))
+
+(defmethod (setf command) (val (check-button check-button))
+  (add-callback (name check-button) val)
+  (format-wish "~a configure -command {callback ~a}" (path check-button) (name check-button)))
+
 
 ;;; radio button widget
 
@@ -828,7 +814,6 @@ wm                   x
    (var :accessor radio-button-variable :initarg :variable :initform nil)
    ))
 
-;:(defmethod create ((rb radio-button))
 (defmethod initialize-instance :after ((rb radio-button) &key)
   (format-wish "radiobutton ~A -text {~A}~@[ -value ~A~]~@[ -variable ~A~]~@[ -command {callback ~a}~]"
 	    (path rb) (text rb)
@@ -840,8 +825,6 @@ wm                   x
   "reads the content of the shared variable of the radio button set"
   (if (radio-button-variable rb)
       (progn
-	;(format-wish "puts $~a;flush stdout" (radio-button-variable rb))
-	;(read-wish)
 	(format-wish "senddata $~a" (radio-button-variable rb))
 	(read-data)
 	)
@@ -859,7 +842,6 @@ wm                   x
   ((width :accessor width :initarg :width :initform nil))
   )
 
-;(defmethod create ((e entry))
 (defmethod initialize-instance :after ((e entry) &key)
   (format-wish "entry ~A~@[ -width ~A~]" (path e) (width e)))
 
@@ -885,7 +867,6 @@ wm                   x
   ((text :accessor text :initarg :text :initform "")
    ))
 
-;(defmethod create ((l labelframe))
 (defmethod initialize-instance :after ((l labelframe) &key)  
   (format-wish "labelframe ~A -text {~A} " (path l) (text l)))
 
@@ -897,7 +878,6 @@ wm                   x
 (defclass paned-window (widget)
   ((orient :accessor pane-orient :initarg :orient  :initform nil)))
 
-;(defmethod create ((pw paned-window))
 (defmethod initialize-instance :after ((pw paned-window) &key)  
   (format-wish "panedwindow ~a~@[ -orient ~(~a~)~]" (path pw) (pane-orient pw)))
 
@@ -922,10 +902,14 @@ wm                   x
    (yscroll :accessor yscroll :initarg :yscroll :initform nil)
    ))
 
-;(defmethod create ((l listbox))
 (defmethod initialize-instance :after ((l listbox) &key)
   (format-wish "listbox ~a~@[ -width ~a~]~@[ -height ~a~]"
 	    (path l) (width l) (height l)))
+
+(defmethod (setf command) (val (listbox listbox))
+  (add-callback (name listbox) val)
+  (format-wish "bind ~a <<ListboxSelect>> {callbackval ~a ([~a curselection])}" (path listbox) (name listbox)
+	       (path listbox)))
 
 (defgeneric listbox-append (l vals))
 (defmethod listbox-append ((l listbox) values)
@@ -1017,30 +1001,20 @@ a list of numbers may be given"
 ;;; scale widget
 
 (defclass scale (widget)
-  ((from :accessor scale-from :initarg :from  :initform nil)
-   (to :accessor scale-to :initarg :to :initform nil)
-   (orient :accessor scale-orient :initarg :orient  :initform nil)
-   (command :accessor command :initarg :command :initform nil)
-   )
-  )
+  ())
 
-;(defmethod create ((sc scale))
-(defmethod initialize-instance :after ((sc scale) &key)
-  (when (command sc)
-    (add-callback (name sc) (command sc))
-    ;(format-wish "proc ~a-command {val} {puts -nonewline {(\"~a\" };puts -nonewline \"[~a get]\";puts {)};flush stdout }" (name sc) (name sc) (path sc))
-    (format-wish "proc ~a-command {val} {callbackval ~a $val}" (name sc) (name sc))
-    )
+(defmethod initialize-instance :after ((sc scale) &key from to orient command)
+  (format-wish "scale ~a -variable ~a~@[ -from ~a~]~@[ -to ~a~]~@[ -orient ~(~a~)~]" (path sc) (name sc))
+  (when command
+    (setf (command sc) command)))q
+
+(defmethod (setf command) (val (scale scale))
+  (add-callback (name scale) val)					
+  (format-wish "proc ~a-command {val} {callbackval ~a $val}" (name scale) (name scale))
+  (format-wish "~a configure -command ~a-command" (path scale) (name scale)))
   
-  (format-wish "scale ~a -variable ~a~@[ -from ~a~]~@[ -to ~a~]~@[ -orient ~(~a~)~] ~@[ -command ~a-command ~]" (path sc) (name sc)
-	       (scale-from sc)
-	       (scale-to sc)
-	       (scale-orient sc)
-	       (and (command sc) (name sc))
-	       ))
 
 (defmethod value ((sc scale))
-  ;(format-wish "puts $~a;flush stdout" (name sc))
   (format-wish "senddata $~a" (name sc))
   (read-data))
 
@@ -1050,15 +1024,16 @@ a list of numbers may be given"
 ;;; spinbox widget
 
 (defclass spinbox (tktextvariable widget)
-  ((from :accessor spinbox-from :initarg :from  :initform nil)
-   (to :accessor spinbox-to :initarg :to :initform nil)
-   ))
+  ())
 
-;(defmethod create ((sp spinbox))
-(defmethod initialize-instance :after ((sp spinbox) &key)
-  (format-wish "spinbox ~a~@[ -from ~a~]~@[ -to ~a~]" (path sp) 
-	    (spinbox-from sp)
-	    (spinbox-to sp)))
+(defmethod initialize-instance :after ((sp spinbox) &key from to command)
+  (format-wish "spinbox ~a~@[ -from ~a~]~@[ -to ~a~]" (path sp) from to)
+  (when command
+    (setf (command sp) command)))
+
+(defmethod (setf command) (val (sp spinbox))
+  (add-callback (name sp) val)					
+  (format-wish "~a configure -command {callbackstring ~a %s}" (path sp) (name sp)))
 
 ;;; toplevel (window) widget 
 
@@ -1066,7 +1041,6 @@ a list of numbers may be given"
   ((protocol-destroy :accessor protocol-destroy :initarg :on-close :initform nil)
    ))
 
-;(defmethod create ((w toplevel))
 (defmethod initialize-instance :after ((w toplevel) &key)
   (format-wish "toplevel ~A" (path w))
   (unless (protocol-destroy w)
@@ -1081,7 +1055,6 @@ a list of numbers may be given"
   ((text :accessor label-text :initarg :text :initform "")
    ))
 
-;(defmethod create ((l label))
 (defmethod initialize-instance :after ((l label) &key)
   (format-wish "label ~A -text {~A} " (path l) (label-text l)))
 
@@ -1090,21 +1063,12 @@ a list of numbers may be given"
 
 ;;; message widget
 
-(defclass message (widget)
-  ((text    :accessor text            :initarg :text    :initform "")
-   (aspect  :accessor message-aspect  :initarg :aspect  :initform nil)
-   (justify :accessor message-justify :initarg :justify :initform nil)
-   (width   :accessor message-width   :initarg :width   :initform nil)
-   ))
+(defclass message (tktextvariable widget)
+  ())
 
-;(defmethod create ((m message))
-(defmethod initialize-instance :after ((m message) &key)
-  (format-wish "message ~A -text {~A}~@[ -aspect ~A~]~@[ -justify ~(~A~)~]~@[ -width ~A~]"
-	    (path m) (text m)
-	    (message-aspect m)
-	    (message-justify m)
-	    (message-width m)))
-
+(defmethod initialize-instance :after ((m message) &key text aspect justify width)
+  (format-wish "message ~A ~@[ -text {~A}~]~@[ -aspect ~A~]~@[ -justify ~(~A~)~]~@[ -width ~A~]"
+	    (path m) text aspect justify width))
 
 ;;; scrollbar
 
@@ -1115,7 +1079,6 @@ a list of numbers may be given"
 (defun make-scrollbar(master &key (orientation "vertical"))
   (make-instance 'scrollbar :master master :orientation orientation))
 
-;(defmethod create ((sb scrollbar))
 (defmethod initialize-instance :after ((sb scrollbar) &key)
   (send-wish (format nil "scrollbar ~a -orient ~a" (path sb) (orientation sb))))
 
@@ -1156,8 +1119,6 @@ a list of numbers may be given"
    (vscroll :accessor vscroll)
    ))
 
-;(defmethod create ((sf scrolled-frame))
-;  (call-next-method)
 (defmethod initialize-instance :after ((sf scrolled-frame) &key)
   (let ((f (make-instance 'frame :master sf)))
     (setf (scrolled-frame-display sf) f)
@@ -1235,7 +1196,6 @@ set y [winfo y ~a]
 
 (defmethod canvas ((canvas canvas)) canvas)
 
-;(defmethod create ((c canvas))
 (defmethod initialize-instance :after ((c canvas) &key)
   (format-wish "canvas ~A~@[ -width ~A~]~@[ -height ~A~]" (path c)
 	    (width c)
@@ -1250,47 +1210,34 @@ set y [winfo y ~a]
   (setf (scrollregion-y0 c) y0)
   (setf (scrollregion-x1 c) x1)
   (setf (scrollregion-y1 c) y1)
-  (configure c "scrollregion" (format nil "~a ~a ~a ~a" x0 y0 x1 y1)))
+  (configure c :scrollregion (format nil "~a ~a ~a ~a" x0 y0 x1 y1)))
+
 ;; canvas item functions
 
 (defun create-line (canvas coords)
   (format-wish "senddata [~a create line~{ ~a~}]" (path canvas) coords)
-;  (format-wish "puts [~a create line~{ ~a~}]" (path canvas) coords)
   (read-data))
-;  (read-wish))
 
 (defun create-line* (canvas &rest coords)
   (funcall #'create-line canvas coords))
 
 (defun create-polygon (canvas coords)
-  ;(format-wish "puts [~a create polygon~{ ~a~}]" (path canvas) coords)
-  ;(read-wish))
   (format-wish "senddata [~a create polygon~{ ~a~}]" (path canvas) coords)
   (read-data))
-  
 
 (defun create-oval (canvas x0 y0 x1 y1)
-  ;(format-wish "puts [~a create oval ~a ~a ~a ~a]" (path canvas) x0 y0 x1 y1)
-  ;(read-wish))
   (format-wish "senddata [~a create oval ~a ~a ~a ~a]" (path canvas) x0 y0 x1 y1)
   (read-data))
 
 (defun create-rectangle (canvas x0 y0 x1 y1)
-  ;(format-wish "puts [~a create rectangle ~a ~a ~a ~a]" (path canvas) x0 y0 x1 y1)
-  ;(read-wish))
   (format-wish "senddata [~a create rectangle ~a ~a ~a ~a]" (path canvas) x0 y0 x1 y1)
   (read-data))
 
 (defun create-text (canvas x y text)
-  ;(format-wish "puts [~a create text ~a ~a -anchor nw -text {~a}]" (path canvas) x y text)
-  ;(read-wish))
   (format-wish "senddata [~a create text ~a ~a -anchor nw -text {~a}]" (path canvas) x y text)
   (read-data))
 
 (defun create-image (canvas x y &key image)
-  ;(format-wish "puts [~a create image ~a ~a -anchor nw~@[ -image ~a~]]" (path canvas) x y
-  ;	    (and image (name image)))
-  ;(read-wish))
   (format-wish "senddata [~a create image ~a ~a -anchor nw~@[ -image ~a~]]" (path canvas) x y
 	       (and image (name image)))
   (read-data))
@@ -1299,31 +1246,20 @@ set y [winfo y ~a]
   (format-wish "~A put {~{{~:{#~2,'0X~2,'0X~2,'0X ~} } ~} } -to ~a ~a~@[ ~a~]~@[ ~a~]" (name image) data x y x2 y2))
 
 (defun create-bitmap (canvas x y &key (bitmap nil))
-  ;(format-wish "puts [~a create image ~a ~a -anchor nw~@[ -bitmap ~a~]]" (path canvas) x y
-  ;	    (and bitmap (name bitmap)))
-  ;(read-wish))
   (format-wish "senddata [~a create image ~a ~a -anchor nw~@[ -bitmap ~a~]]" (path canvas) x y
 	       (and bitmap (name bitmap)))
   (read-data))
 
 
 (defun create-arc (canvas x0 y0 x1 y1 &key (start 0) (extent 180) (style "pieslice"))
-;  (format-wish "puts [~a create arc ~a ~a ~a ~a -start ~a -extent ~a -style ~a]"
-;		  (path canvas) x0 y0 x1 y1 start extent style)
-;  (read-wish))
   (format-wish "senddata [~a create arc ~a ~a ~a ~a -start ~a -extent ~a -style ~a]"
 	       (path canvas) x0 y0 x1 y1 start extent style)
   (read-data))
 
-
 (defun create-window (canvas x y widget)
-;  (format-wish "puts [~a create window ~a ~a -anchor nw -window ~a]"
-;	    (path canvas) x y (path widget))
-;  (read-wish))
   (format-wish "senddata [~a create window ~a ~a -anchor nw -window ~a]"
 	       (path canvas) x y (path widget))
   (read-data))
-
 
 (defun set-coords (canvas item coords)
   (format-wish "~a coords ~a~{ ~a~}" (path canvas) item coords))
@@ -1347,16 +1283,14 @@ set y [winfo y ~a]
 ;;; text widget
 
 (defclass text (widget)
-  ((width  :accessor width  :initarg :width  :initform nil)
-   (height :accessor height :initarg :height :initform nil)
+  (;(width  :accessor width  :initarg :width  :initform nil)
+   ;(height :accessor height :initarg :height :initform nil)
    (xscroll :accessor xscroll :initarg :xscroll :initform nil)
    (yscroll :accessor yscroll :initarg :yscroll :initform nil)
   ))
 
-;(defmethod create ((txt text))
-(defmethod initialize-instance :after ((txt text) &key)
-  (format-wish "text ~a~@[ -width ~a~]~@[ -height ~a~]" (path txt)
-	    (width txt) (height txt)))
+(defmethod initialize-instance :after ((txt text) &key width height)
+  (format-wish "text ~a~@[ -width ~a~]~@[ -height ~a~]" (path txt) width height))
 
 (defun make-text (master &key (width nil) (height nil))
   (make-instance 'text :master master :width width :height height))
@@ -1368,10 +1302,6 @@ set y [winfo y ~a]
 (defgeneric clear-text (txt))
 (defmethod clear-text ((txt text))
   (format-wish "~A delete 0.0 end" (path txt)))
-
-;(defgeneric set-text (txt content))
-;(defmethod set-text ((txt text) content)
-;  (format-wish "~A delete 0.0 end;~A insert end {~A}" (path txt) (path txt) content))
 
 (defgeneric see (txt pos))
 (defmethod see((txt text) pos)
@@ -1390,13 +1320,10 @@ set y [winfo y ~a]
   "bind fun to event of the tag of the text widget txt"
   (let ((name (create-name)))
     (add-callback name fun)
-    ;(format-wish "~a tag bind ~a ~a {puts -nonewline {(\"~A\")};flush stdout}" (path txt) tag event name)
     (format-wish "~a tag bind ~a ~a {callback ~A}" (path txt) tag event name)
     ))
 
 (defmethod text ((text text))
-  ;(format-wish "esc [~a get 1.0 end]" (path text))
-  ;(read-wish))
   (format-wish "senddatastring [~a get 1.0 end]" (path text))
   (read-data))
 
@@ -1414,8 +1341,7 @@ set y [winfo y ~a]
 (defmethod load-text((txt text) filename)
   "load the content of the file <filename>"
   (format-wish "set file [open {~a} \"r\"];~a delete 1.0 end;~a insert end [read $file];close $file;puts \"asdf\"" filename (path txt) (path txt))
-  (read-line *wish*)
-  )
+  (read-line *wish*))
 
 ;;; photo image object
 
@@ -1515,8 +1441,6 @@ set y [winfo y ~a]
 
 (defgeneric cget (w o))
 (defmethod cget ((widget widget) option)
-  ;(format-wish "esc [~a cget -~(~a~)];flush stdout" (path widget) option)
-  ;(read-wish))
   (format-wish "senddatastring [~a cget -~(~a~)]" (path widget) option)
   (read-data))
 
@@ -1548,7 +1472,6 @@ set y [winfo y ~a]
 ;;; for tkobjects, the name of the widget is taken
 (defmethod itemconfigure ((widget canvas) item option (value tkobject))
   (format-wish "~A itemconfigure ~A -~(~A~) {~A}" (path widget) item option (path value)))
-
 
 (defgeneric itemlower (w i &optional above))
 (defmethod itemlower ((widget canvas) item &optional above)
@@ -1593,8 +1516,6 @@ set y [winfo y ~a]
 
 (defgeneric geometry (w))
 (defmethod geometry ((tl widget))
-  ;(format-wish "esc [wm geometry ~a];flush stdout" (path tl))
-  ;(read-wish))
   (format-wish "senddatastring [wm geometry ~a]" (path tl))
   (read-data))
 
@@ -1616,85 +1537,63 @@ set y [winfo y ~a]
 	      name)))
 
 (defun iconwindow (tl wid)
-  (format-wish "wm iconwindow ~a ~a" (path tl) (path wid)))
-  
+  (format-wish "wm iconwindow ~a ~a" (path tl) (path wid)))  
 
 ;;; winfo functions
 
 (defun screen-width (&optional (w nil))
   "give the width of the screen in pixels (if w is given, of the screen the widget w is displayed on)"
-  ;(format-wish "puts [winfo screenwidth ~a];flush stdout" (if w (path w) "."))
-  ;(read-wish))
   (format-wish "senddata [winfo screenwidth ~a]" (if w (path w) "."))
   (read-data))
 
 (defun screen-height (&optional (w nil))
   "give the height of the screen in pixels (if w is given, of the screen the widget w is displayed on)"
-  ;(format-wish "puts [winfo screenheight ~a];flush stdout" (if w (path w) "."))
-  ;(read-wish))
   (format-wish "senddata [winfo screenheight ~a]" (if w (path w) "."))
   (read-data))
 
 (defun screen-width-mm (&optional (w nil))
   "give the width of the screen in mm (if w is given, of the screen the widget w is displayed on)"
-  ;(format-wish "puts [winfo screenmmwidth ~a];flush stdout" (if w (path w) "."))
-  ;(read-wish))
   (format-wish "senddata [winfo screenmmwidth ~a]" (if w (path w) "."))
   (read-data))
 
 (defun screen-heigth-mm (&optional (w nil))
   "give the height of the screen in mm (if w is given, of the screen the widget w is displayed on)"
-  ;(format-wish "puts [winfo screenmmheigth ~a];flush stdout" (if w (path w) "."))
-  ;(read-wish))
   (format-wish "senddata [winfo screenmmheigth ~a]" (if w (path w) "."))
   (read-data))
 
 (defun screen-mouse-x (&optional (w nil))
   "give x position of the mouse on screen (if w is given, of the screen the widget w is displayed on)"
-  ;(format-wish "puts [winfo pointerx ~a];flush stdout" (if w (path w) "."))
-  ;(read-wish))
   (format-wish "senddata [winfo pointerx ~a]" (if w (path w) "."))
   (read-data))
 
 (defun screen-mouse-y (&optional (w nil))
   "give y position of the mouse on screen (if w is given, of the screen the widget w is displayed on)"
-  ;(format-wish "puts [winfo pointery ~a];flush stdout" (if w (path w) "."))
-  ;(read-wish))
   (format-wish "senddata [winfo pointery ~a]" (if w (path w) "."))
   (read-data))
 
 (defun screen-mouse (&optional (w nil))
   "give the position of the mouse on screen as (x y) (if w is given, of the screen the widget w is displayed on)"
-  ;(format-wish "puts -nonewline {(};puts -nonewline [winfo pointerxy ~a];puts {)};flush stdout" (if w (path w) "."))
   (format-wish "senddata \"([winfo pointerxy ~a])\"" (if w (path w) "."))
   (let ((vals (read-data)))
     (values (first vals) (second vals))))
 
 (defun window-width (tl)
   "give the width of the toplevel in pixels"
-  ;(format-wish "puts [winfo width ~a];flush stdout" (path tl))
-  ;(read-wish))
   (format-wish "senddata [winfo width ~a]" (path tl))
   (read-data))
 
 (defun window-height (tl)
   "give the height of the toplevel in pixels"
-  ;(format-wish "puts [winfo height ~a];flush stdout" (path tl))
-  ;(read-wish))
   (format-wish "senddata [winfo height ~a]" (path tl))
   (read-data))
 
 (defun window-x (tl)
   "give the x position of the toplevel in pixels"
-  ;(format-wish "puts [winfo rootx ~a];flush stdout" (path tl))
-  ;(read-wish))
   (format-wish "senddata [winfo rootx ~a]" (path tl))
   (read-data))
 
 (defun window-y (tl)
   "give the y position of the toplevel in pixels"
-  ;(format-wish "puts [winfo rooty ~a];flush stdout" (path tl))
-  ;(read-wish))
   (format-wish "senddata [winfo rooty ~a];flush stdout" (path tl))
   (read-data))
 
@@ -1711,7 +1610,6 @@ set y [winfo y ~a]
 	      (wildcard (second type)))
 	  (format s "{{~a} {~a}} " name wildcard)))
       (format s "}"))
-    ;(format-wish "esc [tk_getOpenFile -filetypes ~a];flush stdout"  files)
     (format-wish "senddatastring [tk_getOpenFile -filetypes ~a]"  files)
     (read-data)))
 
@@ -1726,7 +1624,6 @@ set y [winfo y ~a]
 	      (wildcard (second type)))
 	  (format s "{{~a} {~a}} " name wildcard)))
       (format s "}"))
-    ;(format-wish "esc [tk_getSaveFile -filetypes ~a];flush stdout"  files)
     (format-wish "senddatastring [tk_getSaveFile -filetypes ~a]"  files)
     (read-data)))
 
@@ -1736,12 +1633,8 @@ set y [winfo y ~a]
 ;;; see make-string-output-string/get-output-stream-string
 (defun message-box (message title type icon)
   ;;; tk_messageBox function
-  ;(format-wish "esc [tk_messageBox -message {~a} -title {~a} -type {~a} -icon {~a}];flush stdout" message title type icon)
   (format-wish "senddata [tk_messageBox -message {~a} -title {~a} -type {~a} -icon {~a}]" message title type icon)
   (read-data))
-
-;  (do-read-line)
-;  (read *wish* nil nil)  )
 
 (defun ask-yesno(message &optional (title ""))
   (equal (message-box message title "yesno" "question") "yes"))
@@ -1830,11 +1723,19 @@ set y [winfo y ~a]
 	  (format t "l:~s<=~%" l))
       (force-output)
       (if (listp l)
-	  (if (eq (first l) :callback)
-	      (let ((params (rest l)))
-		;(format t "Callback received~%") (force-output)
-		(callback (first params) (rest params)))
-	    (callback (first l) (rest l)))
+	  (cond  ((eq (first l) :callback)
+		  (let ((params (rest l)))
+					;(format t "Callback received~%") (force-output)
+		    (callback (first params) (rest params))))
+		 ((eq (first l) :event)
+		  (let* ((params (rest l))
+			 (callback (first params))
+			 (evp (rest params))
+			 (event (make-event :x (first evp) :y (second evp) :keycode (third evp) :char (fourth evp))))
+		    (callback callback (list event))
+		    ))
+		 (t
+		  (callback (first l) (rest l))))
 	(progn
 	  (princ l)
 	  (force-output)
