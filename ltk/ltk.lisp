@@ -1,20 +1,18 @@
 #|
-  Copyright 2003 Peter Herth <herth@peter-herth.de>
 
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; either version 2
- of the License, or (at your option) any later version.
+ This software is Copyright (c) 2003 Peter Herth <herth@peter-herth.de>
+
+ Peter Herth grants you the rights to distribute
+ and use this software as governed by the terms
+ of the Lisp Lesser GNU Public License
+ (http://opensource.franz.com/preamble.html),
+ known as the LLGPL.
  
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  GNU General Public License for more details.
  
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
 |#
 
 #|
@@ -253,7 +251,7 @@ wm                   x
               (ext:process-output proc)
               (ext:process-input proc))
              )
-    #+:clisp (let ((proc (ext:run-program program :arguments args :input :stream :output :stream :wait t)))
+    #+:clisp (let ((proc (ext:run-program program :arguments args :input :stream :output :stream :wait wt)))
              (unless proc
                (error "Cannot create process."))
 	     proc
@@ -483,6 +481,46 @@ wm                   x
 
 (defvar *tk* (make-instance 'widget :name "." :path "."))
 
+
+;;; generic functions
+
+(defgeneric value (widget)
+  (:documentation "reads the value of the variable associated with the widget"))
+
+(defclass tkvariable ()
+  ()
+  )
+
+(defmethod create :after ((v tkvariable))
+  (send-w (format nil "~a configure -variable ~a" (path v) (name v))))
+
+(defmethod value ((v tkvariable))
+  (send-w (format nil "puts $~a;flush stdout" (name v)))
+  (read *w* nil nil))
+
+(defgeneric (setf value) (widget val))
+(defmethod (setf value) (val (v tkvariable))
+  (send-w (format nil "set ~a ~a" (name v) val)))
+
+(defclass tktextvariable ()
+  ()
+  )
+
+(defgeneric text (widget)
+  (:documentation "reads the value of the textvariable associated with the widget")
+  )
+(defmethod create :after ((v tktextvariable))
+  (send-w (format nil "~a configure -textvariable ~a" (path v) (name v))))
+
+(defmethod text ((v tktextvariable))
+  (send-w (format nil "puts -nonewline {\"};puts -nonewline $~a;puts {\"};flush stdout" (name v)))
+  (read *w* nil nil))
+
+(defgeneric (setf text) (val variable))
+(defmethod (setf text) (val (v tktextvariable))
+  (send-w (format nil "set ~a ~a" (name v) val)))
+
+
 ;;; window menu bar
 
 (defclass menubar(widget)
@@ -520,7 +558,7 @@ wm                   x
 
 ;;; menu button
 
-(defclass menubutton(widget) 
+(defclass menubutton(widget tkvariable) 
   ((text :accessor text :initarg :text)
    (command :accessor command :initarg :command :initform nil)))
 
@@ -533,26 +571,28 @@ wm                   x
   (let* ((mb (make-instance 'menubutton :master menu :text text :command command)))
     mb))
 
-(defclass menucheckbutton(widget) 
+(defclass menucheckbutton(widget tkvariable tktextvariable) 
   ((text :accessor text :initarg :text)
    (command :accessor command :initarg :command :initform nil)))
 
 (defmethod create ((m menucheckbutton))
   (when (command m)
     (add-callback (name m) (command m)))
-  (send-w (format nil "~A add checkbutton -label {~A} -variable ~a ~a"
-		  (path (master m)) (text m) (name m)
+  (send-w (format nil "~A add checkbutton -label {~A} ~a"
+		  (path (master m)) (text m) 
 		  (if (command m)
 		      (format nil "-command {puts -nonewline {(\"~A\")};flush stdout}" (name m))
 		    "")))
   )
 
+#|
 (defmethod value ((cb menucheckbutton))
   (send-w (format nil "puts $~a;flush stdout" (name cb)))
   (read *w* nil nil))
 
 (defmethod (setf value) (val (cb menucheckbutton))
   (send-w (format nil "set ~a ~a" (name cb) val)))
+|#
 
 (defclass menuradiobutton(widget) 
   ((text :accessor text :initarg :text)
@@ -582,7 +622,7 @@ wm                   x
 
 ;;; standard button widget
 
-(defclass button(widget)
+(defclass button(widget tktextvariable)
   ((command :accessor command :initarg :command :initform nil)
    (text :accessor text :initarg :text :initform "")
    ))
@@ -597,9 +637,9 @@ wm                   x
 
 ;;; check button widget
 
-(defclass check-button (widget)
+(defclass check-button (widget tkvariable tktextvariable)
   ((command :accessor command :initarg :command :initform nil)
-   (text :accessor text :initarg :text :initform "")
+   (text :accessor cb-text :initarg :text :initform "")
    ))
 
 (defmethod create ((cb check-button))
@@ -607,19 +647,17 @@ wm                   x
       (progn
 	(add-callback (name cb) (command cb))
 	(send-w (format nil "checkbutton ~A -text {~A} -variable ~A -command {puts -nonewline {(\"~A\")};flush stdout}" (path cb) (text cb) (name cb) (name cb))))
-    (send-w (format nil "checkbutton ~A -text {~A} -variable ~A" (path cb) (text cb) (name cb)))))
+    (send-w (format nil "checkbutton ~A -text {~A} -variable ~A" (path cb) (cb-text cb) (name cb)))))
 
-(defgeneric value (widget)
-  (:documentation "reads the value of the variable associated with the widget"))
-
+#|
 (defmethod value ((cb check-button))
   (send-w (format nil "puts $~a;flush stdout" (name cb)))
   (read *w* nil nil))
 
-(defgeneric (setf value) (widget val))
+
 (defmethod (setf value) (val (cb check-button))
   (send-w (format nil "set ~a ~a" (name cb) val)))
-
+|#
 
 ;;; radio button widget
 
