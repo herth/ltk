@@ -296,6 +296,7 @@ toplevel             x
 	   "WIDGET"
 	   "WIDGET-PATH"
 	   "WINDOW-HEIGHT"
+	   "WINDOW-ID"
 	   "WINDOW-WIDTH"
 	   "WINDOW-X"
 	   "WINDOW-Y"
@@ -357,7 +358,7 @@ toplevel             x
 		   (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* 0.865)
+(defvar *ltk-version* 0.869)
 ;;; global var for holding the communication stream
 (defvar *wish* nil)
 
@@ -1039,8 +1040,8 @@ a list of numbers may be given"
   (if (null val)
       (format-wish "~a selection clear 0 end" (widget-path l))
     (if (listp val)
-	(format-wish "~a selecttion set ~{ ~a~}" (widget-path l) val)
-      (format-wish "~a selecttion set ~a" (widget-path l) val))))
+	(format-wish "~a selection set ~{ ~a~}" (widget-path l) val)
+      (format-wish "~a selection set ~a" (widget-path l) val))))
 
 (defgeneric listbox-clear (l))
 
@@ -1156,13 +1157,14 @@ a list of numbers may be given"
   ((protocol-destroy :accessor protocol-destroy :initarg :on-close :initform nil)
    ))
 
-(defmethod initialize-instance :after ((w toplevel) &key borderwidth cursor highlightbackground highlightcolor highlightthickness padx pady relief takefocus background class colormap containerheight menu screen use visual width)
+(defmethod initialize-instance :after ((w toplevel) &key borderwidth cursor highlightbackground highlightcolor highlightthickness padx pady relief takefocus background class colormap containerheight menu screen use visual width title)
   (format-wish "toplevel ~A ~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -background ~(~A~)~]~@[ -class ~(~A~)~]~@[ -colormap ~(~A~)~]~@[ -containerheight ~(~A~)~]~@[ -menu ~(~A~)~]~@[ -screen ~(~A~)~]~@[ -use ~(~A~)~]~@[ -visual ~(~A~)~]~@[ -width ~(~A~)~]"
 	       (widget-path w) borderwidth cursor highlightbackground highlightcolor highlightthickness padx pady relief takefocus background class colormap containerheight menu screen use visual width
 )
+  (when title
+    (wm-title w title))
   (unless (protocol-destroy w)
     (format-wish "wm protocol ~a WM_DELETE_WINDOW {wm withdraw ~a}" (widget-path w) (widget-path w))))
-
 
 (defun make-toplevel (master)
   (make-instance 'toplevel :master master))
@@ -1769,7 +1771,7 @@ set y [winfo y ~a]
   (format-wish "wm maxsize ~a ~a ~a" (widget-path w) x y))
 
 (defgeneric withdraw (toplevel))
-(defmethod withdraw ((tl toplevel))
+(defmethod withdraw ((tl widget))
   (format-wish "wm withdraw ~a" (widget-path tl)))
 
 (defgeneric normalize (toplevel))
@@ -1847,7 +1849,12 @@ set y [winfo y ~a]
   (let ((vals (read-data)))
     (values (first vals) (second vals))))
 
-(defun window-width (tl)
+(defun window-id (tl)
+  "get the window id of the toplevel"
+  (format-wish "senddatastring [winfo id ~a]" (widget-path tl))
+  (read-data))
+
+(Defun window-width (tl)
   "give the width of the toplevel in pixels"
   (format-wish "senddata [winfo width ~a]" (widget-path tl))
   (read-data))
@@ -1859,7 +1866,7 @@ set y [winfo y ~a]
 
 (defun window-x (tl)
   "give the x position of the toplevel in pixels"
-  (format-wish "senddata [winfo rootx ~a]" (widget-path tl))
+  (format-wish "senddata [winfo rootx ~a];flush stdout" (widget-path tl))
   (read-data))
 
 (defun window-y (tl)
