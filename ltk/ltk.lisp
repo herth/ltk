@@ -358,7 +358,7 @@ toplevel             x
 		   (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* 0.869)
+(defvar *ltk-version* 0.871)
 ;;; global var for holding the communication stream
 (defvar *wish* nil)
 
