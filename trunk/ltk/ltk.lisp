@@ -27,6 +27,7 @@
 	   "APPEND-TEXT"
 	   "ASK-YESNO"
 	   "ASK-OKCANCEL"
+	   "BIND"
 	   "BUTTON"
 	   "CANVAS"
 	   "CREATE-IMAGE"
@@ -81,6 +82,7 @@
 	   "SET-CONTENT"
 	   "SET-COORDS"
 	   "START-W"
+	   "TAG-BIND"
 	   "TAG-CONFIGURE"
 	   "TEXT"
 	   "*TK*"
@@ -251,10 +253,13 @@
 (defmethod create ((w widget))
   )
 
-(defmethod bind ((w widget) tag fun)
-  (add-callback (name w) fun)
-  (send-w (format nil "bind  ~a ~a {puts -nonewline {(\"~A\")};flush stdout}"
-		  (path w) tag (name w))))
+(defmethod bind ((w widget) event fun)
+  "bind fun to event of the widget w"
+  (let ((name (create-name)))
+    (add-callback name fun)
+    (send-w (format nil "bind  ~a ~a {puts -nonewline {(\"~A\")};flush stdout}"
+		    (path w) event name ))))
+
 
 
 (defvar *tk* (make-instance 'widget :name "." :path "."))
@@ -293,7 +298,7 @@
 
 ;;; menu button
 
-(defclass menubutton(widget)
+(defclass menubutton(widget) 
   ((text :accessor text :initarg :text)
    (command :accessor command :initarg :command :initform nil)))
 
@@ -401,7 +406,7 @@
    (vscroll :accessor vscroll)
    ))
 
-(defun make-scrolled-canvas (master &key  )
+(defun make-scrolled-canvas (master)
   (make-instance 'scrolled-canvas :master master ))
 
 (defmethod create ((sc scrolled-canvas))
@@ -526,11 +531,26 @@
   (send-w (format nil "~a insert end {~a} ~a" (path txt) text (if tag
 								  tag
 								""))))
+(defmethod clear-text ((txt text))
+  (send-w (format nil "~A delete 0.0 end" (path txt))))
+
+(defmethod set-text ((txt text) content)
+  (send-w (format nil "~A delete 0.0 end;~A insert end {~A}" (path txt) content)))
+
+
 (defmethod see((txt text) pos)
   (send-w (format nil "~a see ~a" (path txt) pos)))
 
 (defmethod tag-configure ((txt text) tag option value)
   (send-w (format nil "~a tag configure ~a -~a {~a}" (path txt) tag option value)))
+
+(defmethod tag-bind ((txt text) tag event fun)
+  "bind fun to event of the tag of the text widget txt"
+  (let ((name (create-name)))
+    (add-callback name fun)
+    (send-w (format nil "~a tag bind ~a ~a {puts -nonewline {(\"~A\")};flush stdout}"
+		    (path txt) tag event name))))
+
 
 (defmethod get-text((txt text))
   (send-w (format nil "set file [open \"/tmp/ltk\" \"w\"];puts $file [~a get 1.0 end];close $file;puts \"asdf\"" (path txt)))
@@ -761,7 +781,7 @@
 (defvar *exit-mainloop* nil)
 
 (defun mainloop()
-  (setf *exit-mainloop* nil)
+  (let ((*exit-mainloop* nil))
   (loop
     (let* ((l (read-preserving-whitespace *w* nil nil)))
       (when (null l) (return))
@@ -779,7 +799,7 @@
 ;	    (format t "error while executing callback:~s~&" cond)))
       (when *exit-mainloop*
 	(send-w "exit")
-	(return)))))
+	(return))))))
 
 ;;; another way to terminate the running app, send exit command to wish
 
@@ -971,6 +991,7 @@
 	  (polygon (create-polygon c (list 50 150  250 160 250 300 50 330 )))
 	  (text (create-text c 260 250 "Canvas test"))
 	  )
+     (declare (ignore text))
      (pack sc :expand 1 :fill "both")
      (scrollregion c 0 0 800 800)
      )))
@@ -1023,7 +1044,7 @@
 		))
 			  
 
-       (dotimes (i *number-of-particles)
+       (dotimes (i *number-of-particles*)
 	 (setf (aref particles-1 i)
 	       (make-particle :circle (make-circle canvas)))
 	 )
