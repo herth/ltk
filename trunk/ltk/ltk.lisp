@@ -109,6 +109,7 @@ wm                   x
 	   "ADD-PANE"
 	   "ADD-SEPARATOR"
 	   "AFTER"
+	   "AFTER-IDLE"	   
 	   "APPEND-TEXT"
 	   "APPEND-TEXT-NewLINE"
 	   "ASK-OKCANCEL"
@@ -118,6 +119,11 @@ wm                   x
 	   "BIND"
 	   "BUTTON"
 	   "CANVAS"
+	   "CANVAS-LINE"
+	   "CANVAS-OVAL"
+	   "CANVAS-POLYGON"
+	   "CANVAS-RECTANGLE"
+	   
 	   "CHECK-BUTTON"
 	   "CGET"
 	   "CLEAR-TEXT"
@@ -196,6 +202,12 @@ wm                   x
 	   "MAKE-SCROLLED-CANVAS"
 	   "MAKE-TEXT"
 	   "MAKE-TOPLEVEL"
+
+	   "MAKE-LINE"
+	   "MAKE-OVAL"
+	   "MAKE-POLYGON"
+	   "MAKE-RECTANGLE"
+	   
 	   "MAXSIZE"
 	   "MENU"
 	   "MENUBAR"
@@ -205,6 +217,7 @@ wm                   x
 	   "MESSAGE"
 	   "MESSAGE-BOX"
 	   "MINSIZE"
+	   "MOVE"
 	   "NORMALIZE"
 	   "ON-CLOSE"
 	   "ON-FOCUS"
@@ -312,8 +325,7 @@ wm                   x
 		   (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* 0.861)
-
+(defvar *ltk-version* 0.862)
 ;;; global var for holding the communication stream
 (defvar *wish* nil)
 
@@ -343,7 +355,7 @@ wm                   x
   (send-wish "proc senddatastring {s} {puts \"(:data \\\"[escape $s]\\\")\";flush stdout} ")
   
   ;;; proc sendevent {s} {puts "(event \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
-  (send-wish "proc sendevent {s x y keycode char} {puts \"(:event \\\"$s\\\" $x $y $keycode $char)\"} ")
+  (send-wish "proc sendevent {s x y keycode char width height} {puts \"(:event \\\"$s\\\" $x $y $keycode $char $width $height)\"} ")
   ;;; proc callback {s} {puts "(callback \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
 
   ;;; callback structure: (:callback "widgetname")          ;; for non-parameter callbacks
@@ -476,13 +488,19 @@ wm                   x
 
 (defvar *callbacks* (make-hash-table :test #'equal))
 
-(defvar *counter* 0)
+(defvar *counter* 1)			; counter for creating unique widget names
+(defvar *after-counter* 1)		; counter for creating unique after callbacks
 
 (defun add-callback (sym fun)
   "create a callback sym is the name to use for storage, fun is the function to call"
   (when *debug-tk*
     (format t "add-callback (~A ~A)~%" sym fun))
   (setf (gethash sym *callbacks*) fun))
+
+(defun remove-callback (sym)
+  (when *debug-tk*
+    (format t "remove-callback (~A)~%" sym))
+  (setf (gethash sym *callbacks*) nil))
 
 (defun callback (sym arg)
   "perform the call of the function associated with sym and the args arg"
@@ -495,11 +513,30 @@ wm                   x
 ;;; after <time> msec call function <fun> <label> is used to have
 ;;; several events scheduled at the same time
 
-(defun after(time fun &optional label)
-  (let ((name (format nil "after~@[~a~]" label)))
-    (add-callback name fun)
-    ;(format-wish "after ~a {puts -nonewline {(\"~A\") };flush stdout}" time name)))
+;(defun after (time fun &optional label)
+;  (let ((name (format nil "after~@[~a~]" label)))
+;    (add-callback name fun)
+;    ;(format-wish "after ~a {puts -nonewline {(\"~A\") };flush stdout}" time name)))
+;    (format-wish "after ~a {callback ~A}" time name)))
+
+(defun after (time fun)
+  (let ((name (format nil "after~a" (incf *after-counter*))))
+    (ltk::add-callback name
+		       (lambda ()
+			 (funcall fun)
+			 (remove-callback name)))
     (format-wish "after ~a {callback ~A}" time name)))
+
+(defun after-idle (fun)
+ (let ((name (format nil "afteridle~a" (incf *after-counter*))))
+   (ltk::add-callback name
+		      (lambda ()
+			(funcall fun)
+			(remove-callback name)))
+   (ltk::format-wish "after idle {callback ~A}" name)))
+
+
+
 
 ;; tool functions used by the objects
 
@@ -539,12 +576,6 @@ wm                   x
 
 (defun bell ()
   (send-wish (format nil "bell")))
-
-(defun lower (widget &optional (other nil))
-  (send-wish (format nil "lower ~a~@[ ~a~]" (path widget) (and other (path other)))))
-
-(defun raise (widget &optional (other nil))
-  (send-wish (format nil "raise ~a~@[ ~a~]" (path widget) (and other (path other)))))
 
 (defun destroy (widget)
   (send-wish (format nil "destroy ~a" (path widget))))
@@ -596,25 +627,45 @@ wm                   x
   (gethash (name widget) *callbacks*))
 
 
+(defgeneric lower (widget &optional other))
+(defmethod lower ((widget widget) &optional other)
+  (send-wish (format nil "lower ~a~@[ ~a~]" (path widget) (and other (path other)))))
+
+(defgeneric raise (widget &optional above))
+(defmethod raise ((widget widget) &optional above)
+  (send-wish (format nil "raise ~a~@[ ~a~]" (path widget) (and above (path above)))))
+
+
 (defstruct event
   x
   y
   keycode
   char
+  width
+  height
   )
+
+(defun construct-tk-event (properties)
+ (make-event
+   :x (first properties)
+   :y (second properties)
+   :keycode (third properties)
+   :char (fourth properties)
+   :width (fifth properties)
+   :height (sixth properties)))
 
 (defgeneric bind (w event fun))
 (defmethod bind ((w widget) event fun)
   "bind fun to event of the widget w"
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K}" (path w) event name)))
+    (format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K %w %h}" (path w) event name)))
 
 (defmethod bind (s event fun)
   "bind fun to event within context indicated by string ie. 'all' or 'Button'"
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K}" s event name)))
+    (format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K %w %h}" s event name)))
 
 
 (defvar *tk* (make-instance 'widget :name "." :path "."))
@@ -1211,6 +1262,12 @@ set y [winfo y ~a]
    (scrollregion-y1 :accessor scrollregion-y1 :initform nil)
    ))
 
+;; wrapper class for canvas items
+(defclass canvas-item ()
+  ((canvas :accessor canvas :initarg :canvas)
+   (handle :accessor handle :initarg :handle))
+  )
+
 (defmethod canvas ((canvas canvas)) canvas)
 
 (defmethod initialize-instance :after ((c canvas) &key)
@@ -1227,7 +1284,7 @@ set y [winfo y ~a]
   "bind fun to event of the widget w"
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "~a bind ~a ~a {sendevent ~A %x %y %k %K}" (path canvas) item event name)))
+    (format-wish "~a bind ~a ~a {sendevent ~A %x %y %k %K %w %h}" (path canvas) item event name)))
 
 
 (defgeneric scrollregion (canvas x0 y0 x1 y1))
@@ -1242,6 +1299,10 @@ set y [winfo y ~a]
 (defmethod itemmove ((canvas canvas) item dx dy)
   (format-wish "~a move ~a ~a ~a" (path canvas) item dx dy))
 
+(defgeneric move (item dx dy))
+(defmethod move ((item canvas-item) dx dy)
+  (itemmove (canvas item) (handle item) dx dy))
+
 (defgeneric clear (widget))
 (defmethod clear ((canvas canvas))
   (format-wish "~a delete all" (path canvas)))
@@ -1254,17 +1315,58 @@ set y [winfo y ~a]
 (defun create-line* (canvas &rest coords)
   (funcall #'create-line canvas coords))
 
+(defclass canvas-line (canvas-item)
+  ())
+
+(defmethod initialize-instance :after ((c canvas-line) &key canvas coords)
+  (setf (handle c) (create-line canvas coords)))
+
+(defun make-line (canvas coords)
+  (make-instance 'canvas-line :canvas canvas :coords coords))
+
+
 (defun create-polygon (canvas coords)
   (format-wish "senddata [~a create polygon~{ ~a~}]" (path canvas) coords)
   (read-data))
+
+(defclass canvas-polygon (canvas-item)
+  ())
+
+(defmethod initialize-instance :after ((c canvas-polygon) &key canvas coords)
+  (setf (handle c) (create-polygon canvas coords)))
+
+(defun make-polygon (canvas coords)
+  (make-instance 'canvas-polygon :canvas canvas :coords coords))
+
 
 (defun create-oval (canvas x0 y0 x1 y1)
   (format-wish "senddata [~a create oval ~a ~a ~a ~a]" (path canvas) x0 y0 x1 y1)
   (read-data))
 
+(defclass canvas-oval (canvas-item)
+  ())
+
+(defmethod initialize-instance :after ((c canvas-oval) &key canvas x0 y0 x1 y1)
+  (setf (handle c) (create-oval canvas x0 y0 x1 y1)))
+
+(defun make-oval (canvas x0 y0 x1 y1)
+  (make-instance 'canvas-oval :canvas canvas :x0 x0 :y0 y0 :x1 x1 :y1 y1))
+
+
 (defun create-rectangle (canvas x0 y0 x1 y1)
   (format-wish "senddata [~a create rectangle ~a ~a ~a ~a]" (path canvas) x0 y0 x1 y1)
   (read-data))
+
+(defclass canvas-rectangle (canvas-item)
+  ())
+
+(defmethod initialize-instance :after ((c canvas-rectangle) &key canvas x0 y0 x1 y1)
+  (setf (handle c) (create-rectangle canvas x0 y0 x1 y1)))
+
+(defun make-rectangle (canvas x0 y0 x1 y1)
+  (make-instance 'canvas-rectangle :canvas canvas :x0 x0 :y0 y0 :x1 x1 :y1 y1))
+
+
 
 (defun create-text (canvas x y text)
   (format-wish "senddata [~a create text ~a ~a -anchor nw -text {~a}]" (path canvas) x y text)
@@ -1476,7 +1578,17 @@ set y [winfo y ~a]
 	      (format nil "~(~a~)" value)) ;; if its not a string, print it downcased (eg. symbols)
 	    others
 
-	    )) 
+	    ))
+(defmethod configure ((item canvas-item) option value &rest others)
+  (format-wish "~A itemconfigure ~A -~(~A~) {~A}~{ -~(~a~) {~(~a~)}~}" (path (canvas item)) (handle item) option
+	       (if (stringp value) ;; There may be values that need to be passed as
+		   value           ;; unmodified strings, so do not downcase strings
+		 (format nil "~(~a~)" value))
+	       others))
+
+  
+
+
                                              ;; 
 
 ;;; for tkobjects, the name of the widget is taken
@@ -1513,19 +1625,28 @@ set y [winfo y ~a]
 		value           ;; unmodified strings, so do not downcase strings
 	      (format nil "~(~a~)" value)))) ;; if its not a string, print it downcased
 
+
 ;;; for tkobjects, the name of the widget is taken
 (defmethod itemconfigure ((widget canvas) item option (value tkobject))
   (format-wish "~A itemconfigure ~A -~(~A~) {~A}" (path widget) item option (path value)))
 
-(defgeneric itemlower (w i &optional above))
-(defmethod itemlower ((widget canvas) item &optional above)
+(defgeneric itemlower (w i &optional below))
+(defmethod itemlower ((widget canvas) item &optional below)
   (format-wish "~A lower ~A ~@[~A~]" (path widget)
+	       item below))
+
+(defmethod lower ((item canvas-item) &optional below)
+  (itemlower (canvas item) (handle item) (and below (handle below))))
+
+
+(defgeneric itemraise (w i &optional above))
+(defmethod itemraise ((widget canvas) item &optional above)
+  (format-wish "~A raise ~A ~@[~A~]" (path widget)
 	       item above))
 
-(defgeneric itemraise (w i &optional below))
-(defmethod itemraise ((widget canvas) item &optional below)
-  (format-wish "~A raise ~A ~@[~A~]" (path widget)
-	       item below))
+(defmethod raise ((item canvas-item) &optional above)
+  (itemraise (canvas item) (handle item) (and above (handle above))))
+
 
 ;;; wm functions
 
@@ -1760,7 +1881,7 @@ set y [winfo y ~a]
   (let ((*exit-mainloop* nil)
 	(*read-eval* nil))    ;;safety against malicious clients
   (loop
-    (let* ((l (read-event))) ;((l (read-preserving-whitespace *wish* nil nil)))
+    (let* ((l (read-event))) 
       (when (null l) (return))
       (if *debug-tk*
 	  (format t "l:~s<=~%" l))
@@ -1774,7 +1895,7 @@ set y [winfo y ~a]
 		 (let* ((params (rest l))
 			(callback (first params))
 			(evp (rest params))
-			(event (make-event :x (first evp) :y (second evp) :keycode (third evp) :char (fourth evp))))
+			(event (construct-tk-event evp)))
 		   (callback callback (list event))
 		   ))
 		(t
@@ -1806,6 +1927,7 @@ set y [winfo y ~a]
   `(let ((*wish* nil)
 	 (ltk::*callbacks* (make-hash-table :test #'equal))
 	 (ltk::*counter* 1)
+	 (ltk::*after-counter* 1)
 	 (ltk::*event-queue* nil))
      (start-wish)
      ,@body
