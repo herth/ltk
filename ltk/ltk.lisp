@@ -18,33 +18,36 @@
 |#
 
 #|
-All tk commads as of version with support information
+All tk commads as of version 8.4 with support information. "-" means not
+supported by purpos (look comment), "x" means supported, though some uncommon
+options may not be supported.
+
 command      supported comment
 bell                 x
 bind                 x does not pass the event information
 bindtags
 bitmap               - see image
 button               x
-canvas               x
-checkbutton
-clipboard
+canvas               x (quite some graphic elements missing)
+checkbutton          x
+clipboard            x (canvas get missing... tricky...)
 colors               - constants only
 console              - only on some platforms
-cursors              x
+cursors              x 
 destroy              x
 entry                x
 event
 focus
 font
 frame                x
-grab
+grab                 - 
 grid                 x
 image                x photo image only
 keysyms              - constants only
 label                x
 labelframe           x
 listbox              x
-loadTk
+loadTk               -
 lower                x
 menu                 x
 menubutton           x
@@ -52,10 +55,10 @@ message
 option               -
 options              -
 pack                 x
-panedwindow
+panedwindow          x
 photo                - see image
 place
-radiobutton
+radiobutton          x
 raise                x
 scale
 scrollbar            x
@@ -64,7 +67,7 @@ send
 spinbox
 text                 x
 tk
-tk_bisque
+tk_bisque            -
 tk_chooseColor
 tk_chooseDirectory
 tk_dialog
@@ -73,20 +76,20 @@ tk_focusNext
 tk_focusPrev
 tk_getOpenFile       x
 tk_getSaveFile       x
-tk_menuSetFocus
-tk_messageBox
+tk_menuSetFocus      -
+tk_messageBox        x
 tk_optionMenu
 tk_popup
-tk_setPalette
+tk_setPalette        -
 tk_textCopy
 tk_textCut
 tk_textPaste
-tkerror
-tkvars
-tkwait
+tkerror              -
+tkvars               -
+tkwait               
 toplevel             x
 winfo
-wm
+wm                   x 
 |#
 
 (defpackage "LTK"
@@ -95,6 +98,8 @@ wm
 	#+:sbcl "SB-EXT"
 	)
   (:export "TEST"
+	   "ADD-PANE"
+	   "FORGET-PANE"
 	   "AFTER"
 	   "APPEND-TEXT"
 	   "ASK-YESNO"
@@ -103,13 +108,18 @@ wm
 	   "BIND"
 	   "BUTTON"
 	   "CANVAS"
+	   "CHECKBUTTON"
+	   "CLEAR-TEXT"
+	   "CLIPBOARD-APPEND"
+	   "CLIPBOARD-CLEAR"
+	   "CLIPBOARD-GET"
 	   "CONFIGURE"
 	   "CREATE-IMAGE"
 	   "CREATE-LINE"
 	   "CREATE-MENU2"
 	   "CREATE-POLYGON"
 	   "CREATE-TEXT"
-	   "CLEAR-TEXT"
+	   "*CURSORS*"
 	   "EXIT-WISH"
 	   "DESTROY"
 	   "DO-EXECUTE"
@@ -123,6 +133,7 @@ wm
 	   "GET-TEXT"
 	   "GRID"
 	   "GRID-COLUMNCONFIGURE"
+	   "GRID-CONFIGURE"
 	   "GRID-ROWCONFIGURE"
 	   "IMAGE-LOAD"
 	   "ITEMCONFIGURE"
@@ -147,14 +158,19 @@ wm
 	   "MAKE-SCROLLBAR"
 	   "MAKE-TEXT"
 	   "MAKE-TOPLEVEL"
+	   "*MB-ICONS*"
 	   "MENU"
 	   "MENUBAR"
 	   "MENUBUTTON"
 	   "MESSAGE-BOX"
+	   "MINSIZE"
 	   "PACK"
 	   "PACK-FORGET"
+	   "PANED-WINDOW"
+	   "PANE-CONFIGURE"
 	   "PHOTO-IMAGE"
 	   "POSTSCRIPT"
+	   "RADIO-BUTTON"
 	   "RAISE"
 	   "SAVE-TEXT"
 	   "SCROLLBAR"
@@ -171,6 +187,7 @@ wm
 	   "*TK*"
 	   "TKOBJECT"
 	   "TOPLEVEL"
+	   "VALUE"
 	   "WIDGET"
 	   "WITH-LTK"
 	   "WM-TITLE"
@@ -346,6 +363,17 @@ wm
 (defun destroy (widget)
   (send-w (format nil "destroy ~a" (path widget))))
 
+
+(defun clipboard-clear ()
+  (send-w "clipboard clear"))
+
+(defun clipboard-get ()
+  )
+
+(defun clipboard-append (txt)
+  (send-w (format nil "clipboard append {~a}" txt)))
+
+
 ;; basic tk object
 (defclass tkobject ()
   ((name :accessor name :initarg :name :initform nil)
@@ -367,9 +395,11 @@ wm
   (create w)				; call the widget specific creation method - every 
   )					; widget class needs to overload that
 
+(defgeneric create (w))
 (defmethod create ((w widget))
   )
 
+(defgeneric bind (w event fun))
 (defmethod bind ((w widget) event fun)
   "bind fun to event of the widget w"
   (let ((name (create-name)))
@@ -444,17 +474,88 @@ wm
   (let* ((b (make-instance 'button :master master :text text :command command)))
     b))
 
+;;; check button widget
+
+(defclass check-button (widget)
+  ((command :accessor command :initarg :command :initform nil)
+   (text :accessor text :initarg :text :initform "")
+   ))
+
+(defmethod create ((cb check-button))
+  (if (command cb)
+      (progn
+	(add-callback (name cb) (command cb))
+	(send-w (format nil "checkbutton ~A -text {~A} -variable ~A -command {puts -nonewline {(\"~A\")};flush stdout}" (path cb) (text cb) (name cb) (name cb))))
+    (send-w (format nil "checkbutton ~A -text {~A} -variable ~A" (path cb) (text cb) (name cb))))
+  (setf (created cb) t))
+
+(defgeneric value (widget))
+
+(defmethod value ((cb check-button))
+  (send-w (format nil "puts $~a;flush stdout" (name cb)))
+  (read *w*))
+
+(defgeneric (setf value) (widget val))
+(defmethod (setf value) (val (cb check-button))
+  (send-w (format nil "set ~a ~a" (name cb) val)))
+
+
+;;; radio button widget
+
+(defclass radio-button (widget)
+  ((command :accessor command :initarg :command :initform nil)
+   (text :accessor text :initarg :text :initform "")
+   (val :accessor radio-button-value :initarg :value :initform nil)
+   (var :accessor radio-button-variable :initarg :variable :initform nil)
+   ))
+
+(defmethod create ((rb radio-button))
+  (send-w (format nil "radiobutton ~A -text {~A} ~A ~A ~A"
+		  (path rb) (text rb)
+		  (if (radio-button-value rb)
+		      (format nil "-value {~a}" (radio-button-value rb))
+		    "")
+		  (if (radio-button-variable rb)
+		      (format nil "-variable {~a}" (radio-button-variable rb))
+		    "")		 
+		  (if (command rb)
+		      (progn
+			(add-callback (name rb) (command rb))
+			(format nil "-command {puts -nonewline {(\"~A\")};flush stdout}" (name rb)))
+		    "")))
+  (setf (created rb) t))
+
+(defmethod value ((rb radio-button))
+  "reads the content of the shared variable of the radio button set"
+  (if (radio-button-variable rb)
+      (progn
+	(send-w (format nil "puts $~a;flush stdout" (radio-button-variable rb)))
+	(read *w*))
+    nil))
+
+(defmethod (setf value) (val (rb radio-button))
+  "sets the content of the shared variable of the radio button set"
+  (when (radio-button-variable rb)
+    (send-w (format nil "set ~a ~a" (radio-button-variable rb) val))))
+
+
 ;; text entry widget
 
-(defclass entry(widget) ())
+(defclass entry(widget)
+  ((width :accessor width :initarg :width :initform nil))
+  )
 
 (defmethod create ((e entry))
-  (send-w (format nil "entry ~A " (path e)))
+  (send-w (format nil "entry ~A ~A" (path e)
+		  (if (width e)
+		      (format nil "-width ~a" (width e))
+		    "")))
   (setf (created e) t))
 
 (defun make-entry (master)
   (make-instance 'entry :master master))
 
+(defgeneric get-content (e))
 (defmethod get-content ((e entry))  
   (send-w (format nil "puts [~A get]; flush stdout" (path e)))
   ;#+:sbcl (read-line *w*)
@@ -463,6 +564,7 @@ wm
     c)
   )
 
+(defgeneric set-content (e txt))
 (defmethod set-content ((e entry) txt)
   (send-w (format nil "~A delete 0 end;~A insert end {~A}" (path e) (path e) txt)))
 
@@ -488,6 +590,27 @@ wm
   (send-w (format nil "labelframe ~A -text {~A} " (path l) (text l)))
   (setf (created l) t))
 
+;;; panedwindow widget
+
+(defclass paned-window (widget)
+  ())
+
+(defmethod create ((pw paned-window))
+  (send-w (format nil "panedwindow ~a" (path pw)))
+  (setf (created pw) t))
+
+(defgeneric pane-configure (window option value))
+(defmethod pane-configure ((pw paned-window) option value)
+  (send-w (format nil "~a paneconfigure ~a {~a}" (path pw) option value))
+  )
+
+(defgeneric add-pane (window widget))
+(defmethod add-pane ((pw paned-window) (w widget))
+  (send-w (format nil "~a add ~a" (path pw) (path w))))
+
+(defgeneric forget-pane (window widget))
+(defmethod forget-pane ((pw paned-window) (w widget))
+  (send-w (format nil "~a forget ~a" (path pw) (path w))))
 
 ;;; listbox widget
 
@@ -521,6 +644,7 @@ wm
   (read *w*)
   )
 
+(defgeneric listbox-select (l val))
 (defmethod listbox-select ((l listbox) val)
   "modify the selection in listbox, if nil is given, the selection is cleared,
 if a number is given the corresponding element is selected, alternatively
@@ -533,10 +657,15 @@ a list of numbers may be given"
 
 ;;; toplevel (window) widget 
 
-(defclass toplevel (widget)  ())
+(defclass toplevel (widget)
+  ((protocol-destroy :accessor protocol-destroy :initarg :on-close :initform nil)
+   ))
 
 (defmethod create ((w toplevel))
-  (send-w (format nil "toplevel ~A " (path w)))
+  (send-w (format nil "toplevel ~A" (path w)))
+  (unless (protocol-destroy w)
+    (send-w (format nil "wm protocol ~a WM_DELETE_WINDOW {wm withdraw ~a}" (path w) (path w))))
+      
   (setf (created w) t))
 
 (defun make-toplevel (master)
@@ -627,6 +756,7 @@ a list of numbers may be given"
 (defun make-canvas (master &key (width nil) (height nil) (xscroll nil) (yscroll nil))
   (make-instance 'canvas :master master :width width :height height :xscroll xscroll :yscroll yscroll))
 
+(defgeneric scrollregion (c x0 y0 x1 y1))
 (defmethod scrollregion ((c canvas) x0 y0 x1 y1)
   (setf (scrollregion-x0 c) x0)
   (setf (scrollregion-y0 c) y0)
@@ -642,6 +772,11 @@ a list of numbers may be given"
 
 (defun create-polygon (canvas coords)
   (send-w (format nil "puts [~a create polygon ~{ ~a~}]" (path canvas) coords))
+  (read *w* nil nil)
+  )
+
+(defun create-oval (canvas x0 y0 x1 y1)
+  (send-w (format nil "puts [~a create oval ~a ~a ~a ~a]" (path canvas) x0 y0 x1 y1))
   (read *w* nil nil)
   )
 
@@ -682,6 +817,7 @@ a list of numbers may be given"
    (height :accessor height :initarg :height :initform nil))
   )
 
+
 (defmethod create ((txt text))
   (send-w (format nil "text ~a~a~a" (path txt)
 		  (if (width txt)
@@ -697,10 +833,12 @@ a list of numbers may be given"
   (make-instance 'text :master master :width width :height height )
   )
 
+(defgeneric append-text (txt text &optional tag))
 (defmethod append-text ((txt text) text &optional (tag nil))
   (send-w (format nil "~a insert end {~a} ~a" (path txt) text (if tag
 								  tag
 								""))))
+(defgeneric clear-text (txt))
 (defmethod clear-text ((txt text))
   (send-w (format nil "~A delete 0.0 end" (path txt))))
 
@@ -708,13 +846,15 @@ a list of numbers may be given"
 (defmethod set-text ((txt text) content)
   (send-w (format nil "~A delete 0.0 end;~A insert end {~A}" (path txt) (path txt) content)))
 
-
+(defgeneric see (txt pos))
 (defmethod see((txt text) pos)
   (send-w (format nil "~a see ~a" (path txt) pos)))
 
+(defgeneric tag-configure (txt tag option value))
 (defmethod tag-configure ((txt text) tag option value)
   (send-w (format nil "~a tag configure ~a -~a {~a}" (path txt) tag option value)))
 
+(defgeneric tag-bind (txt tag event fun))
 (defmethod tag-bind ((txt text) tag event fun)
   "bind fun to event of the tag of the text widget txt"
   (let ((name (create-name)))
@@ -722,7 +862,7 @@ a list of numbers may be given"
     (send-w (format nil "~a tag bind ~a ~a {puts -nonewline {(\"~A\")};flush stdout}"
 		    (path txt) tag event name))))
 
-
+(defgeneric get-text (txt))
 (defmethod get-text((txt text))
   (send-w (format nil "set file [open \"/tmp/ltk\" \"w\"];puts $file [~a get 1.0 end];close $file;puts \"asdf\"" (path txt)))
   (read-line *w*)
@@ -733,12 +873,14 @@ a list of numbers may be given"
     erg)
   )
 
-(defmethod save-text((txt text) filename)
+(defgeneric save-text (txt filename))
+(defmethod save-text ((txt text) filename)
   "save the content of the text widget into the file <filename>"
   (send-w (format nil "set file [open {~a} \"w\"];puts $file [~a get 1.0 end];close $file;puts \"asdf\"" filename (path txt)))
   (read-line *w*)
   )
 
+(defgeneric load-text (txt filename))
 (defmethod load-text((txt text) filename)
   "load the content of the file <filename>"
   (send-w (format nil "set file [open {~a} \"r\"];~a delete 1.0 end;~a insert end [read $file];close $file;puts \"asdf\"" filename (path txt) (path txt)))
@@ -762,11 +904,13 @@ a list of numbers may be given"
     (create i)
     i))
 
+(defgeneric image-load (p filename))
 (defmethod image-load((p photo-image) filename)
   ;(format t "loading file ~a~&" filename)
   (send-w (format nil "~A read {~A} -shrink" (name p) filename))
   )
 
+(defgeneric ishow (p name))
 (defmethod ishow((p photo-image) name)
   (convert (concatenate 'string name ".jpg")
 	   "ishow.ppm")
@@ -776,6 +920,7 @@ a list of numbers may be given"
 
 ;;; pack method for widget arrangement in container
 
+(defgeneric pack (w &key side fill expand))
 (defmethod pack ((w widget) &key (side "left") (fill nil) (expand nil))
   (unless (created w)
     (create w))
@@ -787,6 +932,7 @@ a list of numbers may be given"
 		      (format nil " -expand ~A" expand)
 		    ""))))
 
+(defgeneric pack-forget (w))
 (defmethod pack-forget ((w widget))
   (when (created w)
     (send-w (format nil "pack forget ~A" (path w)))))
@@ -795,44 +941,156 @@ a list of numbers may be given"
 
 ;;; grid manager
 
+(defgeneric grid (w r c &key))
 (defmethod grid ((w widget) row column &key (sticky nil))
   (send-w (format nil "grid ~a -row ~a -column ~a ~a" (path w) row column
 		  (if sticky
 		      (format nil " -sticky ~a" sticky)
 		    ""))))
 
+(defgeneric grid-columnconfigure (w c o v))
 (defmethod grid-columnconfigure (widget column option value)
   (send-w (format nil "grid columnconfigure ~a ~a -~a {~a}" (path widget) column option value)))
 
+(defgeneric grid-rowconfigure (w r o v))
 (defmethod grid-rowconfigure (widget row option value)
   (send-w (format nil "grid rowconfigure ~a ~a -~a {~a}" (path widget) row option value)))
+
+(defgeneric grid-configure (w o v))
+(defmethod grid-configure (widget option value)
+  (send-w (format nil "grid configure ~a -~a {~a}" (path widget) option value)))
 
 
 ;;; configure a widget parameter
 
+(defgeneric configure (w o v))
 (defmethod configure (widgt option value)
   ;(format t "normal config~&")
   (send-w (format nil "~A configure -~A {~A}" (path widgt) option value)))
 
 ;;; for tkobjects, the name of the widget is taken
 (defmethod configure (wid option (value tkobject))
-  ;(format t "config2:~&")
   (send-w (format nil "~A configure -~A {~A}" (path wid) option (name value))))
 
-(defmethod itemconfigure (widget item option value)
-  ;(format t "itemconfig ~&")
+(defgeneric itemconfigure (w i o v))
+(defmethod itemconfigure ((widget canvas) item option value)
   (send-w (format nil "~A itemconfigure ~A -~A {~A}" (path widget) item option value)))
 
 ;;; for tkobjects, the name of the widget is taken
-(defmethod itemconfigure (widget item option (value tkobject))
-  ;(format t "itemconfig widget~&")
+(defmethod itemconfigure ((widget canvas) item option (value tkobject))
   (send-w (format nil "~A itemconfigure ~A -~A {~A}" (path widget) item option (name value))))
 
 
 ;;; wm functions
 
+(defgeneric wm-title (w title))
 (defmethod wm-title ((w widget) title)
   (send-w (format nil "wm title ~a {~a}" (path w) title)))
+
+(defgeneric minsize (w x y))
+(defmethod minsize ((w widget) x y)
+  (send-w (format nil "wm minsize ~a ~a ~a" (path w) x y)))
+
+(defgeneric maxsize (w x y))
+(defmethod maxsize ((w widget) x y)
+  (send-w (format nil "wm maxsize ~a ~a ~a" (path w) x y)))
+
+(defgeneric withdraw (w))
+(defmethod withdraw ((tl toplevel))
+  (send-w (format nil "wm withdraw ~a" (path tl))))
+
+(defgeneric normalize (w))
+(defmethod normalize ((tl toplevel))
+  (send-w (format nil "wm state ~a normal" (path tl))))
+
+(defgeneric iconify (w))
+(defmethod iconify ((tl toplevel))
+  (send-w (format nil "wm iconify ~a" (path tl))))
+
+(defgeneric deiconify (w))
+(defmethod deiconify ((tl toplevel))
+  (send-w (format nil "wm deiconify ~a" (path tl))))
+
+(defgeneric geometry (w))
+(defmethod geometry ((tl toplevel))
+  (send-w (format nil "wm geometry ~a" (path tl)))
+  (do-read-line))
+
+(defgeneric set-geometry (w width height x y))
+(defmethod set-geometry ((tl toplevel) width height x y)
+  (send-w (format nil "wm geometry ~a ~ax~a+~a+~a" (path tl) width height x y))
+  (do-read-line))
+
+(defgeneric on-close (w fun))
+(defmethod on-close ((tl toplevel) fun)
+  (let ((name (create-name)))
+    (add-callback name fun)
+    (send-w (format nil
+		    "wm protocol WM_DELETE_WINDOW {puts -nonewline {(\"~A\")};flush stdout}"
+		    name))))
+
+(defgeneric on-focus (w fun))
+(defmethod on-focus ((tl toplevel) fun)
+  (let ((name (create-name)))
+    (add-callback name fun)
+    (send-w (format nil
+		    "wm protocol WM_TAKE_FOCUS {puts -nonewline {(\"~A\")};flush stdout}"
+		    name))))
+
+(defun iconwindow (tl wid)
+  (send-w (format nil "wm iconwindow ~a ~a" (path tl) (path wid))))
+  
+
+;;; winfo functions
+
+(defun screen-width (&optional (w nil))
+  (send-w (format nil "puts [winfo screenwidth ~a]" (if w (path w) ".")))
+  (read *w*))
+
+(defun screen-height (&optional (w nil))
+  (send-w (format nil "puts [winfo screenheight ~a]" (if w (path w) ".")))
+  (read *w*))
+
+(defun screen-width-mm (&optional (w nil))
+  (send-w (format nil "puts [winfo screenmmwidth ~a]" (if w (path w) ".")))
+  (read *w*))
+
+(defun screen-heigth-mm (&optional (w nil))
+  (send-w (format nil "puts [winfo screenmmheigth ~a]" (if w (path w) ".")))
+  (read *w*))
+
+(defun screen-mouse-x (&optional (w nil))
+  (send-w (format nil "puts [winfo pointerx ~a]" (if w (path w) ".")))
+  (read *w*))
+
+(defun screen-mouse-y (&optional (w nil))
+  (send-w (format nil "puts [winfo pointery ~a]" (if w (path w) ".")))
+  (read *w*))
+
+(defun screen-mouse (&optional (w nil))
+  (send-w (format nil "puts -nonewline {(};puts -nonewline [winfo pointerxy ~a];puts {)}" (if w (path w) ".")))
+  (read *w*))
+
+(defun window-width (tl)
+  (send-w (format nil "puts [winfo width ~a]" (path tl)))
+  (read *w* nil nil))
+
+(defun window-height (tl)
+  (send-w (format nil "puts [winfo height ~a]" (path tl)))
+  (read *w* nil nil))
+
+(defun window-x (tl)
+  (send-w (format nil "puts [winfo rootx ~a]" (path tl)))
+  (read *w* nil nil))
+
+(defun window-y (tl)
+  (send-w (format nil "puts [winfo rooty ~a]" (path tl)))
+  (read *w* nil nil))
+
+
+
+
+
 
 
 ;;; Dialog functions
@@ -870,6 +1128,9 @@ a list of numbers may be given"
     ;(read-all *w*)
     ;(string-trim '(#\Newline #\Return #\Linefeed) (read-line *w*))
   ))
+
+(defvar *mb-icons* (list "error" "info" "question" "warning")
+  "icon names valid for message-box function")
 
 ;;; see make-string-output-string/get-output-stream-string
 (defun message-box (message title type icon)
@@ -1114,171 +1375,94 @@ a list of numbers may be given"
   (mainloop))
 
 
-(defun wt2()
-  (start-w)
-  (let* ((text (make-text nil))
-	 (f (make-frame nil))
-	 (b (make-button f "get text" (lambda () (format t "=>~a<=~&" (get-text text)))))
-	 (b2 (make-button f "save text" (lambda () (save-text text "/tmp/ltktest.txt"))))
-	 (b3 (make-button f "load text" (lambda () (load-text text "ltk.lisp"))))
-	 )
-    (pack text :side "top" :expand 1 :fill "both")
-    (pack f :side "bottom"  :fill "x")
-    (pack b :side "left")
-    (pack b2 :side "left")
-    (pack b3 :side "left")
-    (configure text "font" "Courier 12")
-    (tag-configure text "t1" "font" "Courier 20")
-    (append-text text "asdf")
-    (append-text text #\Newline)    
-    (append-text text "xyz" "t1")
-    
-    ))
-
-(defun test2()
-  (wt2)
-  (mainloop))
-
-(defun hello-1()
+(defun rbtest ()
   (with-ltk
-   (let ((b (make-button nil "Press Me"
-			 (lambda ()
-			   (format t "Hello World!~&")))))
-     (pack b))))
-
-(defun hello-2()
-  (with-ltk
-   (let* ((f (make-frame nil))
-	  (b1 (make-button f "Button 1"
-			   (lambda () (format t "Button1~&"))))
-	  (b2 (make-button f "Button 2"
-			   (lambda () (format t "Button2~&")))))
-     (pack f)
-     (pack b1)
-     (pack b2)
-     (configure f "borderwidth" 3)
-     (configure f "relief" "sunken")
+   (let* ((buttons nil))
+     (dotimes (i 20)
+       (push (make-instance 'radio-button :text (format nil "Radio ~a" i) :variable "radios" :value (format nil "R~a" i)) buttons))
+     (setf buttons (nreverse buttons))
+     (dolist (b buttons)
+       (pack b :side "top"))
+     (setf (value (first buttons)) "R3")
      )))
 
-(defun canvastest()
+(defun ltk-eyes2 ()
   (with-ltk
-   (let* ((sc (make-scrolled-canvas nil))
-	  (c (canvas sc))
-	  (line (create-line c  (list 100 100 400 50 700 150)))
-	  (polygon (create-polygon c (list 50 150  250 160 250 300 50 330 )))
-	  (text (create-text c 260 250 "Canvas test"))
-	  )
-     (declare (ignore text))
-     (pack sc :expand 1 :fill "both")
-     (scrollregion c 0 0 800 800)
-     )))
-
-(defvar *number-of-particles* 2)
-
-(defstruct particle
-  circle
-  (x 0d0 :type double-float)
-  (y 0d0 :type double-float)
-  (vx 0d0 :type double-float)
-  (vy 0d0 :type double-float)
-  )
-
-(defun particletest ()
-  (with-ltk
-   (let* ((canvas (make-canvas nil :width 800 :height 800))
-	  (particles-1 (make-array *number-of-particles*))
-	  (particles-2 (make-array *number-of-particles*))
-	  (dt 0.01d0)
-	  )
-     (labels ((update-particles ()
-		(let ((tmp particles-1)) ;switch arrays
-		  (setf particles-1 particles-2)
-		  (setf particles-2 tmp))		
-		(dotimes (i *number-of-particles*)
-		  (let ((particle1 (aref particles-1 i))
-			(particle-old (aref particles-2 i))
-			(ax 0.0d0)
-			(ay 0.0d0))
-		    (setf (particle-x particle1) (particle-x particle-old))
-		    (setf (particle-y particle1) (particle-y particle-old))
-		    (setf (particle-vx particle1) (particle-vx particle-old))
-		    (setf (particle-vy particle1) (particle-vy particle-old))
-				    
-		    (dotimes (j *number-of-particles*)
-		      (unless (= i j)
-			(let* ((particle2 (aref particles-2 j))
-			       (dx (- (particle-x particle2) (particle-x particle1)))
-			       (dy (- (particle-y particle2) (particle-y particle1)))
-			       (d2 (+ (* dx dx) (* dy dy)))
-			       (d (sqrt d2)))
-			  (incf ax (/ dx (* d d2)))
-			  (incf dx (/ dy (* d d2)))
-			)))
-		    (incf (particle-x particle1) (* ax dt))
-		    (incf (particle-y particle1) (* ay dt))
-		    (set-coords canvas (particle-circle particle1) (list (particle-x particle1)
-									 (particle-y particle1)))))
-		))
-			  
-
-       (dotimes (i *number-of-particles*)
-	 (setf (aref particles-1 i)
-	       (make-particle :circle (make-circle canvas)))
-	 )
-			      
-			      
-       (after 50 #'update-particles)
+   (let* ((*debug-tk* nil)
+	  (w (screen-width))
+	  (h (screen-height))
+	  (c (make-instance 'canvas :width 400 :height 300))
+	  (e1 (create-oval c 10 10 40 40))
+	  (e2 (create-oval c 10 10 40 40)))
+     (setf *debug-tk* nil)
+     (labels ((update ()
+		      (let* ((pos (screen-mouse))
+			     (x (truncate (* 300 (/ (first pos) w))))
+			     (y (truncate (* 200 (/ (second pos) h))))
+			     )
+					;(format t "x: ~a y: ~a~&" x y)
+			(force-output)
+			(setf *debug-tk* nil)
+			(set-coords c e1 (list (+ 10 x) (+ 10 y) (+ 10 30 x) (+ 10 30 y)))
+			(set-coords c e2 (list (+ 50 x) (+ 10 y) (+ 50 30 x) (+ 10 30 y))))
+		      (after 50 #'update)))
+     (pack c)
+     (itemconfigure c e1 "fill" "blue")
+     (itemconfigure c e2 "fill" "blue")
+     (after 100 #'update)
      ))))
 
-(defun lb-test ()
+(defun ltk-eyes ()
   (with-ltk
-   (let ((l (make-instance 'listbox)))
-     (pack l :expand 1 :fill "both")
-     (listbox-append l (list 1 2 3 "asdf" (list 3 4 5) 4)))))
+   (let* ((*debug-tk* nil)
+	  (w (screen-width))
+	  (h (screen-height))
+	  (c (make-instance 'canvas :width 400 :height 300))
+	  (e1 (create-oval c 10 10 190 290))
+	  (e2 (create-oval c 210 10 390 290))
+	  (p1 (create-oval c 10 10 40 40))
+	  (p2 (create-oval c 10 10 40 40))
+	  (old-x 0)
+	  (old-y 0))
+     (setf *debug-tk* nil)
+     (labels ((update ()
+		      (let* ((pos (screen-mouse))
+			     (wx (window-x *tk*))
+			     (wy (window-y *tk*))
+			     (width (window-width *tk*))
+			     (height (window-height *tk*))
+			     (mx (first pos))
+			     (my (second pos))
+			     (x (truncate (* width (/ mx w))))
+			     (y (truncate (* height (/ my h))))
+			     (diam (truncate width 8))
+			     (dx1 (- mx (+ wx (truncate width 4))))
+			     (dy1 (- my (+ wy (truncate height 2))))
+			     (dx2 (- mx (+ wx (* 3 (truncate width 4)))))
+			     (dy2 (- my (+ wy (truncate height 2))))
+			     (p1x (+ (- (truncate width 4)  (truncate diam 2)) (truncate (* width  dx1) (* 4.5 w))))
+			     (p1y (+ (- (truncate height 2) (truncate diam 2)) (truncate (* height dy1) (* 2.3 h))))
+			     (p2x (+ (- (* 3 (truncate width 4))  (truncate diam 2)) (truncate (*  width  dx2) (* 4.5 w))))
+			     (p2y (+ (- (truncate height 2) (truncate diam 2)) (truncate (* height dy2) (* 2.3 h))))
 
-(defun lb-test2 ()
-  (with-ltk
-   (let* ((last nil)
-	  (l (make-instance 'listbox))
-	  (wf (make-instance 'frame))
-	  (lbl (make-instance 'label :master wf :text "Widget:"))
-	  (f (make-instance 'frame :master wf))
-	  (canv (make-instance 'canvas :master f :width 100 :height 100))
-	  (scanv (make-instance 'scrolled-canvas :master f))
-	  (widgets (list
-		    (make-instance 'button :master f :text "Button")
-		    (make-instance 'label :master f :text "Label")
-		    canv
-		    scanv
-		    ))
-	;  (b (make-instance 'button :text "Show" :command ))
-	  )
-     (bind l "<<ListboxSelect>>" (lambda ()
-			    (let ((sel (listbox-get-selection l)))
-			      (format t "selection: ~a~%" sel)
-			      (force-output)
-			      (if (first sel)
-				  (let ((w (nth (first sel) widgets)))
-				    (when last
-				      (pack-forget last))
-				    (pack w)
-				    (setf last w))))))
-     (pack l :expand 1 :fill "y")
-     (pack wf :expand 1 :fill "both")
-     ;(grid l 0 0)
-     ;(grid wf 0 1)
-
-     (pack lbl :side "top")
-     (pack f :expand 1 :fill "both")
-     (configure wf "borderwidth" 2)
-     (configure wf "relief" "sunken")
-     
-     ;(pack b)
-     (create-line canv (list 0 0 40 40 60 20 80 80 60 60 40 80 20 60 0 80 0 0))
-     (create-line (canvas scanv) (mapcar (lambda (x)
-					   (* x 10))
-					 (list 0 0 40 40 60 20 80 80 60 60 40 80 20 60 0 80 0 0)))
-     (scrollregion (canvas scanv) 0 0 800 800)
-     (listbox-append l (mapcar (lambda (x) (type-of x)) widgets))
-
-     )))
+			     )
+			(setf *debug-tk* nil)
+			(unless (and (= x old-x)
+				     (= y old-y))
+			  (set-coords c e1 (list 10 10 (- (truncate width 2) 10) (- height 10)))
+			  (set-coords c e2 (list (+ (truncate width 2) 10) 10  (- width 10) (- height 10)))
+			  (set-coords c p1 (list p1x p1y (+ diam p1x) (+ diam p1y)))
+			  (set-coords c p2 (list p2x p2y (+ diam p2x) (+ diam p2y)))
+			  (setf old-x x
+				old-y y))
+			)
+		      (after 100 #'update)))
+     (pack c :expand 1 :fill "both")
+     (itemconfigure c e1 "width" 10)
+     (itemconfigure c e2 "width" 10)
+     (itemconfigure c p1 "fill" "blue")
+     (itemconfigure c p2 "fill" "blue")
+     ;(iconwindow *tk* *tk*)
+     (after 100 #'update)
+     ))))
+	    
