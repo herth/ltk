@@ -63,9 +63,10 @@
 		)))
 	  (close fd)))))
 
-
+#+:sbcl
 (defun stop-server ()
   (setf *stop-remote* t))
+
 
 #+:cmu
 (defun start-mp ()
@@ -119,6 +120,38 @@
 			     (socket-close s)
 			     )))))			  
 	  (socket-close socket)))))
+
+
+(defvar *server* nil)
+#+:lispworks
+(defun stop-server ()
+ (mp:process-kill ltk::*server*))
+
+#+:lispworks
+(require "comm")
+
+#+:lispworks
+(defmacro with-remote-ltk (port &rest body)
+  `(setf *server*
+         (comm:start-up-server :function 
+                               (lambda (handle)
+                                 (let ((stream (make-instance 'comm:socket-stream
+                                                              :socket handle
+                                                              :direction :io
+                                                              :element-type
+                                                              'base-char)))
+                                   (mp:process-run-function (format nil "ltk-remove ~D"
+                                                                    handle)
+                                                            '()
+                                                            (lambda ()
+                                                             (let ((*w* stream))
+                                                               ,@body
+                                                               (mainloop)
+                                                               (close stream)
+                                                               
+                                                               )))))
+                               :service ,port)))
+
 
 
 (defun b-callback (txt)
@@ -184,11 +217,11 @@
 	;  (b (make-instance 'button :text "Show" :command ))
 	  )
      (bind l "<Button-1>" (lambda ()
-			    (let ((sel (listbox-selection l)))
+			    (let ((sel (listbox-get-selection l)))
 			      (format t "selection: ~a~%" sel)
 			      (force-output)
 			      (if (first sel)
-				  (let ((w (nth (first (listbox-selection l)) widgets)))
+				  (let ((w (nth (first (listbox-get-selection l)) widgets)))
 				    (when last
 				      (pack-forget last))
 				    (pack w)
@@ -212,3 +245,59 @@
      (listbox-append l (mapcar (lambda (x) (type-of x)) widgets))
 
      )))
+
+(defun reyes ()
+  (with-remote-ltk 
+   8080
+   (let* ((*debug-tk* nil)
+	  (w (screen-width))
+	  (h (screen-height))
+	  (c (make-instance 'canvas :width 400 :height 300))
+	  (e1 (create-oval c 10 10 190 290))
+	  (e2 (create-oval c 210 10 390 290))
+	  (p1 (create-oval c 10 10 40 40))
+	  (p2 (create-oval c 10 10 40 40))
+	  (old-x 0)
+	  (old-y 0))
+     (setf *debug-tk* nil)
+     (labels ((update ()
+                (let* ((pos (screen-mouse))
+			     (wx (window-x *tk*))
+			     (wy (window-y *tk*))
+			     (width (window-width *tk*))
+			     (height (window-height *tk*))
+			     (mx (first pos))
+			     (my (second pos))
+			     (x (truncate (* width (/ mx w))))
+			     (y (truncate (* height (/ my h))))
+			     (diam (truncate width 8))
+			     (dx1 (- mx (+ wx (truncate width 4))))
+			     (dy1 (- my (+ wy (truncate height 2))))
+			     (dx2 (- mx (+ wx (* 3 (truncate width 4)))))
+			     (dy2 (- my (+ wy (truncate height 2))))
+			     (p1x (+ (- (truncate width 4)  (truncate diam 2)) (truncate (* width  dx1) (* 4.5 w))))
+			     (p1y (+ (- (truncate height 2) (truncate diam 2)) (truncate (* height dy1) (* 2.3 h))))
+			     (p2x (+ (- (* 3 (truncate width 4))  (truncate diam 2)) (truncate (*  width  dx2) (* 4.5 w))))
+			     (p2y (+ (- (truncate height 2) (truncate diam 2)) (truncate (* height dy2) (* 2.3 h))))
+
+			     )
+			(setf *debug-tk* nil)
+			(unless (and (= x old-x)
+				     (= y old-y))
+			  (set-coords c e1 (list 10 10 (- (truncate width 2) 10) (- height 10)))
+			  (set-coords c e2 (list (+ (truncate width 2) 10) 10  (- width 10) (- height 10)))
+			  (set-coords c p1 (list p1x p1y (+ diam p1x) (+ diam p1y)))
+			  (set-coords c p2 (list p2x p2y (+ diam p2x) (+ diam p2y)))
+			  (setf old-x x
+				old-y y))
+			)
+		      (after 100 #'update)))
+     (pack c :expand 1 :fill "both")
+     (itemconfigure c e1 "width" 10)
+     (itemconfigure c e2 "width" 10)
+     (itemconfigure c p1 "fill" "blue")
+     (itemconfigure c p2 "fill" "blue")
+     ;(iconwindow *tk* *tk*)
+     (after 100 #'update)
+     ))))
+	    
