@@ -70,13 +70,13 @@
 				   (when val
 				     (setf (value inspector) val)
 				     (do-inspect inspector val)))))))    
-     (pack quit :side "left")
-     (pack back :side "right")
-     (pack f :side "top" :fill "x")
-     (pack lbl :side "top"  :fill "x")
-     (pack pane :side "top" :expand 1 :fill "both")
-     (grid desc 0 0 :sticky "news")
-     (grid dscroll 0 1 :sticky "ns")
+     (pack quit :side :left)
+     (pack back :side :right)
+     (pack f :side :top :fill :x)
+     (pack lbl :side :top  :fill :x)
+     (pack pane :side :top :expand 1 :fill :both)
+     (grid desc 0 0 :sticky :news)
+     (grid dscroll 0 1 :sticky :ns)
      (grid-columnconfigure f2 0 "weight" 1)
      (grid-columnconfigure f2 1 "weight" 0)
      (grid-rowconfigure f2 0 "weight" 1)
@@ -85,16 +85,16 @@
      
      (add-pane pane f2)
      (add-pane pane lb-fields)
-     (pack entry :side "top" :fill "x")
-     (configure lbl "font" "courier 10 bold")
-     (configure desc "font" "courier 10 bold")
-     (configure fields "font" "courier 10 bold")
-     (configure entry "font" "courier 10 bold")
+     (pack entry :side :top :fill :x)
+     (configure lbl :font "courier 10 bold")
+     (configure desc :font "courier 10 bold")
+     (configure fields :font "courier 10 bold")
+     (configure entry :font "courier 10 bold")
      (setf (desc inspector) desc)
      (setf (title inspector) lbl)
      (setf (fields inspector) fields)
      (bind fields "<Double-Button-1>"
-	   (lambda ()
+	   (lambda (event)
 	     (let* ((nr (first (listbox-get-selection fields))))
 	       (when nr
 		 (let ((entry (nth nr (elements inspector))))
@@ -106,7 +106,7 @@
 		   )))))
 
      (bind entry "<KeyPress-Return>"
-	   (lambda ()
+	   (lambda (event)
 	     (let ((txt (text entry)))
 	       (multiple-value-bind (result condition)		   
 		   (ignore-errors 
@@ -125,13 +125,13 @@
 	       (entry-select entry 0 "end")
 	       )))
      (bind entry "<KeyPress-Up>"
-	   (lambda ()
+	   (lambda (event)
 	     (let ((val (nth (+ 1 history-pos) history)))
 	       (when val
 		 (setf (text entry) val)
 		 (incf history-pos)))))
      (bind entry "<KeyPress-Down>"
-	   (lambda ()
+	   (lambda (event)
 	     (if (> history-pos 0)
 		 (progn
 		   (decf history-pos)
