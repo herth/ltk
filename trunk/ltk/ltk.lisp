@@ -243,6 +243,7 @@ toplevel             x
 	   "MENUBAR"
 	   "MENUBUTTON"
 	   "MENUCHECKBUTTON"
+	   "MENU-DELETE"
 	   "MENURADIOBUTTON"
 	   "MESSAGE"
 	   "MESSAGE-BOX"
@@ -838,6 +839,12 @@ toplevel             x
 (defmethod popup ((menu menu) x y)
   (format-wish "tk_popup ~A ~A ~A" (widget-path menu) x y))
 
+
+(defgeneric menu-delete (menu index))
+(defmethod menu-delete ((menu menu) index)
+  (format-wish "~A delete ~A" (widget-path menu) index))
+
+
 ;;; standard button widget
 
 (defclass button (tktextvariable widget)
@@ -968,7 +975,7 @@ toplevel             x
    ))
 
 (defmethod initialize-instance :after ((l labelframe) &key borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness padx pady relief takefocus text background class colormap container height labelanchor labelwidget visual width)  
-  (format-wish "labelframe ~A ~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text ~A~]~@[ -background ~(~A~)~]~@[ -class ~(~A~)~]~@[ -colormap ~(~A~)~]~@[ -container ~(~A~)~]~@[ -height ~(~A~)~]~@[ -labelanchor ~(~A~)~]~@[ -labelwidget ~(~A~)~]~@[ -visual ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path l) borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness padx pady relief takefocus text background class colormap container height labelanchor labelwidget visual width))
+  (format-wish "labelframe ~A ~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text {~A}~]~@[ -background ~(~A~)~]~@[ -class ~(~A~)~]~@[ -colormap ~(~A~)~]~@[ -container ~(~A~)~]~@[ -height ~(~A~)~]~@[ -labelanchor ~(~A~)~]~@[ -labelwidget ~(~A~)~]~@[ -visual ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path l) borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness padx pady relief takefocus text background class colormap container height labelanchor labelwidget visual width))
 
 (defmethod (setf text) :after (val (l labelframe))
   (format-wish "~a configure -text {~a}" (widget-path l) val))
@@ -1167,7 +1174,7 @@ a list of numbers may be given"
    ))
 
 (defmethod initialize-instance :after ((l label) &key activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground highlightbackground highlightcolor highlightthickness image justify padx pady relief takefocus text underline wraplength compound height state width)
-  (format-wish "label ~A ~@[ -activebackground ~(~A~)~]~@[ -activeforeground ~(~A~)~]~@[ -anchor ~(~A~)~]~@[ -background ~(~A~)~]~@[ -bitmap ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -image ~(~A~)~]~@[ -justify ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text ~A~]~@[ -underline ~(~A~)~]~@[ -wraplength ~(~A~)~]~@[ -compound ~(~A~)~]~@[ -height ~(~A~)~]~@[ -state ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path l) activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground highlightbackground highlightcolor highlightthickness (and image (name image)) justify padx pady relief takefocus text underline wraplength compound height state width))
+  (format-wish "label ~A ~@[ -activebackground ~(~A~)~]~@[ -activeforeground ~(~A~)~]~@[ -anchor ~(~A~)~]~@[ -background ~(~A~)~]~@[ -bitmap ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -image ~(~A~)~]~@[ -justify ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text {~A}~]~@[ -underline ~(~A~)~]~@[ -wraplength ~(~A~)~]~@[ -compound ~(~A~)~]~@[ -height ~(~A~)~]~@[ -state ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path l) activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground highlightbackground highlightcolor highlightthickness (and image (name image)) justify padx pady relief takefocus text underline wraplength compound height state width))
 
 (defun make-label (master text)
   (make-instance 'label :master master  :text text))
