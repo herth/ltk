@@ -943,3 +943,61 @@
      (pack sc :expand 1 :fill "both")
      (scrollregion c 0 0 800 800)
      )))
+
+(defvar *number-of-particles* 2)
+
+(defstruct particle
+  circle
+  (x 0d0 :type double-float)
+  (y 0d0 :type double-float)
+  (vx 0d0 :type double-float)
+  (vy 0d0 :type double-float)
+  )
+
+(defun particletest ()
+  (with-ltk
+   (let* ((canvas (make-canvas nil :width 800 :height 800))
+	  (particles-1 (make-array *number-of-particles*))
+	  (particles-2 (make-array *number-of-particles*))
+	  (dt 0.01d0)
+	  )
+     (labels ((update-particles ()
+		(let ((tmp particles-1)) ;switch arrays
+		  (setf particles-1 particles-2)
+		  (setf particles-2 tmp))		
+		(dotimes (i *number-of-particles*)
+		  (let ((particle1 (aref particles-1 i))
+			(particle-old (aref particles-2 i))
+			(ax 0.0d0)
+			(ay 0.0d0))
+		    (setf (particle-x particle1) (particle-x particle-old))
+		    (setf (particle-y particle1) (particle-y particle-old))
+		    (setf (particle-vx particle1) (particle-vx particle-old))
+		    (setf (particle-vy particle1) (particle-vy particle-old))
+				    
+		    (dotimes (j *number-of-particles*)
+		      (unless (= i j)
+			(let* ((particle2 (aref particles-2 j))
+			       (dx (- (particle-x particle2) (particle-x particle1)))
+			       (dy (- (particle-y particle2) (particle-y particle1)))
+			       (d2 (+ (* dx dx) (* dy dy)))
+			       (d (sqrt d2)))
+			  (incf ax (/ dx (* d d2)))
+			  (incf dx (/ dy (* d d2)))
+			)))
+		    (incf (particle-x particle1) (* ax dt))
+		    (incf (particle-y particle1) (* ay dt))
+		    (set-coords canvas (particle-circle particle1) (list (particle-x particle1)
+									 (particle-y particle1)))))
+		))
+			  
+
+       (dotimes (i *number-of-particles)
+	 (setf (aref particles-1 i)
+	       (make-particle :circle (make-circle canvas)))
+	 )
+			      
+			      
+       (after 50 #'update-particles)
+     ))))
+     
