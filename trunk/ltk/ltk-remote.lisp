@@ -80,9 +80,10 @@
 		(multiprocessing::make-process
 		 (lambda ()
 		   (let ((ltk::*wish* stream)
-			 (*callbacks* (make-hash-table :test #'equal))
-			 (*counter* 1)
-			 (*event-queue* nil))
+			 (ltk::**callbacks* (make-hash-table :test #'equal))
+			 (ltk::**counter* 1)
+			 (ltk::**event-queue* nil))
+		     (ltk::init-wish)
 		     ,@body
 		     (mainloop)
 		     (format t "closing connection~&")
@@ -143,9 +144,10 @@
 		 (stream (socket-make-stream s :input t :output t)))
 	    (make-thread (lambda ()
 			   (let ((ltk::*wish* stream)
-				 (*callbacks* (make-hash-table :test #'equal))
-				 (*counter* 1)
-				 (*event-queue* nil))
+				 (ltk::**callbacks* (make-hash-table :test #'equal))
+				 (ltk::**counter* 1)
+				 (ltk::**event-queue* nil))
+			     (ltk::init-wish)
 			     ,@body
 			     (mainloop)
 			     
@@ -161,14 +163,14 @@
 (defvar *server* nil)
 #+:lispworks
 (defun stop-server ()
- (mp:process-kill ltk::*server*))
+ (mp:process-kill ltk-remote::*server*))
 
 #+:lispworks
 (require "comm")
 
 #+:lispworks
 (defmacro with-remote-ltk (port &rest body)
-  `(setf *server*
+  `(setf ltk-remote::*server*
          (comm:start-up-server :function 
                                (lambda (handle)
                                  (let ((stream (make-instance 'comm:socket-stream
@@ -181,9 +183,10 @@
                                                             '()
                                                             (lambda ()
                                                              (let ((ltk::*wish* stream)
-								   (*callbacks* (make-hash-table :test #'equal))
-								   (*counter* 1)
-								   (*event-queue* nil))
+								   (ltk::**callbacks* (make-hash-table :test #'equal))
+								   (ltk::**counter* 1)
+								   (ltk::**event-queue* nil))
+							       (ltk::init-wish)
                                                                ,@body
                                                                (mainloop)
                                                                (close stream)
