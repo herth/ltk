@@ -212,8 +212,8 @@
 (defmethod get-content ((e entry))  
   (send-w (format nil "puts [~A get]; flush stdout" (path e)))
   #+:sbcl (read-all *w*)
-
-  #-:sbcl (let ((c (read-line *w*)))
+  #+:lispworks (progn (read-line *w*)(read-line *w*))
+  #+:cmu (let ((c (read-line *w*)))
     (if *debug-tk*
 	(format t "gc: =>~a<=~&" c))
     ;(read-w)
@@ -492,7 +492,7 @@
       (format s "}"))
     (send-w (format nil "puts [tk_getOpenFile -filetypes ~a]"  files))
     (read-all *w*)
-    (read-line *w*)
+    (string-trim '(#\Newline #\Return #\Linefeed) (read-line *w*))
   ))
 
 
@@ -511,7 +511,7 @@
       (format s "}"))
     (send-w (format nil "puts [tk_getSaveFile -filetypes ~a]"  files))
     (read-all *w*)
-    (read-line *w*)
+    (string-trim '(#\Newline #\Return #\Linefeed) (read-line *w*))
   ))
 
 ;;; see make-string-output-string/get-output-stream-string
