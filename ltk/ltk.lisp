@@ -95,7 +95,8 @@ wm                   x
 	#+:cmu "EXT"
 	#+:sbcl "SB-EXT"
 	)
-  (:export "TEST"
+  (:export "LTKTEST"
+	   "*LTK-VERSION*"
 	   "*CURSORS*"
 	   "*DEBUG-TK*"
 	   "*EXIT-MAINLOOP*"
@@ -251,7 +252,7 @@ wm                   x
               (ext:process-output proc)
               (ext:process-input proc))
              )
-    #+:clisp (let ((proc (ext:run-program program :arguments args :input :stream :output :stream :wait wt)))
+    #+:clisp (let ((proc (ext:run-program program :arguments args :input :stream :output :stream :wait t)))
              (unless proc
                (error "Cannot create process."))
 	     proc
@@ -271,8 +272,18 @@ wm                   x
 		  (error "Cannot create process."))   
 		proc
 		)
+    #+:ecl(ext:run-program program args :input :stream :output :stream
+:error :output)
+     #+:openmcl (let ((proc (ccl:run-program program args :input
+:stream :output :stream :wait wt)))
+		  (unless proc
+		    (error "Cannot create process."))
+		  (make-two-way-stream
+		   (ccl:external-process-output-stream proc)
+		   (ccl:external-process-input-stream proc)))
     ))
 
+(defvar *ltk-version* 0.81)
 
 ;;; global var for holding the communication stream
 (defvar *w* nil)
@@ -281,10 +292,16 @@ wm                   x
 ;;; with tk is echoed to stdout
 (defvar *debug-tk* t)
 
+(defvar *wish-pathname*
+  #+freebsd			"wish8.4"
+  #+(and sbcl (not freebsd))	"/usr/bin/wish"
+  #-(or sbcl freebsd)		"wish")
+
+(defvar *wish-args* '("-name" "LTK"))
+
 ;;; start wish and set *w*
 (defun start-w ()
-  #+:sbcl (setf *w* (do-execute "/usr/bin/wish" '("-name" "LTK")))
-  #-:sbcl (setf *w* (do-execute "wish" '("-name" "LTK"))))
+  (setf *w* (do-execute *wish-pathname* *wish-args*)))
 
 ;;; send a string to wish
 (defun send-w(text)
@@ -360,6 +377,8 @@ wm                   x
 
 (defvar *callbacks* (make-hash-table :test #'equal))
 
+(defvar *counter* 0)
+
 (defun add-callback(sym fun)
   ;(format t "add-callback (~A ~A)~%" sym fun)
   (setf (gethash sym *callbacks*) fun))
@@ -379,9 +398,15 @@ wm                   x
 ;; tool functions used by the objects
 
 ;; incremental counter to create unique numbers
+#| 
 (let ((counter 1))
   (defun get-counter()
     (incf counter)))
+|#
+
+
+(defun get-counter()
+  (incf *counter*))
 
 ;; create unique widget name, append unique number to "w"
 (defun create-name ()
@@ -466,6 +491,7 @@ wm                   x
   )					; widget class needs to overload that
 
 (defgeneric create (w))
+
 (defmethod create ((w widget))
   )
 
@@ -500,7 +526,7 @@ wm                   x
 
 (defgeneric (setf value) (widget val))
 (defmethod (setf value) (val (v tkvariable))
-  (send-w (format nil "set ~a ~a" (name v) val)))
+  (send-w (format nil "set ~a {~a}" (name v) val)))
 
 (defclass tktextvariable ()
   ()
@@ -513,12 +539,14 @@ wm                   x
   (send-w (format nil "~a configure -textvariable ~a" (path v) (name v))))
 
 (defmethod text ((v tktextvariable))
-  (send-w (format nil "puts -nonewline {\"};puts -nonewline $~a;puts {\"};flush stdout" (name v)))
+  ;(send-w (format nil "puts -nonewline {\"};puts -nonewline $~a;puts {\"};flush stdout" (name v)))
+  (send-w (format nil "puts \"\\\"$~a\\\"\";flush stdout" (name v)))
+
   (read *w* nil nil))
 
 (defgeneric (setf text) (val variable))
 (defmethod (setf text) (val (v tktextvariable))
-  (send-w (format nil "set ~a ~a" (name v) val)))
+  (send-w (format nil "set ~a {~a}" (name v) val)))
 
 
 ;;; window menu bar
@@ -558,41 +586,40 @@ wm                   x
 
 ;;; menu button
 
-(defclass menubutton(widget tkvariable) 
+(defclass menubutton(widget) 
   ((text :accessor text :initarg :text)
    (command :accessor command :initarg :command :initform nil)))
 
 (defmethod create ((m menubutton))
    (add-callback (name m) (command m))
-   (send-w (format nil "~A add command -label {~A} -command {puts -nonewline {(\"~A\")};flush stdout}" (path (master m)) (text m) (name m)))
+   (send-w (format nil "~A add command -label {~A}  -command {puts -nonewline {(\"~A\")};flush stdout}" (path (master m)) (text m) (name m)))
    )
 
 (defun make-menubutton(menu text command)
   (let* ((mb (make-instance 'menubutton :master menu :text text :command command)))
     mb))
 
-(defclass menucheckbutton(widget tkvariable tktextvariable) 
+(defclass menucheckbutton(widget) 
   ((text :accessor text :initarg :text)
    (command :accessor command :initarg :command :initform nil)))
 
 (defmethod create ((m menucheckbutton))
   (when (command m)
     (add-callback (name m) (command m)))
-  (send-w (format nil "~A add checkbutton -label {~A} ~a"
-		  (path (master m)) (text m) 
+  (send-w (format nil "~A add checkbutton -label {~A} -variable ~a ~a"
+		  (path (master m)) (text m) (name m) 
 		  (if (command m)
 		      (format nil "-command {puts -nonewline {(\"~A\")};flush stdout}" (name m))
 		    "")))
   )
 
-#|
+
 (defmethod value ((cb menucheckbutton))
   (send-w (format nil "puts $~a;flush stdout" (name cb)))
   (read *w* nil nil))
 
 (defmethod (setf value) (val (cb menucheckbutton))
   (send-w (format nil "set ~a ~a" (name cb) val)))
-|#
 
 (defclass menuradiobutton(widget) 
   ((text :accessor text :initarg :text)
@@ -605,8 +632,8 @@ wm                   x
   (unless (group m)
     (setf (group m)
 	  (name m)))
-  (send-w (format nil "~A add radiobutton -label {~A} -variable ~a ~a"
-		   (path (master m)) (text m) (group m)
+  (send-w (format nil "~A add radiobutton -label {~A} -value ~a -variable ~a ~a"
+		   (path (master m)) (text m) (name m) (group m)
 		   (if (command m)
 		       (format nil "-command {puts -nonewline {(\"~A\")};flush stdout}" (name m))
 		     "")))
@@ -624,12 +651,12 @@ wm                   x
 
 (defclass button(widget tktextvariable)
   ((command :accessor command :initarg :command :initform nil)
-   (text :accessor text :initarg :text :initform "")
+   (text :accessor button-text :initarg :text :initform "")
    ))
 
 (defmethod create ((bt button))
   (add-callback (name bt) (command bt))
-  (send-w (format nil "button ~A -text {~A} -command {puts -nonewline {(\"~A\")};flush stdout}" (path bt) (text bt) (name bt))))
+  (send-w (format nil "button ~A -text {~A} -command {puts -nonewline {(\"~A\")};flush stdout}" (path bt) (button-text bt) (name bt))))
 
 (defun make-button (master text command)
   (let* ((b (make-instance 'button :master master :text text :command command)))
@@ -699,12 +726,12 @@ wm                   x
 
 ;; text entry widget
 
-(defclass entry(widget)
+(defclass entry(widget tktextvariable)
   ((width :accessor width :initarg :width :initform nil))
   )
 
 (defmethod create ((e entry))
-  (send-w (format nil "entry ~A -textvariable ~A ~A" (path e) (name e)
+  (send-w (format nil "entry ~A ~A" (path e)
 		  (if (width e)
 		      (format nil "-width ~a" (width e))
 		    ""))))
@@ -727,14 +754,14 @@ wm                   x
 
 (defun entry-select (e from to)
   (send-w (format nil "~a selection range ~a ~a" (path e) from to)))
-
+#|
 (defmethod value ((e entry))
   (send-w (format nil "puts \"\\\"$~a\\\"\";flush stdout" (name e)))
   (read *w* nil nil))
 
 (defmethod (setf value) (val (e entry))
   (send-w (format nil "set ~a {~a}" (name e) val)))
-
+|#
 
 ;;; frame widget 
 
@@ -754,6 +781,10 @@ wm                   x
 
 (defmethod create ((l labelframe))
   (send-w (format nil "labelframe ~A -text {~A} " (path l) (text l))))
+
+(defmethod (setf text) :after (val (l labelframe))
+  (send-w (format nil "~a configure -text {~a}" (path l) val)))
+
 
 ;;; panedwindow widget
 
@@ -895,14 +926,14 @@ a list of numbers may be given"
 
 ;;; spinbox widget
 
-(defclass spinbox (widget)
+(defclass spinbox (widget tktextvariable)
   ((from :accessor spinbox-from :initarg :from  :initform nil)
    (to :accessor spinbox-to :initarg :to :initform nil)
    )
   )
 
 (defmethod create ((sp spinbox))
-  (send-w (format nil "spinbox ~a -textvariable ~a ~a~a" (path sp) (name sp)
+  (send-w (format nil "spinbox ~a ~a~a" (path sp) 
 		  (if (spinbox-from sp)
 		      (format nil " -from ~a" (spinbox-from sp))
 		    "")
@@ -910,14 +941,14 @@ a list of numbers may be given"
 		      (format nil " -to ~a" (spinbox-to sp))
 		    "")
 		  )))
-
+#|
 (defmethod value ((sp spinbox))
   (send-w (format nil "puts $~a;flush stdout" (name sp)))
   (read *w* nil nil))
 
 (defmethod (setf value) (val (sp spinbox))
   (send-w (format nil "set ~a ~a" (name sp) val)))
-
+|#
 ;;; toplevel (window) widget 
 
 (defclass toplevel (widget)
@@ -935,12 +966,12 @@ a list of numbers may be given"
 
 ;;; label widget
 
-(defclass label(widget)
-  ((text :accessor text :initarg :text :initform "")
+(defclass label(widget tktextvariable)
+  ((text :accessor label-text :initarg :text :initform "")
    ))
 
 (defmethod create ((l label))
-  (send-w (format nil "label ~A -text {~A} " (path l) (text l))))
+  (send-w (format nil "label ~A -text {~A} " (path l) (label-text l))))
 
 (defun make-label (master text)
   (make-instance 'label :master master  :text text))
@@ -1503,7 +1534,12 @@ a list of numbers may be given"
       (if *debug-tk*
 	  (format t "l:~A<=~%" l))
       (force-output)
-      (callback (first l) (rest l))
+      (if (listp l)
+	  (callback (first l) (rest l))
+	(progn
+	  (princ l)
+	  (force-output)
+	))
 ;      (ignore-errors   (callback (first l) (rest l))	    )
 ;      (multiple-value-bind (erg cond)
 ;	  (ignore-errors
@@ -1525,7 +1561,9 @@ a list of numbers may be given"
 ;;; wrapper macro - initializes everything, calls body and then mainloop
 ;;; since 
 (defmacro with-ltk (&rest body)
-  `(progn
+  `(let ((*w* nil)
+	 (*callbacks* (make-hash-table :test #'equal))
+	 (*counter* 1))
      (start-w)
      ,@body
      (mainloop)))
@@ -1537,71 +1575,72 @@ a list of numbers may be given"
 (defvar *demo-line* nil)
 (defvar *demo-canvas* nil)
 
-(defun wt()
-  (start-w)
-  (let* ((bar (make-frame nil))
-	 (fr (make-frame bar))
-	 (lr (make-label fr "Rotation:"))
-	 (bstart (make-button fr "Start" 'start-rotation))
-	 (bstop  (make-button fr "Stop"  'stop-rotation))
-	 (b1 (make-button bar "Hallo" (lambda () (format T "Hallo~%"))))
-	 (b2 (make-button bar "Welt!" (lambda () (format T "Welt~%"))))
-	 (f (make-frame bar))
-	 (l (make-label f "Test:"))
-	 (b3 (make-button f "Ok." 'test-rotation)); (setf *exit-mainloop* t))))
-	 (e (make-entry bar))
-	 (b4 (make-button bar "get!" (lambda () (format T "content of entry:~A~%" (get-content e)))))
-	 (b5 (make-button bar "set!" (lambda () (set-content e "test of set"))))
-	 (sc (make-scrolled-canvas nil)); :width 500 :height 500))
-	 (c (canvas sc))
-	 (lines nil)
-	 mb mfile mf-load mf-save mf-export mfe-jpg mfe-gif mf-exit mf-print
-	 )
-    (setf mb (make-menubar))
-    (setf mfile (make-menu mb "File"))
-    (setf mf-load (make-menubutton mfile "Load" (lambda () (format t "Load pressed~&"))))
-    (setf mf-save (make-menubutton mfile "Save" (lambda () (format t "Save pressed~&"))))
-    (add-separator mfile)
-    (setf mf-export (make-menu mfile "Export..."))
-    (add-separator mfile)
-    (setf mf-print (make-menubutton mfile "Print" (lambda () (postscript c "wt.ps"))))
-    (add-separator mfile)
-    (setf mfe-jpg (make-menubutton mf-export "jpeg" (lambda () (format t "Jpeg pressed~&"))))
-    (setf mfe-gif (make-menubutton mf-export "png" (lambda () (format t "Png pressed~&"))))
-    (setf mf-exit (make-menubutton mfile "Exit" (lambda () (setf *exit-mainloop* t))))
+;;;; default ltk test
+(defun ltktest()
+  (with-ltk
+   (let* ((bar (make-frame nil))
+	  (fr (make-frame bar))
+	  (lr (make-label fr "Rotation:"))
+	  (bstart (make-button fr "Start" 'start-rotation))
+	  (bstop  (make-button fr "Stop"  'stop-rotation))
+	  (b1 (make-button bar "Hallo" (lambda () (format T "Hallo~%") (force-output))))
+	  (b2 (make-button bar "Welt!" (lambda () (format T "Welt~%") (force-output))))
+	  (f (make-frame bar))
+	  (l (make-label f "Test:"))
+	  (b3 (make-button f "Ok." 'test-rotation)); (setf *exit-mainloop* t))))
+	  (e (make-entry bar))
+	  (b4 (make-button bar "get!" (lambda () (format T "content of entry:~A~%" (get-content e)))))
+	  (b5 (make-button bar "set!" (lambda () (set-content e "test of set"))))
+	  (sc (make-scrolled-canvas nil)); :width 500 :height 500))
+	  (c (canvas sc))
+	  (lines nil)
+	  mb mfile mf-load mf-save mf-export mfe-jpg mfe-gif mf-exit mf-print
+	  )
+     (setf mb (make-menubar))
+     (setf mfile (make-menu mb "File"))
+     (setf mf-load (make-menubutton mfile "Load" (lambda () (format t "Load pressed~&"))))
+     (setf mf-save (make-menubutton mfile "Save" (lambda () (format t "Save pressed~&"))))
+     (add-separator mfile)
+     (setf mf-export (make-menu mfile "Export..."))
+     (add-separator mfile)
+     (setf mf-print (make-menubutton mfile "Print" (lambda () (postscript c "wt.ps"))))
+     (add-separator mfile)
+     (setf mfe-jpg (make-menubutton mf-export "jpeg" (lambda () (format t "Jpeg pressed~&"))))
+     (setf mfe-gif (make-menubutton mf-export "png" (lambda () (format t "Png pressed~&"))))
+     (setf mf-exit (make-menubutton mfile "Exit" (lambda () (setf *exit-mainloop* t))))
 
-    (configure c "borderwidth" "2")
-    (configure c "relief" "sunken")
-    (pack sc :side "top" :fill "both" :expand 1)
-    (pack bar :side "bottom")
-    (scrollregion c 0 0 500 400)
-    (pack fr)
-    (pack lr)
-    (configure fr "borderwidth" "2")
-    (configure fr "relief" "sunken")
-    (pack bstart)
-    (pack bstop)
-    (pack b1)
-    (pack b2)
-    (configure f "borderwidth" "2")
-    (configure f "relief" "sunken")
-    (pack f :fill "x")
-    (pack l)
-    (pack b3)
-    (pack e)
-    (pack b4)
-    (pack b5)
-    (dotimes (i 100)
-      (let ((w (* i 2.8001)))
-	(let ((x (+ 250 (* 150.0 (sin w))))
-	      (y (+ 200 (* 150.0 (cos w)))))
-	  (push y lines)
-	  (push x lines)
-	)))
-    (setf *demo-line* (create-line c lines))
-    (setf *demo-canvas* c)
-    (create-text c 10 10 "Ltk Demonstration")
-    ))
+     (configure c "borderwidth" "2")
+     (configure c "relief" "sunken")
+     (pack sc :side "top" :fill "both" :expand 1)
+     (pack bar :side "bottom")
+     (scrollregion c 0 0 500 400)
+     (pack fr)
+     (pack lr)
+     (configure fr "borderwidth" "2")
+     (configure fr "relief" "sunken")
+     (pack bstart)
+     (pack bstop)
+     (pack b1)
+     (pack b2)
+     (configure f "borderwidth" "2")
+     (configure f "relief" "sunken")
+     (pack f :fill "x")
+     (pack l)
+     (pack b3)
+     (pack e)
+     (pack b4)
+     (pack b5)
+     (dotimes (i 100)
+       (let ((w (* i 2.8001)))
+	 (let ((x (+ 250 (* 150.0 (sin w))))
+	       (y (+ 200 (* 150.0 (cos w)))))
+	   (push y lines)
+	   (push x lines)
+	   )))
+     (setf *demo-line* (create-line c lines))
+     (setf *demo-canvas* c)
+     (create-text c 10 10 "Ltk Demonstration")
+    )))
 
 (defvar *angle* 0)
 (defvar *angle2* 0)
@@ -1647,12 +1686,8 @@ a list of numbers may be given"
   )
 
 
-;;;; default ltk test
 
-(defun test()
-  (wt)
-;  (read-all *w*)
-  (mainloop))
+
 
 ;;;; radio button test
 
