@@ -35,6 +35,7 @@
 	   "CREATE-MENU2"
 	   "CREATE-POLYGON"
 	   "CREATE-TEXT"
+	   "CLEAR-TEXT"
 	   "EXIT-WISH"
 	   "DO-EXECUTE"
 	   "DO-MSG"
@@ -81,6 +82,7 @@
 	   "SEE"
 	   "SET-CONTENT"
 	   "SET-COORDS"
+	   "SET-TEXT"
 	   "START-W"
 	   "TAG-BIND"
 	   "TAG-CONFIGURE"
@@ -781,7 +783,8 @@
 (defvar *exit-mainloop* nil)
 
 (defun mainloop()
-  (let ((*exit-mainloop* nil))
+  (let ((*exit-mainloop* nil)
+	(*read-eval* nil))    ;;safety against malicious clients
   (loop
     (let* ((l (read-preserving-whitespace *w* nil nil)))
       (when (null l) (return))
