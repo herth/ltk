@@ -118,12 +118,17 @@ wm                   x
 	   "CLIPBOARD-CLEAR"
 	   "CLIPBOARD-GET"
 	   "CONFIGURE"
+	   "CREATE-ARC"
+	   "CREATE-BITMAP"
 	   "CREATE-IMAGE"
 	   "CREATE-LINE"
+	   "CREATE-LINE*"
 	   "CREATE-MENU2"
 	   "CREATE-OVAL"
 	   "CREATE-POLYGON"
+	   "CREATE-RECTANGLE"
 	   "CREATE-TEXT"
+	   "CREATE-WINDOW"
 	   "DEICONIFY"
 	   "DESTROY"
 	   "DO-EXECUTE"
@@ -132,6 +137,7 @@ wm                   x
 	   "ENTRY-SELECT"
 	   "EXIT-WISH"
 	   "FORGET-PANE"
+	   "FORMAT-W"
 	   "FRAME"
 	   "GEOMETRY"
 	   "GET-CONTENT"
@@ -286,7 +292,7 @@ wm                   x
 		   (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* 0.81)
+(defvar *ltk-version* 0.84)
 
 ;;; global var for holding the communication stream
 (defvar *w* nil)
@@ -313,6 +319,18 @@ wm                   x
     (force-output))
   (format *w* "~A~%" text)
   (force-output *w*))
+
+
+(defun format-w (control &rest args)
+  (when *debug-tk*
+    (apply #'format t control args)
+    (format t "~%"))
+  (apply #'format *w* control args)
+  (format *w* "~%")
+  (force-output *w*))
+
+      #|your existing code here|#
+
 
 ;;; wrapper around read-line to compensate for slight differences between lisp versions
 (defun do-read-line()
@@ -479,6 +497,9 @@ wm                   x
       )
   )
 
+(defgeneric path (w))
+(defmethod path ((w (eql nil))) nil)
+
 ;; basic class for all widgets 
 (defclass widget(tkobject)
   ((master :accessor master :initarg :master :initform nil) ;; parent widget or nil
@@ -513,6 +534,8 @@ wm                   x
 
 
 ;;; generic functions
+
+(defgeneric canvas (w))
 
 (defgeneric value (widget)
   (:documentation "reads the value of the variable associated with the widget"))
@@ -1046,6 +1069,7 @@ a list of numbers may be given"
 
 (defclass scrolled-frame (frame)
   ((inner :accessor interior)
+   (displayframe :accessor scrolled-frame-display)
    (hscroll :accessor hscroll)
    (vscroll :accessor vscroll)
    ))
@@ -1053,6 +1077,7 @@ a list of numbers may be given"
 (defmethod create ((sf scrolled-frame))
   (call-next-method)
   (let ((f (make-instance 'frame :master sf)))
+    (setf (scrolled-frame-display sf) f)
     (setf (interior sf) (make-instance 'frame :master f))
     (setf (hscroll sf) (make-instance 'scrollbar :master sf :orientation "horizontal"))
     (setf (vscroll sf) (make-instance 'scrollbar :master sf :orientation "vertical"))
@@ -1128,6 +1153,9 @@ set y [winfo y ~a]
    (scrollregion-y1 :accessor scrollregion-y1 :initform nil)
    ))
 
+(defmethod canvas ((canvas canvas)) canvas)
+;(defmethod canvas ((scrolled-canvas scrolled-canvas)) (canvas scrolled-canvas))
+
 (defmethod create ((c canvas))
   (send-w (format nil "canvas ~A~A~A" (path c)
 		  (if (width c)
@@ -1152,36 +1180,56 @@ set y [winfo y ~a]
 
 (defun create-line (canvas coords)
   (send-w (format nil "puts [~a create line ~{ ~a~}]" (path canvas) coords))
-  (read *w* nil nil)
-  )
+  (read-w))
+
+(defun create-line* (canvas &rest coords)
+  (format t "canvas: ~a coords ~a ~%" canvas coords)
+  (force-output)
+  (funcall #'create-line canvas coords))
 
 (defun create-polygon (canvas coords)
   (send-w (format nil "puts [~a create polygon ~{ ~a~}]" (path canvas) coords))
-  (read *w* nil nil)
-  )
+  (read-w))
 
 (defun create-oval (canvas x0 y0 x1 y1)
   (send-w (format nil "puts [~a create oval ~a ~a ~a ~a]" (path canvas) x0 y0 x1 y1))
-  (read *w* nil nil)
-  )
+  (read-w))
+
+(defun create-rectangle (canvas x0 y0 x1 y1)
+  (send-w (format nil "puts [~a create rectangle ~a ~a ~a ~a]" (path canvas) x0 y0 x1 y1))
+  (read-w))
 
 (defun create-text (canvas x y text)
   (send-w (format nil "puts [~a create text ~a ~a -anchor nw -text {~a}]" (path canvas) x y text))
-  (read *w* nil nil)
-  )
+  (read-w))
 
 (defun create-image (canvas x y &key (image nil))
   (send-w (format nil "puts [~a create image ~a ~a -anchor nw ~a]" (path canvas) x y
 		  (if image
 		      (format nil "-image {~a}" (name image))
 		    "")))
-  (read *w* nil nil)
-  )
-  
+  (read-w))
+
+(defun create-bitmap (canvas x y &key (bitmap nil))
+  (send-w (format nil "puts [~a create image ~a ~a -anchor nw ~a]" (path canvas) x y
+		  (if bitmap
+		      (format nil "-bitmap {~a}" (name bitmap))
+		    "")))
+  (read-w))
+
+(defun create-arc (canvas x0 y0 x1 y1 &key (start 0) (extent 180) (style "pieslice"))
+  (send-w (format nil "puts [~a create arc ~a ~a ~a ~a -start ~a -extent ~a -style ~a]"
+		  (path canvas) x0 y0 x1 y1 start extent style))
+  (read-w))
+
+(defun create-window (canvas x y widget)
+  (send-w (format nil "puts [~a create window ~a ~a -anchor nw -window ~a]"
+		  (path canvas) x y (path widget)))
+  (read-w))
+
 
 (defun set-coords (canvas item coords)
-  (send-w (format nil "~a coords ~a ~{ ~a~}" (path canvas) item coords))
-  )
+  (send-w (format nil "~a coords ~a ~{ ~a~}" (path canvas) item coords)))
 
 (defun postscript (canvas filename)
   (if (and (scrollregion-x0 canvas)
@@ -1197,6 +1245,7 @@ set y [winfo y ~a]
     (send-w (format nil "~a postscript -file ~a" (path canvas) filename))))
 
 ;;; text widget
+
 (defclass text (widget)
   ((width  :accessor width  :initarg :width  :initform nil)
    (height :accessor height :initarg :height :initform nil))
@@ -1302,15 +1351,60 @@ set y [winfo y ~a]
 
 ;;; pack method for widget arrangement in container
 
-(defgeneric pack (w &key side fill expand))
-(defmethod pack ((w widget) &key (side "left") (fill nil) (expand nil))
-  (send-w (format nil "pack ~A -side {~A}~A~A" (path w) side
-		  (if fill
-		      (format nil " -fill ~A" fill)
-		    "")
+(defgeneric pack (w &key side fill expand after before padx pady ipadx ipady anchor))
+
+(defmethod pack ((w widget) &key (side :top) (fill :none) expand after before padx pady ipadx ipady anchor)
+  (cond ((stringp side)
+         (warn "Using a string for the :SIDE parameter is deprecated."))
+        ((stringp fill)
+         (warn "Using a string for the :FILL parameter is deprecated.")))
+  (format-w "pack ~A -side {~(~A~)} -fill ~(~A~)~@[~* -expand 1~]~
+             ~@[ -after ~A~]~@[ -before ~A~]~@[ -padx ~A~]~
+             ~@[ -pady ~A~]~@[ -ipadx ~A~]~@[ -ipady ~A~]~@[ -anchor ~(~A~)~]"
+          (path w) side fill expand (and after (path after)) (and before (path before)) padx pady ipadx ipady anchor))
+
+#|
+(defmethod pack ((w widget) &key (side :top) (fill nil) (expand nil) (after nil) (before nil))
+  (send-w (format nil "pack ~A -side {~A} -fill ~a ~A~A~A" (path w)
+		  (cond ((stringp side)
+			 (format t "pack: using string for side parameter is deprecated.~&")
+			 side)
+			((eq side :left)
+			 "left")
+			((eq side :right)
+			 "right")
+			((eq side :top)
+			 "top")
+			((eq side :bottom)
+			 "left")
+			(t
+			 "top"))
+		  (cond ((eq fill :x)
+			 "x")
+			((eq fill :y)
+			 "y")
+			((eq fill :both)
+			 "both")
+			((eq fill t)
+			 "both")
+			((stringp fill)
+			 (format t "pack: using string for fill parameter is deprecated.~&")
+			 fill)			
+			(t
+			 "none"))
 		  (if expand
-		      (format nil " -expand ~A" expand)
-		    ""))))
+		      (format nil " -expand ~A" 1)
+		    "")
+		  (if after
+		      (format nil " -after ~A" (path after))
+		    "")
+		  (if before
+		      (format nil " -before ~A" (path before))
+		    "")
+		  )
+	  ))
+|#
+
 
 (defgeneric pack-forget (w))
 (defmethod pack-forget ((w widget))
@@ -1400,7 +1494,7 @@ set y [winfo y ~a]
   (do-read-line))
 
 (defgeneric set-geometry (w width height x y))
-(defmethod set-geometry ((tl toplevel) width height x y)
+(defmethod set-geometry ((tl widget) width height x y)
   (send-w (format nil "wm geometry ~a ~ax~a+~a+~a" (path tl) width height x y)))
   ;(do-read-line))
 
@@ -1693,25 +1787,25 @@ set y [winfo y ~a]
 
      (configure c "borderwidth" "2")
      (configure c "relief" "sunken")
-     (pack sc :side "top" :fill "both" :expand 1)
-     (pack bar :side "bottom")
+     (pack sc :side :top :fill :both :expand t)
+     (pack bar :side :bottom)
      (scrollregion c 0 0 500 400)
-     (pack fr)
-     (pack lr)
+     (pack fr :side :left)
+     (pack lr :side :left)
      (configure fr "borderwidth" "2")
      (configure fr "relief" "sunken")
-     (pack bstart)
-     (pack bstop)
-     (pack b1)
-     (pack b2)
+     (pack bstart :side :left)
+     (pack bstop :side :left)
+     (pack b1 :side :left)
+     (pack b2 :side :left)
      (configure f "borderwidth" "2")
      (configure f "relief" "sunken")
-     (pack f :fill "x")
-     (pack l)
-     (pack b3)
-     (pack e)
-     (pack b4)
-     (pack b5)
+     (pack f :fill :x :side :left)
+     (pack l :side :left)
+     (pack b3 :side :left)
+     (pack e :side :left)
+     (pack b4 :side :left)
+     (pack b5 :side :left)
      (dotimes (i 100)
        (let ((w (* i 2.8001)))
 	 (let ((x (+ 250 (* 150.0 (sin w))))
