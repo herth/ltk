@@ -158,6 +158,8 @@ wm                   x
 	   "IMAGE-LOAD"
 	   "INTERIOR"
 	   "ITEMCONFIGURE"
+	   "ITEMLOWER"
+	   "ITEMRAISE"
 	   "LABEL"
 	   "LABELFRAME"
 	   "LISTBOX"
@@ -426,6 +428,7 @@ wm                   x
       (format t "postponing event: ~a ~%" d)
       (force-output)
       (setf d (read-wish)))
+    (format t "readdata: ~a~%" d) (force-output)
     (second d)))
 
 ;;; sanitizing strings: lisp -> tcl (format *wish* "{~a}" string)
@@ -538,8 +541,9 @@ wm                   x
   (send-wish "clipboard clear"))
 
 (defun clipboard-get ()
-  (format-wish "esc [clipboard get]; flush stdout")
-  (read-wish))
+  ;(format-wish "esc [clipboard get]; flush stdout")
+  (format-wish "senddatastring [clipboard get]")
+  (read-data))
 
 (defun clipboard-append (txt)
   (format-wish "clipboard append {~a}" txt))
@@ -700,8 +704,10 @@ wm                   x
 
 
 (defmethod value ((cb menucheckbutton))
-  (format-wish "puts $~a;flush stdout" (name cb))
-  (read-wish))
+;  (format-wish "puts $~a;flush stdout" (name cb))
+;  (read-wish))
+  (format-wish "senddata $~a" (name cb))
+  (read-data))
 
 (defmethod (setf value) (val (cb menucheckbutton))
   (format-wish "set ~a ~a" (name cb) val))
@@ -726,8 +732,10 @@ wm                   x
    
 
 (defmethod value ((cb menuradiobutton))
-  (format-wish "puts $~a;flush stdout" (group cb))
-  (read-wish))
+;  (format-wish "puts $~a;flush stdout" (group cb))
+;  (read-wish))
+  (format-wish "senddata $~a" (group cb))
+  (read-data))
 
 (defmethod (setf value) (val (cb menuradiobutton))
   (format-wish "set ~a ~a" (group cb) val))
@@ -816,8 +824,11 @@ wm                   x
   "reads the content of the shared variable of the radio button set"
   (if (radio-button-variable rb)
       (progn
-	(format-wish "puts $~a;flush stdout" (radio-button-variable rb))
-	(read-wish))
+	;(format-wish "puts $~a;flush stdout" (radio-button-variable rb))
+	;(read-wish)
+	(format-wish "senddata $~a" (radio-button-variable rb))
+	(read-data)
+	)
     nil))
 
 (defmethod (setf value) (val (rb radio-button))
@@ -1367,8 +1378,10 @@ set y [winfo y ~a]
 	      (path txt) tag event name)))
 
 (defmethod text ((text text))
-  (format-wish "esc [~a get 1.0 end]" (path text))
-  (read-wish))
+  ;(format-wish "esc [~a get 1.0 end]" (path text))
+  ;(read-wish))
+  (format-wish "senddatastring [~a get 1.0 end]" (path text))
+  (read-data))
 
 (defmethod (setf text) (val (text text))
   (format-wish "~A delete 0.0 end;~A insert end {~A}" (path text) (path text) val))
@@ -1484,8 +1497,10 @@ set y [winfo y ~a]
 
 (defgeneric cget (w o))
 (defmethod cget ((widget widget) option)
-  (format-wish "esc [~a cget -~(~a~)];flush stdout" (path widget) option)
-  (read-wish))
+  ;(format-wish "esc [~a cget -~(~a~)];flush stdout" (path widget) option)
+  ;(read-wish))
+  (format-wish "senddatastring [~a cget -~(~a~)]" (path widget) option)
+  (read-data))
 
 (defun background (widget)
   (cget widget :background))
@@ -1514,6 +1529,18 @@ set y [winfo y ~a]
 ;;; for tkobjects, the name of the widget is taken
 (defmethod itemconfigure ((widget canvas) item option (value tkobject))
   (format-wish "~A itemconfigure ~A -~(~A~) {~A}" (path widget) item option (path value)))
+
+
+(defgeneric itemlower (w i &optional above))
+(defmethod itemlower ((widget canvas) item &optional above)
+  (format-wish "~A lower ~A ~@[~A~]" (path widget)
+	       item above))
+
+(defgeneric itemraise (w i &optional below))
+(defmethod itemraise ((widget canvas) item &optional below)
+  (format-wish "~A raise ~A ~@[~A~]" (path widget)
+	       item below))
+
 
 ;;; wm functions
 
@@ -1547,8 +1574,10 @@ set y [winfo y ~a]
 
 (defgeneric geometry (w))
 (defmethod geometry ((tl widget))
-  (format-wish "esc [wm geometry ~a];flush stdout" (path tl))
-  (read-wish))
+  ;(format-wish "esc [wm geometry ~a];flush stdout" (path tl))
+  ;(read-wish))
+  (format-wish "senddatastring [wm geometry ~a]" (path tl))
+  (read-data))
 
 (defgeneric set-geometry (w width height x y))
 (defmethod set-geometry ((tl widget) width height x y)
@@ -1575,59 +1604,80 @@ set y [winfo y ~a]
 
 (defun screen-width (&optional (w nil))
   "give the width of the screen in pixels (if w is given, of the screen the widget w is displayed on)"
-  (format-wish "puts [winfo screenwidth ~a];flush stdout" (if w (path w) "."))
-  (read-wish))
+  ;(format-wish "puts [winfo screenwidth ~a];flush stdout" (if w (path w) "."))
+  ;(read-wish))
+  (format-wish "senddata [winfo screenwidth ~a]" (if w (path w) "."))
+  (read-data))
 
 (defun screen-height (&optional (w nil))
   "give the height of the screen in pixels (if w is given, of the screen the widget w is displayed on)"
-  (format-wish "puts [winfo screenheight ~a];flush stdout" (if w (path w) "."))
-  (read-wish))
+  ;(format-wish "puts [winfo screenheight ~a];flush stdout" (if w (path w) "."))
+  ;(read-wish))
+  (format-wish "senddata [winfo screenheight ~a]" (if w (path w) "."))
+  (read-data))
 
 (defun screen-width-mm (&optional (w nil))
   "give the width of the screen in mm (if w is given, of the screen the widget w is displayed on)"
-  (format-wish "puts [winfo screenmmwidth ~a];flush stdout" (if w (path w) "."))
-  (read-wish))
+  ;(format-wish "puts [winfo screenmmwidth ~a];flush stdout" (if w (path w) "."))
+  ;(read-wish))
+  (format-wish "senddata [winfo screenmmwidth ~a]" (if w (path w) "."))
+  (read-data))
 
 (defun screen-heigth-mm (&optional (w nil))
   "give the height of the screen in mm (if w is given, of the screen the widget w is displayed on)"
-  (format-wish "puts [winfo screenmmheigth ~a];flush stdout" (if w (path w) "."))
-  (read-wish))
+  ;(format-wish "puts [winfo screenmmheigth ~a];flush stdout" (if w (path w) "."))
+  ;(read-wish))
+  (format-wish "senddata [winfo screenmmheigth ~a]" (if w (path w) "."))
+  (read-data))
 
 (defun screen-mouse-x (&optional (w nil))
   "give x position of the mouse on screen (if w is given, of the screen the widget w is displayed on)"
-  (format-wish "puts [winfo pointerx ~a];flush stdout" (if w (path w) "."))
-  (read-wish))
+  ;(format-wish "puts [winfo pointerx ~a];flush stdout" (if w (path w) "."))
+  ;(read-wish))
+  (format-wish "senddata [winfo pointerx ~a]" (if w (path w) "."))
+  (read-data))
 
 (defun screen-mouse-y (&optional (w nil))
   "give y position of the mouse on screen (if w is given, of the screen the widget w is displayed on)"
-  (format-wish "puts [winfo pointery ~a];flush stdout" (if w (path w) "."))
-  (read-wish))
+  ;(format-wish "puts [winfo pointery ~a];flush stdout" (if w (path w) "."))
+  ;(read-wish))
+  (format-wish "senddata [winfo pointery ~a]" (if w (path w) "."))
+  (read-data))
 
 (defun screen-mouse (&optional (w nil))
   "give the position of the mouse on screen as (x y) (if w is given, of the screen the widget w is displayed on)"
-  (format-wish "puts -nonewline {(};puts -nonewline [winfo pointerxy ~a];puts {)};flush stdout" (if w (path w) "."))
-  (let ((vals (read-wish)))
+  ;(format-wish "puts -nonewline {(};puts -nonewline [winfo pointerxy ~a];puts {)};flush stdout" (if w (path w) "."))
+  (format-wish "senddata \"([winfo pointerxy ~a])\"" (if w (path w) "."))
+  (let ((vals (read-data)))
     (values (first vals) (second vals))))
 
 (defun window-width (tl)
   "give the width of the toplevel in pixels"
-  (format-wish "puts [winfo width ~a];flush stdout" (path tl))
-  (read-wish))
+  ;(format-wish "puts [winfo width ~a];flush stdout" (path tl))
+  ;(read-wish))
+  (format-wish "senddata [winfo width ~a]" (path tl))
+  (read-data))
 
 (defun window-height (tl)
   "give the height of the toplevel in pixels"
-  (format-wish "puts [winfo height ~a];flush stdout" (path tl))
-  (read-wish))
+  ;(format-wish "puts [winfo height ~a];flush stdout" (path tl))
+  ;(read-wish))
+  (format-wish "senddata [winfo height ~a]" (path tl))
+  (read-data))
 
 (defun window-x (tl)
   "give the x position of the toplevel in pixels"
-  (format-wish "puts [winfo rootx ~a];flush stdout" (path tl))
-  (read-wish))
+  ;(format-wish "puts [winfo rootx ~a];flush stdout" (path tl))
+  ;(read-wish))
+  (format-wish "senddata [winfo rootx ~a]" (path tl))
+  (read-data))
 
 (defun window-y (tl)
   "give the y position of the toplevel in pixels"
-  (format-wish "puts [winfo rooty ~a];flush stdout" (path tl))
-  (read-wish))
+  ;(format-wish "puts [winfo rooty ~a];flush stdout" (path tl))
+  ;(read-wish))
+  (format-wish "senddata [winfo rooty ~a];flush stdout" (path tl))
+  (read-data))
 
 ;;; Dialog functions
 
@@ -1642,8 +1692,9 @@ set y [winfo y ~a]
 	      (wildcard (second type)))
 	  (format s "{{~a} {~a}} " name wildcard)))
       (format s "}"))
-    (format-wish "esc [tk_getOpenFile -filetypes ~a];flush stdout"  files)
-    (read-wish)))
+    ;(format-wish "esc [tk_getOpenFile -filetypes ~a];flush stdout"  files)
+    (format-wish "senddatastring [tk_getOpenFile -filetypes ~a]"  files)
+    (read-data)))
 
 (defun get-save-file(&optional (options '(("All Files" "*"))))
   (let ((files (make-array '(0) :element-type 'base-char
@@ -1656,8 +1707,9 @@ set y [winfo y ~a]
 	      (wildcard (second type)))
 	  (format s "{{~a} {~a}} " name wildcard)))
       (format s "}"))
-    (format-wish "esc [tk_getSaveFile -filetypes ~a];flush stdout"  files)
-    (read-wish)))
+    ;(format-wish "esc [tk_getSaveFile -filetypes ~a];flush stdout"  files)
+    (format-wish "senddatastring [tk_getSaveFile -filetypes ~a]"  files)
+    (read-data)))
 
 (defvar *mb-icons* (list "error" "info" "question" "warning")
   "icon names valid for message-box function")
@@ -1665,8 +1717,9 @@ set y [winfo y ~a]
 ;;; see make-string-output-string/get-output-stream-string
 (defun message-box (message title type icon)
   ;;; tk_messageBox function
-  (format-wish "esc [tk_messageBox -message {~a} -title {~a} -type {~a} -icon {~a}];flush stdout" message title type icon)
-  (read-wish))
+  ;(format-wish "esc [tk_messageBox -message {~a} -title {~a} -type {~a} -icon {~a}];flush stdout" message title type icon)
+  (format-wish "senddata [tk_messageBox -message {~a} -title {~a} -type {~a} -icon {~a}]" message title type icon)
+  (read-data))
 
 ;  (do-read-line)
 ;  (read *wish* nil nil)  )
