@@ -100,6 +100,7 @@ wm                   x
 	   "*CURSORS*"
 	   "*DEBUG-TK*"
 	   "*EXIT-MAINLOOP*"
+	   "*INIT-WISH-HOOK*"
 	   "*MB-ICONS*"
 	   "*TK*"
 	   "ADD-PANE"
@@ -194,7 +195,7 @@ wm                   x
 	   "PACK-FORGET"
 	   "PANE-CONFIGURE"
 	   "PANED-WINDOW"
-;	   "PATH"
+	   "PATH"
 	   "PHOTO-IMAGE"
 	   "PLACE"
 	   "POSTSCRIPT"
@@ -298,7 +299,7 @@ wm                   x
 		   (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* 0.85)
+(defvar *ltk-version* 0.86)
 
 ;;; global var for holding the communication stream
 (defvar *wish* nil)
@@ -314,6 +315,7 @@ wm                   x
 
 (defvar *wish-args* '("-name" "LTK"))
 
+(defvar *init-wish-hook* nil)
 
 ;;; setup of wish
 ;;; put any tcl function definitions needed for running ltk here
@@ -321,6 +323,8 @@ wm                   x
   ;; print string readable, escaping all " and \
   ;; proc esc {s} {puts "\"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\""}
   (send-wish "proc esc {s} {puts \"\\\"[regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]\\\"\"} ")
+  (dolist (fun *init-wish-hook*)	; run init hook funktions 
+    (funcall fun))
   )
 
 ;;; start wish and set *wish*
@@ -532,10 +536,7 @@ wm                   x
     (add-callback name fun)
     (format-wish "bind  ~a ~a {puts -nonewline {(\"~A\")};flush stdout}" (path w) event name )))
 
-
-
 (defvar *tk* (make-instance 'widget :name "." :path "."))
-
 
 ;;; generic functions
 
@@ -564,12 +565,11 @@ wm                   x
 (defgeneric text (widget)
   (:documentation "reads the value of the textvariable associated with the widget")
   )
+
 (defmethod create :after ((v tktextvariable))
   (format-wish "~a configure -textvariable ~a" (path v) (name v)))
 
 (defmethod text ((v tktextvariable))
-  ;(send-wish (format nil "puts -nonewline {\"};puts -nonewline $~a;puts {\"};flush stdout" (name v)))
-  ;(send-wish (format nil "puts \"\\\"$~a\\\"\";flush stdout" (name v)))
   (format-wish "esc $~a; flush stdout" (name v))
   (read-wish))
 
@@ -1338,7 +1338,7 @@ set y [winfo y ~a]
 
 ;;; for tkobjects, the name of the widget is taken
 (defmethod configure (wid option (value tkobject))
-  (format-wish "~A configure -~(~A~) {~A}" (path wid) option (name value)))
+  (format-wish "~A configure -~(~A~) {~A}" (path wid) option (path value)))
 
 (defgeneric cget (w o))
 (defmethod cget ((widget widget) option)
@@ -1371,7 +1371,7 @@ set y [winfo y ~a]
 
 ;;; for tkobjects, the name of the widget is taken
 (defmethod itemconfigure ((widget canvas) item option (value tkobject))
-  (format-wish "~A itemconfigure ~A -~(~A~) {~A}" (path widget) item option (name value)))
+  (format-wish "~A itemconfigure ~A -~(~A~) {~A}" (path widget) item option (path value)))
 
 ;;; wm functions
 
