@@ -8,6 +8,11 @@
   (let ((fullstring program))
     (dolist (a args)
       (setf fullstring (concatenate 'string fullstring " " a)))
+    #+:cmupty (let ((proc (run-program program args :input t :output t :wait wt :pty :stream :error :output)))
+             (unless proc
+               (error "Cannot create process."))
+	     (ext:process-pty proc)
+             )
     #+:cmu (let ((proc (run-program program args :input :stream :output :stream :wait wt)))
              (unless proc
                (error "Cannot create process."))
@@ -621,9 +626,17 @@
 
 ;;;; testing functions
 
+(defvar *do-rotate* nil)
+(defvar *demo-line* nil)
+(defvar *demo-canvas* nil)
+
 (defun wt()
   (start-w)
   (let* ((bar (make-frame nil))
+	 (fr (make-frame bar))
+	 (lr (make-label fr "Rotation:"))
+	 (bstart (make-button fr "Start" 'start-rotation))
+	 (bstop  (make-button fr "Stop"  'stop-rotation))
 	 (b1 (make-button bar "Hallo" (lambda () (format T "Hallo~%"))))
 	 (b2 (make-button bar "Welt!" (lambda () (format T "Welt~%"))))
 	 (f (make-frame bar))
@@ -632,7 +645,7 @@
 	 (e (make-entry bar))
 	 (b4 (make-button bar "get!" (lambda () (format T "content of entry:~A~%" (get-content e)))))
 	 (b5 (make-button bar "set!" (lambda () (set-content e "test of set"))))
-	 (sc (make-scrolled-canvas nil)); :width 500 :height 400))
+	 (sc (make-scrolled-canvas nil)); :width 500 :height 500))
 	 (c (canvas sc))
 	 (lines nil)
 	 mb mfile mf-load mf-save mf-export mfe-jpg mfe-gif mf-exit mf-print
@@ -655,6 +668,12 @@
     (pack sc :side "top" :fill "both" :expand 1)
     (pack bar :side "bottom")
     (scrollregion c 0 0 500 400)
+    (pack fr)
+    (pack lr)
+    (configure fr "borderwidth" "2")
+    (configure fr "relief" "sunken")
+    (pack bstart)
+    (pack bstop)
     (pack b1)
     (pack b2)
     (configure f "borderwidth" "2")
@@ -672,13 +691,51 @@
 	  (push y lines)
 	  (push x lines)
 	)))
-    (create-line c lines)
+    (setf *demo-line* (create-line c lines))
+    (setf *demo-canvas* c)
     (create-text c 10 10 "Ltk Demonstration")
     ))
-	 
 
+(defvar *angle* 0)
+(defvar *angle2* 0)
+(defvar *angle3* 0)
+
+
+(defun rotate()
+  (let ((*debug-tk* nil))
+    (let ((lines nil)
+	  (dx (* 50 (sin *angle2*)))
+	  (dy (* 50 (cos *angle2*)))
+	  (wx (sin *angle3*))
+;	  (wy (cos *angle3*))
+	  )
+      (incf *angle* 0.1)
+      (incf *angle2* 0.03)
+      (incf *angle3* 0.01)
+      
+      (dotimes (i 100)
+	(let ((w (+ *angle* (* i 2.8001))))
+	  (let ((x (+ dx 250 (* 150 (sin w) wx)))
+		(y (+ dy 200 (* 150 (cos w)))))
+	    (push y lines)
+	    (push x lines)
+	    )))    
+      (set-coords *demo-canvas* *demo-line* lines))
+    (if *do-rotate*
+	(after 25 #'rotate))))
+
+(defun start-rotation()
+  (setf *debug-tk* nil)
+  (setf *do-rotate* t)
+  (rotate)
+  )
+(defun stop-rotation()
+  (setf *debug-tk* t)
+  (setf *do-rotate* nil)
+  )
 
 (defun test()
   (wt)
+;  (read-all *w*)
   (mainloop))
 
