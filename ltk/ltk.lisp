@@ -501,9 +501,9 @@
 	      (wildcard (second type)))
 	  (format s "{{~a} {~a}} " name wildcard)))
       (format s "}"))
-    (send-w (format nil "puts [tk_getOpenFile -filetypes ~a]"  files))
+    (send-w (format nil "puts [tk_getOpenFile -filetypes ~a];flush stdout"  files))
     ;(read-all *w*)
-    (do-read-line)
+    (string-right-trim '(#\Newline #\Return #\Linefeed) (do-read-line))
   ))
 
 
