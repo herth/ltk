@@ -212,12 +212,12 @@
 (defmethod get-content ((e entry))  
   (send-w (format nil "puts [~A get]; flush stdout" (path e)))
   #+:sbcl (read-all *w*)
-  #+:lispworks (progn (read-line *w*)(read-line *w*))
+  #+:lispworks (progn (read-line *w*)    (string-trim '(#\Newline #\Return #\Linefeed) (read-line *w*)))
   #+:cmu (let ((c (read-line *w*)))
     (if *debug-tk*
 	(format t "gc: =>~a<=~&" c))
     ;(read-w)
-    c)
+    (string-trim '(#\Newline #\Return #\Linefeed) c))
   )
 
 (defmethod set-content ((e entry) txt)
