@@ -25,7 +25,7 @@ options may not be supported.
 command      supported comment
 bell                 x
 bind                 x does not pass the event information
-bindtags
+bindtags               modifly the tag list of a widget that describes which events it gets
 bitmap               - see image
 button               x
 canvas               x (quite some graphic elements missing)
@@ -36,8 +36,8 @@ console              - only on some platforms
 cursors              x 
 destroy              x
 entry                x
-event
-focus
+event                  create and manage virtual events
+focus                  focus management functions
 font
 frame                x
 grab                 - 
@@ -57,14 +57,14 @@ options              -
 pack                 x
 panedwindow          x
 photo                - see image
-place
+place                  geometry manager using coordinates
 radiobutton          x
 raise                x
-scale
+scale                x 
 scrollbar            x
 selection
 send
-spinbox
+spinbox              x
 text                 x
 tk
 tk_bisque            -
@@ -88,7 +88,7 @@ tkerror              -
 tkvars               -
 tkwait               
 toplevel             x
-winfo
+winfo                x
 wm                   x 
 |#
 
@@ -108,7 +108,7 @@ wm                   x
 	   "BIND"
 	   "BUTTON"
 	   "CANVAS"
-	   "CHECKBUTTON"
+	   "CHECK-BUTTON"
 	   "CLEAR-TEXT"
 	   "CLIPBOARD-APPEND"
 	   "CLIPBOARD-CLEAR"
@@ -174,6 +174,7 @@ wm                   x
 	   "RADIO-BUTTON"
 	   "RAISE"
 	   "SAVE-TEXT"
+	   "SCALE"
 	   "SCROLLBAR"
 	   "SCROLLED-CANVAS"
 	   "SCROLLREGION"
@@ -181,6 +182,7 @@ wm                   x
 	   "SET-CONTENT"
 	   "SET-COORDS"
 	   "SET-TEXT"
+	   "SPINBOX"
 	   "START-W"
 	   "TAG-BIND"
 	   "TAG-CONFIGURE"
@@ -369,6 +371,9 @@ wm                   x
   (send-w "clipboard clear"))
 
 (defun clipboard-get ()
+  (send-w (format nil "puts [clipboard get]; flush stdout"))
+  (let ((c (read-all *w*)))
+    c)
   )
 
 (defun clipboard-append (txt)
@@ -490,11 +495,12 @@ wm                   x
     (send-w (format nil "checkbutton ~A -text {~A} -variable ~A" (path cb) (text cb) (name cb))))
   (setf (created cb) t))
 
-(defgeneric value (widget))
+(defgeneric value (widget)
+  (:documentation "reads the value of the variable associated with the widget"))
 
 (defmethod value ((cb check-button))
   (send-w (format nil "puts $~a;flush stdout" (name cb)))
-  (read *w*))
+  (read *w* nil nil))
 
 (defgeneric (setf value) (widget val))
 (defmethod (setf value) (val (cb check-button))
@@ -569,6 +575,9 @@ wm                   x
 (defmethod set-content ((e entry) txt)
   (send-w (format nil "~A delete 0 end;~A insert end {~A}" (path e) (path e) txt)))
 
+
+(defun entry-select (e from to)
+  (send-w (format nil "~a selection range ~a ~a" (path e) from to)))
 
 ;;; frame widget 
 
@@ -655,6 +664,64 @@ a list of numbers may be given"
     (if (listp val)
 	(send-w (format nil "~a selecttion set ~{ ~a~}" (path l) val))
       (send-w (format nil "~a selecttion set ~a" (path l) val)))))
+
+
+;;; scale widget
+
+(defclass scale (widget)
+  ((from :accessor scale-from :initarg :from  :initform nil)
+   (to :accessor scale-to :initarg :to :initform nil)
+   (orient :accessor scale-orient :initarg :orient  :initform nil))
+  )
+
+(defmethod create ((sc scale))
+  (send-w (format nil "scale ~a -variable ~a ~a~a~a" (path sc) (name sc)
+		  (if (scale-from sc)
+		      (format nil " -from ~a" (scale-from sc))
+		    "")
+		  (if (scale-to sc)
+		      (format nil " -to ~a" (scale-to sc))
+		    "")
+		  (if (scale-orient sc)
+		      (format nil " -orient ~a" (scale-orient sc))
+		    "")
+		  ))
+  (setf (created sc) t))
+
+
+(defmethod value ((sc scale))
+  (send-w (format nil "puts $~a;flush stdout" (name sc)))
+  (read *w* nil nil))
+
+(defmethod (setf value) (val (sc scale))
+  (send-w (format nil "set ~a ~a" (name sc) val)))
+
+;;; spinbox widget
+
+(defclass spinbox (widget)
+  ((from :accessor spinbox-from :initarg :from  :initform nil)
+   (to :accessor spinbox-to :initarg :to :initform nil)
+   )
+  )
+
+(defmethod create ((sp spinbox))
+  (send-w (format nil "spinbox ~a -textvariable ~a ~a~a" (path sp) (name sp)
+		  (if (spinbox-from sp)
+		      (format nil " -from ~a" (spinbox-from sp))
+		    "")
+		  (if (spinbox-to sp)
+		      (format nil " -to ~a" (spinbox-to sp))
+		    "")
+		  ))
+  (setf (created sp) t))
+
+
+(defmethod value ((sp spinbox))
+  (send-w (format nil "puts $~a;flush stdout" (name sp)))
+  (read *w* nil nil))
+
+(defmethod (setf value) (val (sp spinbox))
+  (send-w (format nil "set ~a ~a" (name sp) val)))
 
 ;;; toplevel (window) widget 
 
