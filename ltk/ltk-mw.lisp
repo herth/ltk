@@ -46,6 +46,8 @@ o history-entry
 	   "HISTORY"
 	   "CLEAR-HISTORY"
 	   "MENU-ENTRY"
+	   "APPEND-ITEM"
+	   "DELETE-ITEM"
 	   ))
 
 (in-package :ltk-mw)
@@ -163,7 +165,8 @@ o history-entry
 ;;;; menu entry
 
 (defclass menu-entry (entry)
-  ((menu :accessor menu))
+  ((menu :accessor menu)
+   (entries :accessor entries :initform nil))
   )
 
 (defmethod initialize-instance :after ((entry menu-entry) &key command content)
@@ -175,11 +178,8 @@ o history-entry
   (let ((mp (make-menu nil "Popup")))
     (setf (menu entry) mp)
     (dolist (c content)
-      (make-menubutton mp c (lambda ()
-			      (setf (text entry) c)
-			      
-			      (ltk::callback (ltk::name entry) (list c))
-			      )))
+      (append-item entry c))
+
     
     (bind entry "<1>" (lambda (event)
 			(declare (ignore event))
@@ -190,9 +190,19 @@ o history-entry
 (defmethod (setf command) (val (entry menu-entry))
   (ltk::add-callback (ltk::name entry) val))
 
+(defgeneric append-item (entry item))
 (defmethod append-item ((entry menu-entry) item)
+  (setf (entries entry) (append (entries entry) (list item)))
   (make-menubutton (menu entry) item (lambda ()
-				       (setf (text entry) item)
-			      
+				       (setf (text entry) item)			      
 				       (ltk::callback (ltk::name entry) (list item))
+				       
 				       )))
+(defun remove-nth (n list)
+  (concatenate 'list (subseq list 0 n) (subseq list (1+ n))))
+
+(defmethod delete-item ((entry menu-entry) index)
+  (when (< index (length (entries entry)))
+    (setf (entries entry) (remove-nth index (entries entry)))
+    (menu-delete (menu entry) index))
+  )
