@@ -140,6 +140,7 @@ wm                   x
 	   "LABEL"
 	   "LABELFRAME"
 	   "LISTBOX"
+	   "LISTBOX-APPEND"
 	   "LISTBOX-GET-SELECTION"
 	   "LISTBOX-SELECT"
 	   "LOAD-TEXT"
