@@ -1,3 +1,4 @@
+#!/usr/bin/wish
 wm withdraw .
 set host localhost
 if {[llength $argv] == 2} {

@@ -17,6 +17,78 @@
 
 |#
 
+#|
+All tk commads as of version with support information
+command      supported comment
+bell                 x
+bind                 x does not pass the event information
+bindtags
+bitmap               - see image
+button               x
+canvas               x
+checkbutton
+clipboard
+colors               - constants only
+console              - only on some platforms
+cursors              x
+destroy              x
+entry                x
+event
+focus
+font
+frame                x
+grab
+grid                 x
+image                x photo image only
+keysyms              - constants only
+label                x
+labelframe           x
+listbox              x
+loadTk
+lower                x
+menu                 x
+menubutton           x
+message
+option               -
+options              -
+pack                 x
+panedwindow
+photo                - see image
+place
+radiobutton
+raise                x
+scale
+scrollbar            x
+selection
+send
+spinbox
+text                 x
+tk
+tk_bisque
+tk_chooseColor
+tk_chooseDirectory
+tk_dialog
+tk_focusFollowsMouse 
+tk_focusNext
+tk_focusPrev
+tk_getOpenFile       x
+tk_getSaveFile       x
+tk_menuSetFocus
+tk_messageBox
+tk_optionMenu
+tk_popup
+tk_setPalette
+tk_textCopy
+tk_textCut
+tk_textPaste
+tkerror
+tkvars
+tkwait
+toplevel             x
+winfo
+wm
+|#
+
 (defpackage "LTK"
   (:use "COMMON-LISP"
 	#+:cmu "EXT"
@@ -27,9 +99,11 @@
 	   "APPEND-TEXT"
 	   "ASK-YESNO"
 	   "ASK-OKCANCEL"
+	   "BELL"
 	   "BIND"
 	   "BUTTON"
 	   "CANVAS"
+	   "CONFIGURE"
 	   "CREATE-IMAGE"
 	   "CREATE-LINE"
 	   "CREATE-MENU2"
@@ -37,6 +111,7 @@
 	   "CREATE-TEXT"
 	   "CLEAR-TEXT"
 	   "EXIT-WISH"
+	   "DESTROY"
 	   "DO-EXECUTE"
 	   "DO-MSG"
 	   "ENTRY"
@@ -52,7 +127,12 @@
 	   "IMAGE-LOAD"
 	   "ITEMCONFIGURE"
 	   "LABEL"
+	   "LABELFRAME"
+	   "LISTBOX"
+	   "LISTBOX-GET-SELECTION"
+	   "LISTBOX-SELECT"
 	   "LOAD-TEXT"
+	   "LOWER"
 	   "MAINLOOP"
 	   "MAKE-BUTTON"
 	   "MAKE-CANVAS"
@@ -72,9 +152,10 @@
 	   "MENUBUTTON"
 	   "MESSAGE-BOX"
 	   "PACK"
+	   "PACK-FORGET"
 	   "PHOTO-IMAGE"
 	   "POSTSCRIPT"
-	   "CONFIGURE"
+	   "RAISE"
 	   "SAVE-TEXT"
 	   "SCROLLBAR"
 	   "SCROLLED-CANVAS"
@@ -231,6 +312,40 @@
 
 ;;; the library implementation 
 
+
+(defvar *cursors*
+  (list
+   "X_cursor" "arrow" "based_arrow_down" "based_arrow_up" "boat" "bogosity"
+   "bottom_left_corner" "bottom_right_corner" "bottom_side" "bottom_tee"
+   "box_spiral" "center_ptr" "circle" "clock" "coffee_mug" "cross"
+   "cross_reverse" "crosshair" "diamond_cross" "dot" "dotbox" "double_arrow"
+   "draft_large" "draft_small" "draped_box" "exchange" "fleur" "gobbler"
+   "gumby" "hand1" "hand2" "heart" "icon" "iron_cross" "left_ptr" "left_side"
+   "left_tee" "leftbutton" "ll_angle" "lr_angle" "man" "middlebutton" "mouse"
+   "pencil" "pirate" "plus" "question_arrow" "right_ptr" "right_side"
+   "right_tee" "rightbutton" "rtl_logo" "sailboat" "sb_down_arrow"
+   "sb_h_double_arrow" "sb_left_arrow" "sb_right_arrow" "sb_up_arrow"
+   "sb_v_double_arrow" "shuttle" "sizing" "spider" "spraycan" "star"
+   "target" "tcross" "top_left_arrow" "top_left_corner" "top_right_corner"
+   "top_side" "top_tee" "trek" "ul_angle" "umbrella" "ur_angle" "watch" "xterm"))
+
+(defun bell ()
+  (send-w (format nil "bell")))
+
+(defun lower (widget &optional (other nil))
+  (send-w (format nil "lower ~a ~a" (path widget)
+		  (if other
+		      (path other)
+		    ""))))
+(defun raise (widget &optional (other nil))
+  (send-w (format nil "raise ~a ~a" (path widget)
+		  (if other
+		      (path other)
+		    ""))))
+
+(defun destroy (widget)
+  (send-w (format nil "destroy ~a" (path widget))))
+
 ;; basic tk object
 (defclass tkobject ()
   ((name :accessor name :initarg :name :initform nil)
@@ -362,6 +477,59 @@
 
 (defun make-frame (master)
   (make-instance 'frame :master master))
+
+;;; labelframe widget 
+
+(defclass labelframe(widget)
+  ((text :accessor text :initarg :text :initform "")
+   ))
+
+(defmethod create ((l labelframe))
+  (send-w (format nil "labelframe ~A -text {~A} " (path l) (text l)))
+  (setf (created l) t))
+
+
+;;; listbox widget
+
+(defclass listbox (widget)
+  ((width  :accessor width  :initarg :width  :initform nil)
+   (height :accessor height :initarg :height :initform nil))
+  )
+
+(defmethod create ((l listbox))
+  (send-w (format nil "listbox ~a~a~a" (path l)
+		  (if (width l)
+		      (format nil " -width ~a" (width l))
+		    "")
+		  (if (height l)
+		      (format nil " -height ~a" (height l))
+		    "")
+		  ))
+  (setf (created l) t))
+
+
+(defgeneric listbox-append (l vals))
+(defmethod listbox-append ((l listbox) values)
+  "append values (which may be a list) to the list box"
+  (if (listp values)
+      (send-w (format nil "~a insert end ~{ \{~a\}~}" (path l) values))
+    (send-w (format nil "~a insert end \{~a\}" (path l) values))))
+
+(defgeneric listbox-get-selection (l))
+(defmethod listbox-get-selection ((l listbox))
+  (send-w (format nil "puts -nonewline {(};puts -nonewline [~a curselection];puts {)};flush stdout" (path l)))
+  (read *w*)
+  )
+
+(defmethod listbox-select ((l listbox) val)
+  "modify the selection in listbox, if nil is given, the selection is cleared,
+if a number is given the corresponding element is selected, alternatively
+a list of numbers may be given"
+  (if (null val)
+      (send-w (format nil "~a selection clear 0 end" (path l)))
+    (if (listp val)
+	(send-w (format nil "~a selecttion set ~{ ~a~}" (path l) val))
+      (send-w (format nil "~a selecttion set ~a" (path l) val)))))
 
 ;;; toplevel (window) widget 
 
@@ -536,8 +704,9 @@
 (defmethod clear-text ((txt text))
   (send-w (format nil "~A delete 0.0 end" (path txt))))
 
+(defgeneric set-text (txt content))
 (defmethod set-text ((txt text) content)
-  (send-w (format nil "~A delete 0.0 end;~A insert end {~A}" (path txt) content)))
+  (send-w (format nil "~A delete 0.0 end;~A insert end {~A}" (path txt) (path txt) content)))
 
 
 (defmethod see((txt text) pos)
@@ -617,6 +786,11 @@
 		  (if expand
 		      (format nil " -expand ~A" expand)
 		    ""))))
+
+(defmethod pack-forget ((w widget))
+  (when (created w)
+    (send-w (format nil "pack forget ~A" (path w)))))
+
 
 
 ;;; grid manager
@@ -1055,4 +1229,56 @@
 			      
        (after 50 #'update-particles)
      ))))
+
+(defun lb-test ()
+  (with-ltk
+   (let ((l (make-instance 'listbox)))
+     (pack l :expand 1 :fill "both")
+     (listbox-append l (list 1 2 3 "asdf" (list 3 4 5) 4)))))
+
+(defun lb-test2 ()
+  (with-ltk
+   (let* ((last nil)
+	  (l (make-instance 'listbox))
+	  (wf (make-instance 'frame))
+	  (lbl (make-instance 'label :master wf :text "Widget:"))
+	  (f (make-instance 'frame :master wf))
+	  (canv (make-instance 'canvas :master f :width 100 :height 100))
+	  (scanv (make-instance 'scrolled-canvas :master f))
+	  (widgets (list
+		    (make-instance 'button :master f :text "Button")
+		    (make-instance 'label :master f :text "Label")
+		    canv
+		    scanv
+		    ))
+	;  (b (make-instance 'button :text "Show" :command ))
+	  )
+     (bind l "<<ListboxSelect>>" (lambda ()
+			    (let ((sel (listbox-get-selection l)))
+			      (format t "selection: ~a~%" sel)
+			      (force-output)
+			      (if (first sel)
+				  (let ((w (nth (first sel) widgets)))
+				    (when last
+				      (pack-forget last))
+				    (pack w)
+				    (setf last w))))))
+     (pack l :expand 1 :fill "y")
+     (pack wf :expand 1 :fill "both")
+     ;(grid l 0 0)
+     ;(grid wf 0 1)
+
+     (pack lbl :side "top")
+     (pack f :expand 1 :fill "both")
+     (configure wf "borderwidth" 2)
+     (configure wf "relief" "sunken")
      
+     ;(pack b)
+     (create-line canv (list 0 0 40 40 60 20 80 80 60 60 40 80 20 60 0 80 0 0))
+     (create-line (canvas scanv) (mapcar (lambda (x)
+					   (* x 10))
+					 (list 0 0 40 40 60 20 80 80 60 60 40 80 20 60 0 80 0 0)))
+     (scrollregion (canvas scanv) 0 0 800 800)
+     (listbox-append l (mapcar (lambda (x) (type-of x)) widgets))
+
+     )))
