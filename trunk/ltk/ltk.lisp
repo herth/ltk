@@ -215,6 +215,7 @@ wm                   x
 	   "PATH"
 	   "PHOTO-IMAGE"
 	   "PLACE"
+	   "PLACE-FORGET"
 	   "POSTSCRIPT"
 	   "RADIO-BUTTON"
 	   "RAISE"
@@ -1428,7 +1429,7 @@ set y [winfo y ~a]
           (path w) side fill expand (and after (path after)) (and before (path before)) padx pady ipadx ipady anchor))
 
 
-(defgeneric pack-forget (w))
+(defgeneric pack-forget (widget))
 (defmethod pack-forget ((w widget))
   (format-wish "pack forget ~A" (path w)))
 
@@ -1438,6 +1439,10 @@ set y [winfo y ~a]
 (defgeneric place (widget x y &key width height))
 (defmethod place (widget x y &key width height)
   (format-wish "place ~A -x ~A -y ~A~@[ -width ~a~]~@[ -height ~a~]" (path widget) x y width height))
+
+(defgeneric place-forget (widget))
+(defmethod place-forget ((w widget))
+  (format-wish "place forget ~A" (path w)))
 
 ;;; grid manager
 
