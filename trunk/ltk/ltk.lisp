@@ -211,7 +211,9 @@
 
 (defmethod get-content ((e entry))  
   (send-w (format nil "puts [~A get]; flush stdout" (path e)))
-  (let ((c (read-line *w*)))
+  #+:sbcl (read-all *w*)
+
+  #-:sbcl (let ((c (read-line *w*)))
     (if *debug-tk*
 	(format t "gc: =>~a<=~&" c))
     ;(read-w)
