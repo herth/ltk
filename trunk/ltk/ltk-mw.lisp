@@ -27,9 +27,6 @@ Widgets offered are:
 o progress
     A widget displaying a progress bar
    
-
-
-
 |#
 
 (defpackage "LTK-MW"
@@ -39,34 +36,44 @@ o progress
   (:export "PROGRESS"
 	   "PERCENT"
 	   "BAR-COLOR"
+	   "REDRAW-ON-RESIZE"
 	   ))
 
 (in-package :ltk-mw)
 
-;;; progress bar
 
-(defclass progress (frame)
-  ((canvas :accessor canvas)
-   (rect :accessor rect)
+(defclass redraw-on-resize ()
+  ())
+
+(defgeneric redraw (widget))
+
+(defmethod initialize-instance :after ((r redraw-on-resize) &key)
+  (bind r "<Configure>" (lambda (evt) (declare (ignore evt))
+			  (redraw r))))
+;;; progress bar
+(defclass progress (redraw-on-resize canvas)
+  ((rect :accessor rect)
    (color :accessor bar-color :initarg :color :initform :blue)
    (percent :accessor percent :initform 0 :initarg :percent)
    ))
 
-(defmethod initialize-instance :after ((progress progress) &key)
-  (let ((canvas (make-instance 'canvas :master progress :height 20)))
-    (configure progress :borderwidth 2 :relief :sunken)
-    (setf (canvas progress) canvas)
-    (pack canvas :expand t :fill :both)
-    (setf (rect progress) (create-rectangle canvas 0 0 0 20))
-    (itemconfigure canvas (rect progress) :fill (bar-color progress))
-    (itemconfigure canvas (rect progress) :outline (bar-color progress))))
+(defmethod redraw ((progress progress))
+  (let ((width (window-width progress))
+	(height (window-height progress)))
+    (set-coords progress (rect progress)
+		(list 0 0 (truncate (* (percent progress) width) 100) height))))
+
+(defmethod initialize-instance :after ((progress progress) &key)					
+  (configure progress :borderwidth 2 :relief :sunken)
+  (setf (rect progress) (create-rectangle progress 0 0 0 20))
+  (itemconfigure progress (rect progress) :fill    (bar-color progress))
+  (itemconfigure progress (rect progress) :outline (bar-color progress)))
 
 (defmethod (setf bar-color) :after (val (progress progress))
-  (itemconfigure (canvas progress) (rect progress) :fill (bar-color progress))
-  (itemconfigure (canvas progress) (rect progress) :outline (bar-color progress)))
+  (itemconfigure progress (rect progress) :fill (bar-color progress))
+  (itemconfigure progress (rect progress) :outline (bar-color progress)))
 
 (defmethod (setf percent) :after (val (progress progress))
-  (let ((width (window-width (canvas progress)))
-	(height (window-height (canvas progress))))
-    (set-coords (canvas progress) (rect progress)
-		(list 0 0 (truncate (* val width) 100) height))))
+  (redraw progress))
+
+
