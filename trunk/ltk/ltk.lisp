@@ -156,6 +156,7 @@ wm                   x
 	   "ICONIFY"
 	   "ICONWINDOW"
 	   "IMAGE-LOAD"
+	   "IMAGE-SETPIXEL"
 	   "INTERIOR"
 	   "ITEMCONFIGURE"
 	   "ITEMLOWER"
@@ -247,7 +248,7 @@ wm                   x
 	   "WM-TITLE"
 	   ))
 
-(in-package ltk)
+(in-package :ltk)
 
 ;communication with wish
 ;;; this ist the only function to adapted to other lisps
@@ -421,15 +422,18 @@ wm                   x
 
 (defun read-data ()
   (let ((d (read-wish)))
-    
-    (loop while (not (equal (first d) :data))
-      do
-      (setf *event-queue* (append *event-queue* (list d)))
-      (format t "postponing event: ~a ~%" d)
-      (force-output)
-      (setf d (read-wish)))
-    (format t "readdata: ~s~%" d) (force-output)
-    (second d)))
+    (if (listp d)
+	(progn
+	  (loop while (not (equal (first d) :data))
+	    do
+	    (setf *event-queue* (append *event-queue* (list d)))
+	    (format t "postponing event: ~a ~%" d)
+	    (force-output)
+	    (setf d (read-wish)))
+					;(format t "readdata: ~s~%" d) (force-output)
+	  (second d))
+      (format t "read-data:~a~a~%" d (read-all *wish*)))
+))
 
 ;;; sanitizing strings: lisp -> tcl (format *wish* "{~a}" string)
 ;;; in string escaped : {} mit \{ bzw \}  und \ mit \\
@@ -1291,6 +1295,8 @@ set y [winfo y ~a]
 	       (and image (name image)))
   (read-data))
 
+(defun image-setpixel (image data x y &optional x2 y2 )
+  (format-wish "~A put {~{{~:{#~2,'0X~2,'0X~2,'0X ~} } ~} } -to ~a ~a~@[ ~a~]~@[ ~a~]" (name image) data x y x2 y2))
 
 (defun create-bitmap (canvas x y &key (bitmap nil))
   ;(format-wish "puts [~a create image ~a ~a -anchor nw~@[ -bitmap ~a~]]" (path canvas) x y
@@ -1418,8 +1424,9 @@ set y [winfo y ~a]
   )
 
 ;(defmethod create ((p photo-image))
-(defmethod initialize-instance :after ((p photo-image) &key)
-  (format-wish "image create photo ~A" (name p)))
+(defmethod initialize-instance :after ((p photo-image) &key width height)
+  (setf (name p) (create-name))
+  (format-wish "image create photo ~A~@[ -width ~a~]~@[ -height ~a~]" (name p) width height))
 
 (defun make-image ()
   (let* ((name (create-name))
@@ -1516,6 +1523,7 @@ set y [winfo y ~a]
 (defun background (widget)
   (cget widget :background))
 
+#-:gcl
 (defun (setf background) (val widget)
   (configure widget :background val))
 
