@@ -31,7 +31,8 @@
      (setf (named-p inspector) named-p
 	   (description inspector) description
 	   (elements inspector) elements)
-     (configure (title inspector) "text" (format nil "inspecting: ~a ~s" (type-of value) value))
+     ;;(configure (title inspector) "text" (format nil "inspecting: ~a ~s" (type-of value) value))
+     (setf (text (title inspector)) (format nil "inspecting: ~a ~s" (type-of value) value))
      (setf (text (desc inspector)) description)
      (listbox-clear (fields inspector))
      (if named-p
@@ -47,6 +48,7 @@
 
 (defun ginspect (inspected-value)
   "inspect the value with a graphical user interface"
+  (let ((*debug-tk* nil))
   (with-ltk
    (setf *debug-tk* nil)
    (let* ((inspector (make-instance 'ginspector))	   
@@ -80,8 +82,8 @@
      (grid-columnconfigure f2 0 "weight" 1)
      (grid-columnconfigure f2 1 "weight" 0)
      (grid-rowconfigure f2 0 "weight" 1)
-     (configure dscroll "command" (concatenate 'string (path desc) " yview"))
-     (configure desc "yscrollcommand" (concatenate 'string (path dscroll) " set"))
+     (configure dscroll "command" (concatenate 'string (widget-path desc) " yview"))
+     (configure desc "yscrollcommand" (concatenate 'string (widget-path dscroll) " set"))
      
      (add-pane pane f2)
      (add-pane pane lb-fields)
@@ -95,6 +97,7 @@
      (setf (fields inspector) fields)
      (bind fields "<Double-Button-1>"
 	   (lambda (event)
+	     (declare (ignore event))
 	     (let* ((nr (first (listbox-get-selection fields))))
 	       (when nr
 		 (let ((entry (nth nr (elements inspector))))
@@ -107,6 +110,7 @@
 
      (bind entry "<KeyPress-Return>"
 	   (lambda (event)
+	     (declare (ignore event))
 	     (let ((txt (text entry)))
 	       (multiple-value-bind (result condition)		   
 		   (ignore-errors 
@@ -126,12 +130,14 @@
 	       )))
      (bind entry "<KeyPress-Up>"
 	   (lambda (event)
+	     (declare (ignore event))
 	     (let ((val (nth (+ 1 history-pos) history)))
 	       (when val
 		 (setf (text entry) val)
 		 (incf history-pos)))))
      (bind entry "<KeyPress-Down>"
 	   (lambda (event)
+	     (declare (ignore event))
 	     (if (> history-pos 0)
 		 (progn
 		   (decf history-pos)
@@ -142,7 +148,7 @@
 
      (setf (value inspector) inspected-value)
      (do-inspect inspector inspected-value)
-     )))
+     ))))
 
 ;;;; INSPECTED-PARTS
 
