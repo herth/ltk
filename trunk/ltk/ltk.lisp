@@ -643,7 +643,7 @@
 	 (b2 (make-button bar "Welt!" (lambda () (format T "Welt~%"))))
 	 (f (make-frame bar))
 	 (l (make-label f "Test:"))
-	 (b3 (make-button f "Ok." (lambda () (exit-wish)))); (setf *exit-mainloop* t))))
+	 (b3 (make-button f "Ok." 'test-rotation)); (setf *exit-mainloop* t))))
 	 (e (make-entry bar))
 	 (b4 (make-button bar "get!" (lambda () (format T "content of entry:~A~%" (get-content e)))))
 	 (b5 (make-button bar "set!" (lambda () (set-content e "test of set"))))
@@ -726,6 +726,11 @@
     (if *do-rotate*
 	(after 25 #'rotate))))
 
+(defun test-rotation()
+  (setf *debug-tk* nil)
+  (time (dotimes (i 100)
+	  (rotate)))
+  )
 (defun start-rotation()
   (setf *debug-tk* nil)
   (setf *do-rotate* t)
