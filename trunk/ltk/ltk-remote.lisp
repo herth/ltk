@@ -17,10 +17,22 @@
 
 |#
 
-(in-package ltk)
+#+:sbcl (require :sb-bsd-sockets)
+
+(defpackage "LTK-REMOTE"
+  (:use "COMMON-LISP" "LTK"
+	#+:cmu "EXT"
+	#+:sbcl "SB-EXT"
+	#+:sbcl "SB-THREAD"
+	#+:sbcl  "SB-BSD-SOCKETS")
+	
+  (:export
+   "WITH-REMOTE-LTK"
+   ))
 
 
-       
+(in-package ltk-remote)
+
 
 ;;; cmu version
 
@@ -68,7 +80,7 @@
 					;(close stream)
 		(multiprocessing::make-process
 		 (lambda ()
-		   (let ((*w* stream))
+		   (let ((ltk::*w* stream))
 		     ,@body
 		     (mainloop)
 		     (format t "closing connection~&")
@@ -101,12 +113,6 @@
 (defun stop-server ()
   (setf *stop-remote* t))
 
-#+:sbcl
-(use-package :sb-thread)
-#+:sbcl
-(require :sb-bsd-sockets)
-#+:sbcl
-(use-package :sb-bsd-sockets)
 
 #+:sbcl
 (defun make-socket-server (port)
@@ -134,7 +140,7 @@
 	  (let* ((s (socket-accept socket))
 		 (stream (socket-make-stream s :input t :output t)))
 	    (make-thread (lambda ()
-			   (let ((*w* stream))
+			   (let ((ltk::*w* stream))
 			     ,@body
 			     (mainloop)
 			     
@@ -169,7 +175,7 @@
                                                                     handle)
                                                             '()
                                                             (lambda ()
-                                                             (let ((*w* stream))
+                                                             (let ((ltk::*w* stream))
                                                                ,@body
                                                                (mainloop)
                                                                (close stream)

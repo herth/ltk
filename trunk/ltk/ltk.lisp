@@ -104,6 +104,7 @@ wm                   x
 	   "*MB-ICONS*"
 	   "*TK*"
 	   "ADD-PANE"
+	   "ADD-SEPARATOR"
 	   "AFTER"
 	   "APPEND-TEXT"
 	   "ASK-OKCANCEL"
@@ -173,6 +174,8 @@ wm                   x
 	   "MENU"
 	   "MENUBAR"
 	   "MENUBUTTON"
+	   "MENUCHECKBUTTON"
+	   "MENURADIOBUTTON"
 	   "MESSAGE"
 	   "MESSAGE-BOX"
 	   "MINSIZE"
@@ -220,6 +223,7 @@ wm                   x
 	   "WINDOW-X"
 	   "WINDOW-Y"
 	   "WITH-LTK"
+	   "WITH-REMOTE-LTK"
 	   "WITHDRAW"
 	   "WM-TITLE"
 	   ))
@@ -318,7 +322,7 @@ wm                   x
 
 ;;; sanitizing strings: lisp -> tcl (format *w* "{~a}" string)
 ;;; in string escaped : {} mit \{ bzw \}  und \ mit \\
-
+#|
 (defun replace-char (char with txt)
   (let ((pos (position char txt)))
     (loop
@@ -338,6 +342,7 @@ wm                   x
       (setf txt (concatenate 'string (subseq txt 0 pos) "\\" (subseq txt pos)))))
   txt
   )
+|#
 ;;; tcl -> lisp: puts "$x" mit \ und " escaped
 ;;;  puts [regsub {"} [regsub {\\} $x {\\\\}] {\"}]
 
@@ -489,12 +494,16 @@ wm                   x
 ;;; menues
 
 (defclass menu(widget)
-  ((text :accessor text :initarg :text))
-  )
+  ((text :accessor text :initarg :text)
+   (help :accessor menu-help :initarg :help :initform nil)
+  ))
 
 (defmethod create ((m menu))
-   (send-w (format nil "menu ~A -tearoff 0" (path m)))
-   (send-w (format nil "~A add cascade -label {~A} -menu ~a" (path (master m)) (text m) (path m))))
+  (when (menu-help m) ;; special treatment for help menu
+    (setf (name m) "help")
+    (setf (slot-value m 'path) (create-path (master m) (name m))))
+  (send-w (format nil "menu ~A -tearoff 0" (path m)))
+  (send-w (format nil "~A add cascade -label {~A} -menu ~a" (path (master m)) (text m) (path m))))
 
 (defun make-menu(menu text)
   (make-instance 'menu :master menu :text text))
@@ -516,6 +525,53 @@ wm                   x
 (defun make-menubutton(menu text command)
   (let* ((mb (make-instance 'menubutton :master menu :text text :command command)))
     mb))
+
+(defclass menucheckbutton(widget) 
+  ((text :accessor text :initarg :text)
+   (command :accessor command :initarg :command :initform nil)))
+
+(defmethod create ((m menucheckbutton))
+  (when (command m)
+    (add-callback (name m) (command m)))
+  (send-w (format nil "~A add checkbutton -label {~A} -variable ~a ~a"
+		  (path (master m)) (text m) (name m)
+		  (if (command m)
+		      (format nil "-command {puts -nonewline {(\"~A\")};flush stdout}" (name m))
+		    "")))
+  )
+
+(defmethod value ((cb menucheckbutton))
+  (send-w (format nil "puts $~a;flush stdout" (name cb)))
+  (read *w* nil nil))
+
+(defmethod (setf value) (val (cb menucheckbutton))
+  (send-w (format nil "set ~a ~a" (name cb) val)))
+
+(defclass menuradiobutton(widget) 
+  ((text :accessor text :initarg :text)
+   (command :accessor command :initarg :command :initform nil)
+   (group :accessor group :initarg :group :initform nil)))
+
+(defmethod create ((m menuradiobutton))
+  (when (command m)
+    (add-callback (name m) (command m)))
+  (unless (group m)
+    (setf (group m)
+	  (name m)))
+  (send-w (format nil "~A add radiobutton -label {~A} -variable ~a ~a"
+		   (path (master m)) (text m) (group m)
+		   (if (command m)
+		       (format nil "-command {puts -nonewline {(\"~A\")};flush stdout}" (name m))
+		     "")))
+   )
+
+(defmethod value ((cb menuradiobutton))
+  (send-w (format nil "puts $~a;flush stdout" (group cb)))
+  (read *w* nil nil))
+
+(defmethod (setf value) (val (cb menuradiobutton))
+  (send-w (format nil "set ~a ~a" (group cb) val)))
+
 
 ;;; standard button widget
 
@@ -1492,8 +1548,8 @@ a list of numbers may be given"
     (pack b5)
     (dotimes (i 100)
       (let ((w (* i 2.8001)))
-	(let ((x (+ 250 (* 150 (sin w))))
-	      (y (+ 200 (* 150 (cos w)))))
+	(let ((x (+ 250 (* 150.0 (sin w))))
+	      (y (+ 200 (* 150.0 (cos w)))))
 	  (push y lines)
 	  (push x lines)
 	)))
