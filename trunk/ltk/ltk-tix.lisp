@@ -14,9 +14,9 @@
 
 (eval-when (:load-toplevel)
   (setf *init-wish-hook* (append *init-wish-hook*
-				 (lambda ()
+				 (list (lambda ()
 				   (send-wish "package require Tix"))
-				 )))
+				       ))))
 
 (defclass balloon (widget)
   ())
