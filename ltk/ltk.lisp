@@ -915,3 +915,17 @@
 			 (lambda ()
 			   (format t "Hello World!~&")))))
      (pack b))))
+
+(defun hello-2()
+  (with-ltk
+   (let* ((f (make-frame nil))
+	  (b1 (make-button f "Button 1"
+			   (lambda () (format t "Button1~&"))))
+	  (b2 (make-button f "Button 2"
+			   (lambda () (format t "Button2~&")))))
+     (pack f)
+     (pack b1)
+     (pack b2)
+     (configure f "borderwidth" 3)
+     (configure f "relief" "sunken")
+     )))
