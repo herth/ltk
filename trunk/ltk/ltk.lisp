@@ -184,6 +184,7 @@ toplevel             x
 	   "EVENT-Y"
 	   "EVENT-KEYCODE"
 	   "EVENT-CHAR"
+	   "EVENT-MOUSE-BUTTON"
 	   "EVENT-ROOT-X"
 	   "EVENT-ROOT-Y"
 	   "FOCUS"
@@ -194,6 +195,8 @@ toplevel             x
 	   "GEOMETRY"
 	   "GET-OPEN-FILE"
 	   "GET-SAVE-FILE"
+	   "GRAB"
+	   "GRAB-RELEASE"
 	   "GRID"
 	   "GRID-COLUMNCONFIGURE"
 	   "GRID-CONFIGURE"
@@ -202,10 +205,12 @@ toplevel             x
 	   "ICONWINDOW"
 	   "IMAGE-LOAD"
 	   "IMAGE-SETPIXEL"
+	    "INPUT-BOX"
 	   "INSERT-OBJECT"
 	   "INTERIOR"
 	   "ITEMBIND"
 	   "ITEMCONFIGURE"
+	   "ITEMDELETE"
 	   "ITEMMOVE"
 	   "ITEMLOWER"
 	   "ITEMRAISE"
@@ -214,6 +219,7 @@ toplevel             x
 	   "LISTBOX"
 	   "LISTBOX-APPEND"
 	   "LISTBOX-CLEAR"
+	   "LISTBOX-CONFIGURE"
 	   "LISTBOX-GET-SELECTION"
 	   "LISTBOX-SELECT"
 	   "LOAD-TEXT"
@@ -311,6 +317,10 @@ toplevel             x
 
 (in-package :ltk)
 
+(defun dbg (fmt &rest args)
+  (apply #'format t fmt args)
+  (force-output))
+
 ;communication with wish
 ;;; this ist the only function to adapted to other lisps
 
@@ -361,7 +371,7 @@ toplevel             x
 		   (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* 0.872)
+(defvar *ltk-version* 0.873)
 ;;; global var for holding the communication stream
 (defvar *wish* nil)
 
@@ -473,8 +483,7 @@ toplevel             x
 	  (loop while (not (equal (first d) :data))
 	    do
 	    (setf *event-queue* (append *event-queue* (list d)))
-	    (format t "postponing event: ~a ~%" d)
-	    (force-output)
+	    ;;(format t "postponing event: ~a ~%" d) (force-output)
 	    (setf d (read-wish)))
 					;(format t "readdata: ~s~%" d) (force-output)
 	  (second d))
@@ -496,14 +505,15 @@ toplevel             x
 	(force-output)
 	(setf pos (position char txt :start (+ pos (length with)))))))
   txt)
+|#
 
 (defun sanitize (txt)
-  (let ((pos (position #\{ txt)))
+  (let ((pos (search "{" txt)))
     (when pos
-      (setf txt (concatenate 'string (subseq txt 0 pos) "\\" (subseq txt pos)))))
+      (setf txt (concatenate 'string (subseq txt 0 pos) "\\{" (subseq txt (+ pos 1))))))
   txt
   )
-|#
+
 ;;; tcl -> lisp: puts "$x" mit \ und " escaped
 ;;;  puts [regsub {"} [regsub {\\} $x {\\\\}] {\"}]
 
@@ -574,6 +584,120 @@ toplevel             x
 			 (widget-path master)
 		       "")))
     (format nil "~A.~A" master-path name)))
+
+;;; widget class built helper functions
+
+(defparameter *initargs*
+  '(
+#|
+    activebackground 
+    activeforeground 
+    anchor 
+    background 
+    bitmap 
+    borderwidth 
+    command
+    compound 
+    cursor
+    default 
+    disabledforeground 
+    font 
+    foreground 
+    height 
+    highlightbackground
+    highlightcolor 
+    highlightthickness 
+    image 
+    justify 
+    overrelief 
+    padx 
+    pady
+    relief 
+    repeatdelay 
+    repeatinterval 
+    state 
+    takefocus 
+    underline
+    width
+    wraplength
+    |#
+    (anchor :anchor "~@[ -ANCHORrr ~(~a~)~]" "  ")
+    (width :width "~@[ -width ~(~a~)~]" "The width of the widget") 
+    ))
+
+(eval-when (:compile-toplevel)
+ (defparameter *class-args*
+   '()))
+
+(eval-when (:load-toplevel :execute)
+ (defvar *class-args*
+   '()))
+
+(defmacro defargs (class &rest defs)
+  ;;  (format t "~&defargs for ~a:~&" class)
+  (let ((args nil))
+    (loop 
+     while defs
+     do
+     (let ((arg (pop defs)))
+       ;; (format t "arg:~a ~a~&" arg args)
+       (cond
+	((eq arg :inherit)	 
+	 (let* ((inheritedclass (pop defs))
+		(arglist (rest (assoc inheritedclass *class-args*))))
+	   ;;(format t "inheriting: ~a from ~a ~&" arglist inheritedclass) (force-output)
+	   (dolist (arg arglist)
+	     ;;(format t "testing: ~a~&" arg) (force-output)
+	     (unless (member arg args)
+	       ;;(format t "appending ~a" arg)(force-output)
+	       (setf args (append args (list arg)))
+	       ;;(format t " => ~a ~&" args)
+	       ))))
+	((eq arg :delete)
+	 (setf args (delete (pop defs) args)))	    
+	(t
+	 ;;(format t "adding ~a" arg) (force-output)
+	 (setf args (append args (list arg)))
+	 ;;(format t " => ~a ~&" args)
+	 ))))
+    (format t "class: ~a args: ~a~&" class args) (force-output)
+    `(setf *class-args* (append *class-args* '((,class ,@args))))
+    ))
+
+
+(defargs widget 
+  width height
+  activebackground 
+  activeforeground 
+  )
+
+(defargs button :inherit widget anchor)
+(defargs text :inherit widget  :inherit button :delete anchor color)
+
+(defmacro defwidgetinit  (wclass cmd code)
+  (let ((args (rest (assoc wclass *class-args*))))
+    (format t "args; ~a~&" args)
+    (let ((cmdstring (format nil "~a ~~A " cmd)))
+      (when code
+	(setf cmdstring (concatenate 'string cmdstring (first code))))
+      (dolist (arg args)
+	(let ((entry (assoc arg *initargs*)))
+	  (cond
+	   (entry 
+	    (setf cmdstring (concatenate 'string cmdstring (third entry)))
+	    )
+	   (t 
+	    (setf cmdstring (concatenate 'string cmdstring (format nil "~~@[ -~(~a~) ~~(~~A~~)~~]" arg)))))	
+	  ))
+      `(defmethod initialize-instance :after ((widget ,wclass) &key ,@args)
+	 (format-wish ,cmdstring (widget-path widget) ,@(rest code) ,@args))
+      )
+    )
+  )
+
+;(macroexpand-1 '(ltk::defwidgetinit button "button" ("-command {callback ~A} " (name bt))  (append *button-args* (list padx pady))))
+
+
 
 ;;; the library implementation 
 
@@ -692,6 +816,9 @@ toplevel             x
 		 (widget-path w) event append name)
 ))
 
+
+
+
 (defmethod bind (s event fun &key append)
   "bind fun to event within context indicated by string ie. 'all' or 'Button'"
   (let ((name (create-name)))
@@ -778,8 +905,12 @@ toplevel             x
   (format-wish "menu ~A -tearoff 0" (widget-path m))
   (when (master m) (format-wish "~A add cascade -label {~A} -menu ~a~@[ -underline ~a ~]" (widget-path (master m)) (text m) (widget-path m) underline)))
 
-(defun make-menu(menu text &key underline)
-  (make-instance 'menu :master menu :text text :underline underline))
+(defun make-menu(menu text &key underline name)
+  (if name
+      (make-instance 'menu :master menu :text text :underline underline :name name)
+    (make-instance 'menu :master menu :text text :underline underline)))
+
+
 
 (defun add-separator (menu)
    (format-wish "~A add separator" (widget-path menu)))
@@ -1040,8 +1171,11 @@ toplevel             x
 
 (defgeneric listbox-get-selection (l))
 (defmethod listbox-get-selection ((l listbox))
-  (format-wish "puts -nonewline {(};puts -nonewline [~a curselection];puts {)};flush stdout" (widget-path l))
-  (read *wish*))
+  (format-wish "senddata \"([~a curselection])\"" (widget-path l))
+  (read-data))
+
+;  (format-wish "puts -nonewline {(};puts -nonewline [~a curselection];puts {)};flush stdout" (widget-path l))
+;  (read *wish*))
 
 (defgeneric listbox-select (l val))
 (defmethod listbox-select ((l listbox) val)
@@ -1058,6 +1192,13 @@ a list of numbers may be given"
 
 (defmethod listbox-clear ((l listbox))
   (format-wish "~a delete 0 end" (widget-path l)))
+
+
+(defgeneric listbox-configure (l i &rest options))
+(defmethod listbox-configure ((l listbox) index &rest options)
+  (format-wish "~a itemconfigure ~a ~{ -~(~a~) {~(~a~)}~}" (widget-path l) index options)
+  )
+
 
 (defclass scrolled-listbox (frame)
   ((listbox :accessor listbox)
@@ -1366,7 +1507,11 @@ set y [winfo y ~a]
   "bind fun to event of the widget w"
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "~a bind ~a ~a {sendevent ~A %x %y %k %K %w %h}" (widget-path canvas) item event name)))
+    (format-wish "~a bind ~a ~a {sendevent ~A %x %y %k %K %w %h %X %Y %b}" (widget-path canvas) item event name)))
+
+(defmethod bind ((w canvas-item) event fun &key append)
+  (declare (ignore append))
+  (itembind (canvas w) (handle w) event fun))
 
 (defgeneric scrollregion (canvas x0 y0 x1 y1))
 (defmethod scrollregion ((c canvas) x0 y0 x1 y1)
@@ -1379,6 +1524,10 @@ set y [winfo y ~a]
 (defgeneric itemmove (canvas item dx dy))
 (defmethod itemmove ((canvas canvas) item dx dy)
   (format-wish "~a move ~a ~a ~a" (widget-path canvas) item dx dy))
+
+(defgeneric itemdelete (canvas item))
+(defmethod itemdelete ((canvas canvas) item)
+  (format-wish "~a delete ~a" (widget-path canvas) item))
 
 (defgeneric move (item dx dy))
 (defmethod move ((item canvas-item) dx dy)
@@ -1492,10 +1641,12 @@ set y [winfo y ~a]
   (setf (handle c) (create-arc canvas x0 y0 x1 y1 :start start :extent extent :style style)))
 
 
-(defun create-window (canvas x y widget)
-  (format-wish "senddata [~a create window ~a ~a -anchor nw -window ~a]"
-	       (widget-path canvas) x y (widget-path widget))
+(defun create-window (canvas x y widget &key (anchor :nw))
+  (format-wish "senddata [~a create window ~a ~a -anchor ~(~a~) -window ~a]"
+ 	       (widget-path canvas) x y anchor (widget-path widget))
+
   (read-data))
+
 
 
 (defgeneric set-coords (canvas item coords))
@@ -1596,8 +1747,9 @@ set y [winfo y ~a]
 (defgeneric load-text (txt filename))
 (defmethod load-text((txt text) filename)
   "load the content of the file <filename>"
-  (format-wish "set file [open {~a} \"r\"];~a delete 1.0 end;~a insert end [read $file];close $file;puts \"asdf\"" filename (widget-path txt) (widget-path txt))
-  (read-line *wish*))
+;  (format-wish "set file [open {~a} \"r\"];~a delete 1.0 end;~a insert end [read $file];close $file;puts \"asdf\"" filename (widget-path txt) (widget-path txt))
+  (format-wish "set file [open {~a} \"r\"];~a delete 1.0 end;~a insert end [read $file];close $file;puts \"(:DATA asdf)\"" filename (widget-path txt) (widget-path txt))
+  (read-data))
 
 ;;; photo image object
 
@@ -1775,6 +1927,15 @@ set y [winfo y ~a]
   (itemraise (canvas item) (handle item) (and above (handle above))))
 
 
+;;; grab functions
+
+(defgeneric grab (toplevel))
+(defmethod grab ((toplevel toplevel))
+  (format-wish "grab set ~a" (widget-path toplevel)))
+
+(defgeneric grab-release (toplevel))
+(defmethod grab-release ((toplevel toplevel))
+  (format-wish "grab release ~a" (widget-path toplevel)))
 
 ;;; wm functions
 
@@ -2028,16 +2189,24 @@ set y [winfo y ~a]
 ;;;; the variable *exit-mainloop* is set
 
 (defvar *exit-mainloop* nil)
+(defvar *break-mainloop* nil)
 
+(defun break-mainloop ()
+  (setf *break-mainloop* t))
 (defun mainloop()
   (let ((*exit-mainloop* nil)
+	(*break-mainloop* nil)
 	(*read-eval* nil))    ;;safety against malicious clients
   (loop
     (let* ((l (read-event))) 
-      (when (null l) (return))
-      (if *debug-tk*
-	  (format t "l:~s<=~%" l))
-      (force-output)
+      (when (null l)
+	(close *wish*)
+ 	(setf *wish* nil)
+ 	(return))
+
+      (when *debug-tk*
+	  (format t "l:~s<=~%" l)
+	  (force-output))
       (if (listp l)
 	  (cond ((eq (first l) :callback)
 		 (let ((params (rest l)))
@@ -2056,17 +2225,14 @@ set y [winfo y ~a]
 	  (princ l)
 	  (force-output)
 	  ))
-;      (ignore-errors   (callback (first l) (rest l))	    )
-;      (multiple-value-bind (erg cond)
-;	  (ignore-errors
-	    ;(callback (first l) (rest l))
-;	    t)
-					;(format t "erg:~a cond:~s<=" erg cond)
-;	(if (not erg)
-;	    (format t "error while executing callback:~s~&" cond)))
+      (when *break-mainloop*
+	(return))
       (when *exit-mainloop*
-	(send-wish "exit")
-	(return))))))
+	(when ltk::*wish*
+	  (send-wish "exit")
+	  (close ltk::*wish*)
+	  (setf ltk::*wish* nil)
+	  (return)))))))
 
 ;;; another way to terminate the running app, send exit command to wish
 
@@ -2076,7 +2242,7 @@ set y [winfo y ~a]
 ;;; wrapper macro - initializes everything, calls body and then mainloop
 ;;; since 
 (defmacro with-ltk (&rest body)
-  `(let ((*wish* nil)
+  `(let ((ltk::*wish* nil)
 	 (ltk::*callbacks* (make-hash-table :test #'equal))
 	 (ltk::*counter* 1)
 	 (ltk::*after-counter* 1)
@@ -2084,7 +2250,12 @@ set y [winfo y ~a]
      (start-wish)
     ;(force-focus *tk*)
      ,@body
-     (mainloop)))
+     (unwind-protect 
+	 (mainloop)
+       (when *wish*
+	 (send-wish "exit")
+	 (close *wish*))
+       )))
        
 
 ;;;; testing functions
@@ -2288,3 +2459,47 @@ set y [winfo y ~a]
      (itemconfigure c p2 "fill" "blue")
      (after 100 #'update)
      ))))
+
+(defun input-box (prompt &key (title "Input"))
+  (let* ((*exit-mainloop* nil)
+	 (ok t)
+	 (w (make-instance 'toplevel :title title))
+	 (l (make-instance 'label :master w :text prompt))
+	 (e (make-instance 'entry :master w :width 40))
+	 (f (make-instance 'frame :master w))
+	 (b_ok (make-instance 'button :master f :text "Ok" 
+			      :command (lambda ()
+					 (break-mainloop)
+					 )))
+	 (b_cancel (make-instance 'button :master f :text "Cancel" 
+				  :command (lambda ()
+					     (setf ok nil)
+					     (break-mainloop)
+					     )))
+	 )
+    (pack l :side :top :anchor :w)
+    (pack e :side :top)
+    (pack f :side :top :anchor :e)
+    (pack b_cancel :side :right)
+    (pack b_ok :side :right)
+    (bind w "<Return>" (lambda (event)
+			 (declare (ignore event))
+			 (break-mainloop)))
+    (focus e)
+    (grab w)
+    (mainloop)
+    (grab-release w)
+    (withdraw w)
+    (and ok
+	 (text e))
+    ))
+(defun modal-test ()
+  (with-ltk
+   (let* ((b (make-instance 'button :text "Input" 
+			    :command (lambda ()
+				       (let ((erg (input-box "Enter a string:" :title "String input")))
+					 (if erg 
+					     (format t "input was: ~a~%" erg)
+					   (format t "input was cancelled~%"))
+				       (force-output))))))
+     (pack b))))
