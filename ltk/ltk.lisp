@@ -152,8 +152,12 @@ toplevel             x
 	   "CANVAS-TEXT"
 	   "CANVAS-IMAGE"
 	   "CANVAS-ARC"	   
-	   "CHECK-BUTTON"
+	   "CANVASX"	   
+	   "CANVASY"	   
 	   "CGET"
+	   "CHECK-BUTTON"
+	   "CHOOSE-COLOR"
+	   "CHOOSE-DIRECTORY"
 	   "CLEAR-TEXT"
 	   "CLEAR"
 	   "CLIPBOARD-APPEND"
@@ -172,6 +176,7 @@ toplevel             x
 	   "CREATE-RECTANGLE"
 	   "CREATE-TEXT"
 	   "CREATE-WINDOW"
+	   "DEFARGS"
 	   "DEICONIFY"
 	   "DESTROY"
 	   "DO-EXECUTE"
@@ -269,8 +274,10 @@ toplevel             x
 	   "PLACE-FORGET"
 	   "POPUP"
 	   "POSTSCRIPT"
+	   "PROCESS-EVENTS"
 	   "RADIO-BUTTON"
 	   "RAISE"
+	   "READ-EVENT"
 	   "SAVE-TEXT"
 	   "SCALE"
 	   "SCREEN-HEIGHT"
@@ -371,13 +378,15 @@ toplevel             x
 		   (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* 0.873)
+(defvar *ltk-version* 0.876)
 ;;; global var for holding the communication stream
 (defvar *wish* nil)
 
 ;;; verbosity of debug messages, if true, then all communication
 ;;; with tk is echoed to stdout
 (defvar *debug-tk* t)
+
+(defvar *trace-tk* t)
 
 (defvar *wish-pathname*
   #+freebsd			"wish8.4"
@@ -399,7 +408,13 @@ toplevel             x
   ;;; proc senddata {s} {puts "(data \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
   (send-wish "proc senddata {s} {puts \"(:data [escape $s])\";flush stdout}")
   (send-wish "proc senddatastring {s} {puts \"(:data \\\"[escape $s]\\\")\";flush stdout} ")
-  
+  (send-wish "proc senddatastrings {strings} {
+                 puts \"(:data (\"
+ 	         foreach s $strings {
+                     puts \"\\\"[escape $s]\\\"\"
+                     }
+                 puts \"))\";flush stdout} ")
+
   ;;; proc sendevent {s} {puts "(event \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
   ;(send-wish "proc sendevent {s x y keycode char width height root_x root_y} {puts \"(:event \\\"$s\\\" $x $y $keycode $char $width $height $root_x $root_y)\"} ")
   (send-wish "proc sendevent {s x y keycode char width height root_x root_y mouse_button} {puts \"(:event \\\"$s\\\" $x $y $keycode $char $width $height $root_x $root_y $mouse_button)\"} ")
@@ -462,19 +477,27 @@ toplevel             x
 
 ;;; read from wish 
 (defun read-wish()
-  (let ((*read-eval* nil))
+  (let ((*read-eval* nil)
+	(*package* (find-package :ltk)))
     (read *wish* nil nil)))
 
 (defvar *event-queue* nil)
 
-(defun read-event ()
-  (let ((pending (pop *event-queue*)))
-    ;(format t "re:pending:~a~%" pending) (force-output)
-    (unless pending
-      (setf pending (read-preserving-whitespace *wish* nil nil)))
-    ;(format t "re:returning:~a~%" pending) (force-output)
-    pending
-    ))
+(defun can-read (stream)
+  (let ((c (read-char-no-hang stream)))
+    (loop 
+     while (and c
+		(member c '(#\Newline #\Return #\Space)))
+     do
+     (setf c (read-char-no-hang stream)))
+    (when c
+      (unread-char c stream)
+      t)))
+
+(defun read-event (&key (blocking t))
+  (or (pop *event-queue*)
+      (when (or blocking (can-read *wish*))
+        (read-preserving-whitespace *wish* nil nil))))
 
 (defun read-data ()
   (let ((d (read-wish)))
@@ -489,6 +512,12 @@ toplevel             x
 	  (second d))
       (format t "read-data:~a~a~%" d (read-all *wish*)))
     ))
+
+
+(defun read-keyword ()
+  (let ((string (read-data)))
+    (when (> (length string) 0)
+      (values (intern (string-upcase string) :keyword)))))
 
 ;;; sanitizing strings: lisp -> tcl (format *wish* "{~a}" string)
 ;;; in string escaped : {} mit \{ bzw \}  und \ mit \\
@@ -626,53 +655,598 @@ toplevel             x
     ))
 
 (eval-when (:compile-toplevel)
- (defparameter *class-args*
+  (defparameter *class-args*
    '()))
 
 (eval-when (:load-toplevel :execute)
- (defvar *class-args*
+ (defparameter *class-args*
    '()))
 
-(defmacro defargs (class &rest defs)
-  ;;  (format t "~&defargs for ~a:~&" class)
-  (let ((args nil))
-    (loop 
-     while defs
-     do
-     (let ((arg (pop defs)))
-       ;; (format t "arg:~a ~a~&" arg args)
-       (cond
-	((eq arg :inherit)	 
-	 (let* ((inheritedclass (pop defs))
-		(arglist (rest (assoc inheritedclass *class-args*))))
-	   ;;(format t "inheriting: ~a from ~a ~&" arglist inheritedclass) (force-output)
-	   (dolist (arg arglist)
-	     ;;(format t "testing: ~a~&" arg) (force-output)
-	     (unless (member arg args)
-	       ;;(format t "appending ~a" arg)(force-output)
-	       (setf args (append args (list arg)))
-	       ;;(format t " => ~a ~&" args)
-	       ))))
-	((eq arg :delete)
-	 (setf args (delete (pop defs) args)))	    
-	(t
-	 ;;(format t "adding ~a" arg) (force-output)
-	 (setf args (append args (list arg)))
-	 ;;(format t " => ~a ~&" args)
-	 ))))
-    (format t "class: ~a args: ~a~&" class args) (force-output)
-    `(setf *class-args* (append *class-args* '((,class ,@args))))
-    ))
-
-
-(defargs widget 
-  width height
-  activebackground 
-  activeforeground 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+ 
+  (defun build-args (class parents defs)
+    (format t  "class ~s parents ~s defs ~s~%" class parents defs) (force-output)
+    (let ((args nil))
+      (dolist (p parents)
+	(let ((arglist (rest (assoc p *class-args*))))
+	  (format t "parent: ~s arglist: ~s~%" p arglist) (force-output)
+	  (dolist (arg arglist)
+	    (unless (member arg args)
+	      (setf args (append args (list arg)))))))
+      (loop 
+       while defs
+       do
+       (let ((arg (pop defs)))
+	 (cond
+	  ((eq arg :inherit)	 
+	   (let* ((inheritedclass (pop defs))
+		  (arglist (rest (assoc inheritedclass *class-args*))))
+	     (dolist (arg arglist)
+	       (unless (member arg args)
+		 (setf args (append args (list arg)))
+		 ))))
+	  ((eq arg :delete)
+	   (setf args (delete (pop defs) args)))	    
+	  (t
+	   (setf args (append args (list arg)))))))
+      (format t "class: ~a args: ~a~&" class args) (force-output)
+      args
+      ))
   )
 
-(defargs button :inherit widget anchor)
-(defargs text :inherit widget  :inherit button :delete anchor color)
+(defmacro defargs (class parents &rest defs)
+  (let ((args (build-args class parents defs)))
+    (setf *class-args* (append *class-args* (list (cons class args))))
+    `(setf *class-args* (append *class-args* (list '(,class ,@args))))))
+
+(defargs widget () 
+  relief cursor borderwidth background
+)
+
+;(defargs button (widget) anchor)
+;(defargs text (widget button) :delete anchor color)
+
+(defargs button (widget) 
+  activeBackground
+  activeForeground
+  anchor
+  bitmap
+  command
+  compound
+  default
+  disabledForeground
+  font
+  foreground
+  height
+  highlightBackground
+  highlightColor
+  highlightThickness
+  image
+  justify
+  overRelief
+  padX
+  padY
+  repeatDelay
+  repeatInterval
+  state
+  takeFocus
+  text
+  textVariable
+  underline
+  width
+  wrapLength
+  )
+
+(defargs canvas ()
+  background
+  borderWidth
+  background
+  borderWidth
+  closeEnough
+  confine
+  cursor
+  height
+  highlightBackground
+  highlightColor
+  highlightThickness
+  insertBackground
+  insertBorderWidth
+  insertOffTime
+  insertOnTime
+  insertWidth
+  offset
+  relief
+  scrollRegion
+  selectBackground
+  selectBorderWidth
+  selectForeground
+  state
+  takeFocus
+  width
+  xScrollCommand
+  xScrollIncrement
+  yScrollCommand
+  yScrollIncrement
+  )
+	
+(defargs checkbutton ()
+  activeBackground
+  activeForeground
+  anchor
+  background
+  bitmap
+  borderWidth
+  command
+  compound
+  cursor
+  disabledForeground
+  font
+  foreground
+  height
+  highlightBackground
+  highlightColor
+  highlightThickness
+  image
+  indicatorOn
+  justify
+  offRelief
+  offValue
+  onValue
+  overRelief
+  padX
+  padY
+  relief
+  selectColor
+  selectImage
+  state
+  takeFocus
+  text
+  textVariable
+  underline
+  variable
+  width
+  wrapLength
+  )
+(defargs entry ()
+  background
+  borderWidth
+  cursor
+  disabledBackground
+  disabledForeground
+  exportSelection
+  font
+  foreground
+  highlightBackground
+  highlightColor
+  highlightThickness
+  insertBackground
+  insertBorderWidth
+  insertOffTime
+  insertOnTime
+  insertWidth
+  invalidCommand
+  justify
+  readonlyBackground
+  relief
+  selectBackground
+  selectBorderWidth
+  selectForeground
+  show
+  state
+  takeFocus
+  textVariable
+  validate
+  validateCommand
+  width
+  xScrollCommand
+  )
+(defargs frame ()
+  borderWidth
+  class
+  relief
+  background
+  colormap
+  container
+  cursor
+  height
+  highlightBackground
+  highlightColor
+  highlightThickness
+  padX
+  padY
+  takeFocus
+  visual
+  width
+  )
+(defargs label ()
+  activeBackground
+  activeForeground
+  anchor
+  background
+  bitmap
+  borderWidth
+  compound
+  cursor
+  disabledForeground
+  font
+  foreground
+  height
+  highlightBackground
+  highlightColor
+  highlightThickness
+  image
+  justify
+  padX
+  padY
+  relief
+  state
+  takeFocus
+  text
+  textVariable
+  underline
+  width
+  wrapLength
+  )
+(defargs labelframe ()
+  borderWidth
+  class
+  font
+  foreground
+  labelAnchor
+  labelWidget
+  relief
+  text
+  background
+  colormap
+  container
+  cursor
+  height
+  highlightBackground
+  highlightColor
+  highlightThickness
+  padX
+  padY
+  takeFocus
+  visual
+  width
+  )
+(defargs listbox ()
+  activeStyle
+  background
+  borderWidth
+  cursor
+  disabledForeground
+  exportSelection
+  font
+  foreground
+  height
+  highlightBackground
+  highlightColor
+  highlightThickness
+  relief
+  selectBackground
+  selectBorderWidth
+  selectForeground
+  selectMode
+  setGrid
+  state
+  takeFocus
+  width
+  xScrollCommand
+  yScrollCommand
+  listVariable
+  )
+(defargs menu ()
+  activeBackground
+  activeBorderWidth
+  activeForeground
+  background
+  borderWidth
+  cursor
+  disabledForeground
+  font
+  foreground
+  postCommand
+  relief
+  selectColor
+  takeFocus
+  tearOff
+  tearOffCommand
+  title
+  type
+  )
+(defargs menubutton ()
+  activeBackground
+  activeForeground
+  anchor
+  background
+  bitmap
+  borderWidth
+  cursor
+  direction
+  disabledForeground
+  font
+  foreground
+  height
+  highlightBackground
+  highlightColor
+  highlightThickness
+  image
+  indicatorOn
+  justify
+  menu
+  padX
+  padY
+  relief
+  compound
+  state
+  takeFocus
+  text
+  textVariable
+  underline
+  width
+  wrapLength
+  )
+(defargs message ()
+  anchor
+  aspect
+  background
+  borderWidth
+  cursor
+  font
+  foreground
+  highlightBackground
+  highlightColor
+  highlightThickness
+  justify
+  padX
+  padY
+  relief
+  takeFocus
+  text
+  textVariable
+  width
+  )
+(defargs panedwindow ()
+  background
+  borderWidth
+  cursor
+  handlePad
+  handleSize
+  height
+  opaqueResize
+  orient
+  relief
+  sashCursor
+  sashPad
+  sashRelief
+  sashWidth
+  showHandle
+  width
+  )
+(defargs radiobutton ()
+  activeBackground
+  activeForeground
+  anchor
+  background
+  bitmap
+  borderWidth
+  command
+  compound
+  cursor
+  disabledForeground
+  font
+  foreground
+  height
+  highlightBackground
+  highlightColor
+  highlightThickness
+  image
+  indicatorOn
+  justify
+  offRelief
+  overRelief
+  padX
+  padY
+  relief
+  selectColor
+  selectImage
+  state
+  takeFocus
+  text
+  textVariable
+  underline
+  value
+  variable
+  width
+  wrapLength
+  )
+(defargs scale ()
+  activeBackground
+  background
+  bigIncrement
+  borderWidth
+  command
+  cursor
+  digits
+  font
+  foreground
+  from
+  highlightBackground
+  highlightColor
+  highlightThickness
+  label
+  length
+  orient
+  relief
+  repeatDelay
+  repeatInterval
+  resolution
+  showValue
+  sliderLength
+  sliderRelief
+  state
+  takeFocus
+  tickInterval
+  to
+  troughColor
+  variable
+  width
+  )
+(defargs scrollbar ()
+  activeBackground
+  activeRelief
+  background
+  borderWidth
+  background
+  borderWidth
+  command
+  cursor
+  elementBorderWidth
+  highlightBackground
+  highlightColor
+  highlightThickness
+  jump
+  orient
+  relief
+  repeatDelay
+  repeatInterval
+  takeFocus
+  troughColor
+  width
+  )
+(defargs spinbox ()
+  activeBackground
+  background
+  borderWidth
+  Button.background
+  Button.cursor
+  Button.relief
+  Button.relief
+  command
+  cursor
+  disabledBackground
+  disabledForeground
+  exportSelection
+  font
+  foreground
+  format
+  from
+  highlightBackground
+  highlightColor
+  highlightThickness
+  increment
+  insertBackground
+  insertBorderWidth
+  insertOffTime
+  insertOnTime
+  insertWidth
+  invalidCommand
+  justify
+  relief
+  readonlyBackground
+  repeatDelay
+  repeatInterval
+  selectBackground
+  selectBorderWidth
+  selectForeground
+  state
+  takeFocus
+  textVariable
+  to
+  validate
+  validateCommand
+  values
+  width
+  wrap
+  xScrollCommand
+  )
+(defargs text ()
+  autoSeparators
+  background
+  borderWidth
+  background
+  borderWidth
+  cursor
+  exportSelection
+  foreground
+  font
+  foreground
+  height
+  highlightBackground
+  highlightColor
+  highlightThickness
+  insertBackground
+  insertBorderWidth
+  insertOffTime
+  insertOnTime
+  insertWidth
+  maxUndo
+  padX
+  padY
+  relief
+  selectBackground
+  selectBorderWidth
+  selectForeground
+  setGrid
+  spacing1
+  spacing2
+  spacing3
+  state
+  tabs
+  takeFocus
+  undo
+  width
+  wrap
+  xScrollCommand
+  yScrollCommand
+  )
+(defargs toplevel ()
+  borderWidth
+  class
+  menu
+  relief
+  screen
+  use
+  background
+  colormap
+  container
+  cursor
+  height
+  highlightBackground
+  highlightColor
+  highlightThickness
+  padX
+  padY
+  takeFocus
+  visual
+  width
+  )
+
+
+
+(defmacro defwidget (class parents slots cmd &rest code)
+  (let ((args (rest (assoc class *class-args*))))
+    (format t "args; ~a~&" args)
+    (let ((cmdstring (format nil "~a ~~A " cmd)))
+      (dolist (arg args)
+	(let ((entry (assoc arg *initargs*)))
+	  (cond
+	   (entry 
+	    (setf cmdstring (concatenate 'string cmdstring (third entry)))
+	    )
+	   (t 
+	    (setf cmdstring (concatenate 'string cmdstring (format nil "~~@[ -~(~a~) ~~(~~A~~)~~]" arg)))))	
+	  ))
+      `(progn
+	 (defclass ,class (,@parents)
+	   ,slots
+	    )
+	 (defmethod initialize-instance :after ((widget ,class) &key ,@args)
+	   (format-wish ,cmdstring (widget-path widget) ,@(rest code) ,@args))
+	 ))))
+
+
 
 (defmacro defwidgetinit  (wclass cmd code)
   (let ((args (rest (assoc wclass *class-args*))))
@@ -690,14 +1264,14 @@ toplevel             x
 	    (setf cmdstring (concatenate 'string cmdstring (format nil "~~@[ -~(~a~) ~~(~~A~~)~~]" arg)))))	
 	  ))
       `(defmethod initialize-instance :after ((widget ,wclass) &key ,@args)
-	 (format-wish ,cmdstring (widget-path widget) ,@(rest code) ,@args))
+	 (format-wish ,cmdstring (widget-path widget) ,@(rest code) ,@args)
+	 ;;(format-wish ,cmdstring (widget-path widget) ,@args)
+	 ;; ,@code
+	 )
+
       )
     )
   )
-
-;(macroexpand-1 '(ltk::defwidgetinit button "button" ("-command {callback ~A} " (name bt))  (append *button-args* (list padx pady))))
-
-
 
 ;;; the library implementation 
 
@@ -918,7 +1492,7 @@ toplevel             x
 ;;; menu button
 
 (defclass menubutton(widget) 
-  ((text :accessor text :initarg :text)
+  ((text :accessor text :initarg :text :initform "")
    ))
 
 (defmethod initialize-instance :after ((m menubutton) &key command underline accelerator)
@@ -1118,7 +1692,7 @@ toplevel             x
    ))
 
 (defmethod initialize-instance :after ((l labelframe) &key borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness padx pady relief takefocus text background class colormap container height labelanchor labelwidget visual width)  
-  (format-wish "labelframe ~A ~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text {~A}~]~@[ -background ~(~A~)~]~@[ -class ~(~A~)~]~@[ -colormap ~(~A~)~]~@[ -container ~(~A~)~]~@[ -height ~(~A~)~]~@[ -labelanchor ~(~A~)~]~@[ -labelwidget ~(~A~)~]~@[ -visual ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path l) borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness padx pady relief takefocus text background class colormap container height labelanchor labelwidget visual width))
+  (format-wish "labelframe ~A ~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -font {~A}~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text {~A}~]~@[ -background ~(~A~)~]~@[ -class ~(~A~)~]~@[ -colormap ~(~A~)~]~@[ -container ~(~A~)~]~@[ -height ~(~A~)~]~@[ -labelanchor ~(~A~)~]~@[ -labelwidget ~(~A~)~]~@[ -visual ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path l) borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness padx pady relief takefocus text background class colormap container height labelanchor labelwidget visual width))
 
 (defmethod (setf text) :after (val (l labelframe))
   (format-wish "~a configure -text {~a}" (widget-path l) val))
@@ -1263,6 +1837,9 @@ a list of numbers may be given"
 (defmethod append-text ((txt scrolled-text) text &optional (tag nil))
   (format-wish "~a insert end {~a}~@[ ~(~a~)~]" (widget-path (textbox txt)) text tag))
 
+(defmethod (setf text) (new-text (self scrolled-text))
+  (setf (text (textbox self)) new-text))
+
 (defgeneric insert-object (txt object))
 (defmethod insert-object ((txt scrolled-text) obj)
   (format-wish "~a window create end -window ~a" (widget-path (textbox txt)) (widget-path obj)))
@@ -1328,7 +1905,7 @@ a list of numbers may be given"
    ))
 
 (defmethod initialize-instance :after ((l label) &key activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground highlightbackground highlightcolor highlightthickness image justify padx pady relief takefocus text underline wraplength compound height state width)
-  (format-wish "label ~A ~@[ -activebackground ~(~A~)~]~@[ -activeforeground ~(~A~)~]~@[ -anchor ~(~A~)~]~@[ -background ~(~A~)~]~@[ -bitmap ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -image ~(~A~)~]~@[ -justify ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text {~A}~]~@[ -underline ~(~A~)~]~@[ -wraplength ~(~A~)~]~@[ -compound ~(~A~)~]~@[ -height ~(~A~)~]~@[ -state ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path l) activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground highlightbackground highlightcolor highlightthickness (and image (name image)) justify padx pady relief takefocus text underline wraplength compound height state width))
+  (format-wish "label ~A ~@[ -activebackground ~(~A~)~]~@[ -activeforeground ~(~A~)~]~@[ -anchor ~(~A~)~]~@[ -background ~(~A~)~]~@[ -bitmap ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -font {~A}~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -image ~(~A~)~]~@[ -justify ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text {~A}~]~@[ -underline ~(~A~)~]~@[ -wraplength ~(~A~)~]~@[ -compound ~(~A~)~]~@[ -height ~(~A~)~]~@[ -state ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path l) activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground highlightbackground highlightcolor highlightthickness (and image (name image)) justify padx pady relief takefocus text underline wraplength compound height state width))
 
 (defun make-label (master text)
   (make-instance 'label :master master  :text text))
@@ -1501,9 +2078,62 @@ set y [winfo y ~a]
 (defun make-canvas (master &key (width nil) (height nil) (xscroll nil) (yscroll nil))
   (make-instance 'canvas :master master :width width :height height :xscroll xscroll :yscroll yscroll))
 
+(defgeneric set-coords (canvas item coords))
+
+(defmethod set-coords (canvas item coords)
+  (format-wish "~a coords ~a~{ ~a~}" (widget-path canvas) item coords))
+
+(defmethod set-coords ((canvas canvas) (item canvas-item) (coords list))
+  (set-coords canvas (handle item) coords))
+
+(defgeneric set-coords* (canvas item &rest coords))
+
+(defmethod set-coords* (canvas item &rest coords)
+  (funcall #'set-coords canvas item coords))
+
+(defmethod set-coords* ((canvas canvas) (item canvas-item) &rest coords)
+  (funcall #'set-coords canvas (handle item) coords))
+
+(defgeneric coords (item))
+(defmethod coords ((item canvas-item))
+     (list 0 0)				; not implemented yet
+     )
+ 
+(defun format-number (stream number)
+  (cond
+   ((complexp number)
+    (format-number stream (realpart number))
+    (format-number stream (imagpart number)))
+   ((integerp number)
+    (format stream " ~d" number))	    
+   ((typep number 'single-float)
+    (format stream " ~a" number))
+   ((numberp number)
+    (format-number stream (coerce number 'single-float)))
+   ((null number)
+    )
+   ((listp number)
+    (format-number stream (car number))
+    (format-number stream (cdr number)))
+   ((arrayp number)
+    (dotimes (i (length number))
+      (format-number stream (aref number i))))
+   ))
+ 
+(defun process-coords (input)
+  (with-output-to-string (s)
+			 (format-number s input)))
+ 
+(defmethod (setf coords) (val (item canvas-item))
+  (let ((coord-list (process-coords val)))
+    (format-wish "~a coords ~a ~a" (widget-path (canvas item)) (handle item) coord-list)
+    ))
 
 (defgeneric itembind (canvas w event fun))
-(defmethod itembind ((canvas canvas) item event fun)
+(defmethod itembind ((canvas canvas) (item canvas-item) event fun)
+  (itembind canvas (handle item) event fun))
+
+(defmethod itembind ((canvas canvas) (item integer) event fun)
   "bind fun to event of the widget w"
   (let ((name (create-name)))
     (add-callback name fun)
@@ -1521,13 +2151,28 @@ set y [winfo y ~a]
   (setf (scrollregion-y1 c) y1)
   (configure c :scrollregion (format nil "~a ~a ~a ~a" x0 y0 x1 y1)))
 
+
+(defgeneric canvasx (canvas screenx))
+(defmethod canvasx ((canvas canvas) screenx)
+  (format-wish "senddata [~a canvasx ~a]" (widget-path canvas) screenx)
+  (read-data))
+
+(defgeneric canvasy (canvas screeny))
+(defmethod canvasy ((canvas canvas) screeny)
+  (format-wish "senddata [~a canvasy ~a]" (widget-path canvas) screeny)
+  (read-data))
+
 (defgeneric itemmove (canvas item dx dy))
-(defmethod itemmove ((canvas canvas) item dx dy)
+(defmethod itemmove ((canvas canvas) (item integer) dx dy)
   (format-wish "~a move ~a ~a ~a" (widget-path canvas) item dx dy))
+(defmethod itemmove ((canvas canvas) (item canvas-item) dx dy)
+  (itemmove (canvas item) (handle item) dx dy))
 
 (defgeneric itemdelete (canvas item))
-(defmethod itemdelete ((canvas canvas) item)
+(defmethod itemdelete ((canvas canvas) (item integer))
   (format-wish "~a delete ~a" (widget-path canvas) item))
+(defmethod itemdelete ((canvas canvas) (item canvas-item))
+  (format-wish "~a delete ~a" (widget-path canvas) (handle item)))
 
 (defgeneric move (item dx dy))
 (defmethod move ((item canvas-item) dx dy)
@@ -1647,36 +2292,17 @@ set y [winfo y ~a]
 
   (read-data))
 
-
-
-(defgeneric set-coords (canvas item coords))
-
-(defmethod set-coords (canvas item coords)
-  (format-wish "~a coords ~a~{ ~a~}" (widget-path canvas) item coords))
-
-(defmethod set-coords ((canvas canvas) (item canvas-item) (coords list))
-  (set-coords canvas (handle item) coords))
-
-(defgeneric set-coords* (canvas item &rest coords))
-
-(defmethod set-coords* (canvas item &rest coords)
-  (funcall #'set-coords canvas item coords))
-
-(defmethod set-coords* ((canvas canvas) (item canvas-item) &rest coords)
-  (funcall #'set-coords canvas (handle item) coords))
-
-
-
-(defun postscript (canvas filename)
+(defun postscript (canvas filename &key rotate pageheight pagewidth)
   (if (and (scrollregion-x0 canvas)
 	   (scrollregion-x1 canvas)
 	   (scrollregion-y0 canvas)
 	   (scrollregion-y1 canvas))
-      (format-wish "~a postscript -file ~a -x ~a -y ~a -width ~a -height ~a"
+      (format-wish "~a postscript -file ~a -x ~a -y ~a -width ~a -height ~a~@[ -rotate ~a~]~@[ -pagewidth ~a~]~@[ -pageheight ~a~]"
 		(widget-path canvas) filename
 		(scrollregion-x0 canvas) (scrollregion-y0 canvas)
 		(- (scrollregion-x1 canvas) (scrollregion-x0 canvas))
 		(- (scrollregion-y1 canvas) (scrollregion-y0 canvas))
+		rotate pageheight pagewidth
 		)
     (format-wish "~a postscript -file ~a" (widget-path canvas) filename)))
 
@@ -1956,7 +2582,7 @@ set y [winfo y ~a]
   (format-wish "wm withdraw ~a" (widget-path tl)))
 
 (defgeneric normalize (toplevel))
-(defmethod normalize ((tl toplevel))
+(defmethod normalize ((tl widget))
   (format-wish "wm state ~a normal" (widget-path tl)))
 
 (defgeneric iconify (toplevel))
@@ -2076,33 +2702,50 @@ set y [winfo y ~a]
 
 ;;; Dialog functions
 
-(defun get-open-file(&optional (options '(("All Files" "*"))))
-  (let ((files (make-array '(0) :element-type 'base-char
-                             :fill-pointer 0 :adjustable t)))
-    (with-output-to-string
-      (s files)
-      (format s "{")
-      (dolist (type options)
-	(let ((name (first type))
-	      (wildcard (second type)))
-	  (format s "{{~a} {~a}} " name wildcard)))
-      (format s "}"))
-    (format-wish "senddatastring [tk_getOpenFile -filetypes ~a]"  files)
+(defun choose-color (&key parent title initialcolor )
+  (format-wish "senddatastring [tk_chooseColor ~@[ -parent ~A~]~@[ -title {~A}~]~@[ -initialcolor {~A}~]]" (when parent (widget-path parent)) title initialcolor)
+  (read-data))
+
+(defun get-open-file (&key (filetypes '(("All Files" "*")))
+			   (initialdir (namestring *default-pathname-defaults*))
+			   multiple parent title)
+  (let ((files
+        (with-output-to-string (s)
+          (format s "{")
+          (dolist (type filetypes)
+            (let ((name (first type))
+                  (wildcard (second type)))
+              (format s "{{~a} {~a}} " name wildcard)))
+          (format s "}"))))
+    (if multiple
+	(format-wish "senddatastrings [tk_getOpenFile ~
+                      -filetypes ~a ~@[ -initialdir {~a}~] -multiple 1 ~
+                      ~@[ -parent ~a~] ~@[ -title {~a}~]]"
+		      files initialdir 
+		      (and parent (widget-path parent)) title)
+	(format-wish "senddatastring [tk_getOpenFile ~
+                      -filetypes ~a ~@[ -initialdir {~a}~]  ~
+                      ~@[ -parent ~a~] ~@[ -title {~a}~]]"
+		      files initialdir 
+		      (and parent (widget-path parent)) title))
     (read-data)))
 
-(defun get-save-file(&optional (options '(("All Files" "*"))))
-  (let ((files (make-array '(0) :element-type 'base-char
-                             :fill-pointer 0 :adjustable t)))
-    (with-output-to-string
-      (s files)
-      (format s "{")
-      (dolist (type options)
-	(let ((name (first type))
-	      (wildcard (second type)))
-	  (format s "{{~a} {~a}} " name wildcard)))
-      (format s "}"))
-    (format-wish "senddatastring [tk_getSaveFile -filetypes ~a]"  files)
+(defun get-save-file (&key (filetypes '(("All Files" "*"))))
+  (let ((files
+        (with-output-to-string (s)
+          (format s "{")
+          (dolist (type filetypes)
+            (let ((name (first type))
+                  (wildcard (second type)))
+              (format s "{{~a} {~a}} " name wildcard)))
+          (format s "}"))))
+    (format-wish "senddatastring [tk_getSaveFile -filetypes ~a]" files)
     (read-data)))
+
+(defun choose-directory (&key (initialdir (namestring *default-pathname-defaults*))
+			      parent title mustexist)
+  (format-wish "senddatastring [tk_chooseDirectory ~@[ -initialdir {~a}~]~@[ -parent ~a~]~@[ -title {~a}~]~@[ -mustexist ~a~]]" initialdir (and parent (widget-path parent)) title (and mustexist 1))
+  (read-data))
 
 (defvar *mb-icons* (list "error" "info" "question" "warning")
   "icon names valid for message-box function")
@@ -2110,8 +2753,9 @@ set y [winfo y ~a]
 ;;; see make-string-output-string/get-output-stream-string
 (defun message-box (message title type icon)
   ;;; tk_messageBox function
-  (format-wish "senddata [tk_messageBox -message {~a} -title {~a} -type {~a} -icon {~a}]" message title type icon)
-  (read-data))
+  (format-wish "senddatastring [tk_messageBox -message {~a} -title {~a} -type {~a} -icon {~a}]" message title type icon)
+  (read-keyword))
+
 
 (defun ask-yesno(message &optional (title ""))
   (equal (message-box message title "yesno" "question") "yes"))
@@ -2185,6 +2829,75 @@ set y [winfo y ~a]
   (send-wish (format nil ". configure -menu .menubar"))
   )  
 
+
+;;;; Visual error handlers
+
+(defun error-popup (message title icon)
+  (ecase (message-box message title
+                     (if (find-restart 'continue)
+                         :yesno
+                         :ok)
+                     icon)
+    (:yes (continue))
+    ((:ok :no) (abort))))
+
+(defun debug-popup (condition title)
+  (ecase (message-box (format nil "~A~%~%Do you wish to invoke the debugger?"
+			      condition)
+		      title :yesno :question)
+    (:yes (invoke-debugger condition))
+    (:no (abort))))
+
+(defun show-error (error)
+  (error-popup (format nil "~A~@[~%~%~A?~]" error (find-restart 'continue))
+	       "Error" :error))
+
+(defun note-error (error)
+  (declare (ignore error))
+  (error-popup "An internal error has occured." "Error" :error))
+
+(defun debug-error (error)
+  (debug-popup error "Error"))
+
+(defun show-warning (warn)
+  (error-popup (princ-to-string warn) "Warning" :warning))
+
+(defun debug-warning (warn)
+  (debug-popup warn "Warning"))
+
+(defun trivial-debugger (condition hook)
+  (declare (ignore hook))
+  (format *error-output* "~&An error of type ~A has occured: ~A~%"
+	  (type-of condition) condition)
+  #+sbcl (progn (sb-debug:backtrace most-positive-fixnum *error-output*)
+		(quit))
+  #+cmu (progn (debug:backtrace most-positive-fixnum *error-output*)
+	       (quit)))
+
+(defmacro with-ltk-handlers ((&rest keys) &body body)
+  `(call-with-ltk-handlers (lambda () ,@body) ,@keys))
+
+(defun call-with-ltk-handlers (thunk &key handle-errors handle-warnings (debugger t))
+  (labels ((nothing (e) (declare (ignore e)) nil))
+    (multiple-value-bind (simple-error error)
+	(ecase handle-errors
+	  ((t) (values #'show-error #'note-error))
+	  (:simple (values #'show-error #'nothing))
+	  (:debug (values #'nothing #'debug-error))
+	  ((nil) (values #'nothing #'nothing)))
+      (let ((warning (ecase handle-warnings
+		       ((t) #'show-warning)
+		       (:debug #'debug-warning)
+		       ((nil) #'nothing)))
+	    (*debugger-hook* (ecase debugger
+			       ((t) *debugger-hook*)
+			       ((nil) #'trivial-debugger))))
+	(handler-bind ((simple-error simple-error)
+		       (error error)
+		       (warning warning))
+		      (funcall thunk))))))
+
+
 ;;;; main event loop, runs until stream is closed by wish (wish exited) or
 ;;;; the variable *exit-mainloop* is set
 
@@ -2193,46 +2906,65 @@ set y [winfo y ~a]
 
 (defun break-mainloop ()
   (setf *break-mainloop* t))
-(defun mainloop()
+
+(defun process-one-event (event)
+  (when event
+    (when *debug-tk*
+      (format *trace-output* "l:~s<=~%" event)
+      (force-output *trace-output*))
+    (cond
+     ((and (not (listp event))
+           *trace-tk*)
+      (princ event *trace-output*)
+      (finish-output *trace-output*))
+     ((not (listp event)) nil)
+     ((eq (first event) :callback)
+      (let ((params (rest event)))
+        (callback (first params) (rest params))))
+     ((eq (first event) :event)
+      (let* ((params (rest event))
+             (callback (first params))
+             (evp (rest params))
+             (event (construct-tk-event evp)))
+        (callback callback (list event))))
+     (t (callback (first event) (rest event))))))
+
+(defun process-events ()
+  "A function to temporarliy yield control to wish so that pending
+events can be processed, useful in long loops or loops that depend on
+tk input to terminate"
+  (let (event)
+    (loop 
+     while (setf event (read-event :blocking nil))
+     do
+     (process-one-event event))))
+
+(defun mainloop (&rest keys &key handle-errors handle-warnings debugger)
+  (declare (ignore handle-errors handle-warnings debugger))
+
   (let ((*exit-mainloop* nil)
 	(*break-mainloop* nil)
-	(*read-eval* nil))    ;;safety against malicious clients
-  (loop
-    (let* ((l (read-event))) 
-      (when (null l)
-	(close *wish*)
- 	(setf *wish* nil)
- 	(return))
+	(*read-eval* nil)) ;;safety against malicious clients
+    (labels ((proc-event ()
+			 (let ((event (read-event)))
+			   (when (null event)
+			     (close *wish*)
+			     (setf *wish* nil)
+			     (return-from mainloop))
+			   (process-one-event event)
+			   (when *break-mainloop*
+			     (return-from mainloop))
+			   (when *exit-mainloop*
+			     (when ltk::*wish*
+			       (send-wish "exit")
+			       (close ltk::*wish*)
+			       (setf ltk::*wish* nil)
+			       (return-from mainloop)))))
+	     (main ()
+		   (loop (restart-case (proc-event)
+				       (abort () :report "Abort handling Tk event")))))
+      (apply #'call-with-ltk-handlers #'main keys))))
 
-      (when *debug-tk*
-	  (format t "l:~s<=~%" l)
-	  (force-output))
-      (if (listp l)
-	  (cond ((eq (first l) :callback)
-		 (let ((params (rest l)))
-					;(format t "Callback received~%") (force-output)
-		   (callback (first params) (rest params))))
-		((eq (first l) :event)
-		 (let* ((params (rest l))
-			(callback (first params))
-			(evp (rest params))
-			(event (construct-tk-event evp)))
-		   (callback callback (list event))
-		   ))
-		(t
-		 (callback (first l) (rest l))))
-	(progn
-	  (princ l)
-	  (force-output)
-	  ))
-      (when *break-mainloop*
-	(return))
-      (when *exit-mainloop*
-	(when ltk::*wish*
-	  (send-wish "exit")
-	  (close ltk::*wish*)
-	  (setf ltk::*wish* nil)
-	  (return)))))))
 
 ;;; another way to terminate the running app, send exit command to wish
 
@@ -2241,20 +2973,24 @@ set y [winfo y ~a]
 
 ;;; wrapper macro - initializes everything, calls body and then mainloop
 ;;; since 
-(defmacro with-ltk (&rest body)
+
+(defmacro with-ltk ((&rest keys &key handle-errors handle-warnings (debugger t))
+		    &body body)
+  (declare (ignore handle-errors handle-warnings debugger))
   `(let ((ltk::*wish* nil)
 	 (ltk::*callbacks* (make-hash-table :test #'equal))
 	 (ltk::*counter* 1)
 	 (ltk::*after-counter* 1)
 	 (ltk::*event-queue* nil))
-     (start-wish)
-    ;(force-focus *tk*)
-     ,@body
      (unwind-protect 
-	 (mainloop)
-       (when *wish*
+         (with-ltk-handlers (,@keys)
+			    (start-wish)
+			    ,@body
+			    (mainloop))
+       (when ltk::*wish*
 	 (send-wish "exit")
-	 (close *wish*))
+	 (close ltk::*wish*)
+	 (setf ltk::*wish* nil))
        )))
        
 
@@ -2266,7 +3002,7 @@ set y [winfo y ~a]
 
 ;;;; default ltk test
 (defun ltktest()
-  (with-ltk
+  (with-ltk ()
       (let* ((bar (make-instance 'frame))
 	     (fr (make-instance 'frame :master bar))
 	     (lr (make-instance 'label :master fr :text "Rotation:"))
@@ -2408,7 +3144,7 @@ set y [winfo y ~a]
 ;;;; the eyes :)
 
 (defun ltk-eyes ()
-  (with-ltk
+  (with-ltk ()
    (let* ((*debug-tk* nil)
 	  (w (screen-width))
 	  (h (screen-height))
@@ -2494,7 +3230,7 @@ set y [winfo y ~a]
 	 (text e))
     ))
 (defun modal-test ()
-  (with-ltk
+  (with-ltk ()
    (let* ((b (make-instance 'button :text "Input" 
 			    :command (lambda ()
 				       (let ((erg (input-box "Enter a string:" :title "String input")))
@@ -2503,3 +3239,4 @@ set y [winfo y ~a]
 					   (format t "input was cancelled~%"))
 				       (force-output))))))
      (pack b))))
+
