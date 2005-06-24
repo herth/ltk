@@ -135,6 +135,7 @@ toplevel             x
 	   "ADD-PANE"
 	   "ADD-SEPARATOR"
 	   "AFTER"
+	   "AFTER-CANCEL"
 	   "AFTER-IDLE"	   
 	   "APPEND-TEXT"
 	   "APPEND-NEWLINE"
@@ -378,7 +379,7 @@ toplevel             x
 		   (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* 0.876)
+(defvar *ltk-version* 0.8761)
 ;;; global var for holding the communication stream
 (defvar *wish* nil)
 
@@ -521,27 +522,23 @@ toplevel             x
 
 ;;; sanitizing strings: lisp -> tcl (format *wish* "{~a}" string)
 ;;; in string escaped : {} mit \{ bzw \}  und \ mit \\
-#|
-(defun replace-char (char with txt)
-  (let ((pos (position char txt)))
+
+(defun replace-char (txt char with)
+  (let ((pos (search char txt)))
     (loop
       while pos
       do
       (progn
-	(format t "txt: ~a -> " txt)
-	(setf txt (concatenate 'string (subseq txt 0 pos) with (subseq txt pos)))
-	(format t " ~a~&" txt)
-	(force-output)
-	(setf pos (position char txt :start (+ pos (length with)))))))
+	(dbg "txt: ~a -> " txt)
+	(setf txt (concatenate 'string (subseq txt 0 pos) with (subseq txt (1+ pos))))
+	(dbg " ~a~&" txt)
+	(setf pos (search char txt :start2 (+ pos (length with)))))))
   txt)
-|#
 
-(defun sanitize (txt)
-  (let ((pos (search "{" txt)))
-    (when pos
-      (setf txt (concatenate 'string (subseq txt 0 pos) "\\{" (subseq txt (+ pos 1))))))
-  txt
-  )
+
+(defun tkescape (txt)
+  (replace-char (replace-char (replace-char (replace-char (replace-char txt "\\" "\\\\") "$" "\\$") "[" "\\[") "]" "\\]") "\"" "\\\""))
+  
 
 ;;; tcl -> lisp: puts "$x" mit \ und " escaped
 ;;;  puts [regsub {"} [regsub {\\} $x {\\\\}] {\"}]
@@ -586,7 +583,8 @@ toplevel             x
 		       (lambda ()
 			 (funcall fun)
 			 (remove-callback name)))
-    (format-wish "after ~a {callback ~A}" time name)))
+    (format-wish "senddatastring [after ~a {callback ~A}]" time name)
+    (read-data)))
 
 (defun after-idle (fun)
  (let ((name (format nil "afteridle~a" (incf *after-counter*))))
@@ -594,7 +592,11 @@ toplevel             x
 		      (lambda ()
 			(funcall fun)
 			(remove-callback name)))
-   (ltk::format-wish "after idle {callback ~A}" name)))
+   (ltk::format-wish "senddatastring [after idle {callback ~A}]" name)
+   (read-data)))
+
+(defun after-cancel (id)
+  (format-wish "after cancel ~a" id))
 
 ;; tool functions used by the objects
 
@@ -618,40 +620,127 @@ toplevel             x
 
 (defparameter *initargs*
   '(
-#|
-    activebackground 
-    activeforeground 
-    anchor 
-    background 
-    bitmap 
-    borderwidth 
-    command
-    compound 
-    cursor
-    default 
-    disabledforeground 
-    font 
-    foreground 
-    height 
-    highlightbackground
-    highlightcolor 
-    highlightthickness 
-    image 
-    justify 
-    overrelief 
-    padx 
-    pady
-    relief 
-    repeatdelay 
-    repeatinterval 
-    state 
-    takefocus 
-    underline
-    width
-    wraplength
-    |#
-    (anchor :anchor "~@[ -ANCHORrr ~(~a~)~]" "  ")
-    (width :width "~@[ -width ~(~a~)~]" "The width of the widget") 
+    (button.background :Button.background "~@[ -Button.background ~(~a~)~]" "" button.background)
+    (Button.cursor :Button.cursor "~@[ -Button.cursor ~(~a~)~]" "" Button.cursor)
+    (Button.relief :Button.relief "~@[ -Button.relief ~(~a~)~]" "" Button.relief)
+    (activeBackground :activeBackground "~@[ -activeBackground ~(~a~)~]" "" activeBackground)
+    (activeBorderWidth :activeBorderWidth "~@[ -activeBorderWidth ~(~a~)~]" "" activeBorderWidth)
+    (activeForeground :activeForeground "~@[ -activeForeground ~(~a~)~]" "" activeForeground)
+    (activeRelief :activeRelief "~@[ -activeRelief ~(~a~)~]" "" activeRelief)
+    (activeStyle :activeStyle "~@[ -activeStyle ~(~a~)~]" "" activeStyle)
+    (anchor :anchor "~@[ -anchor ~(~a~)~]" "" anchor)
+    (aspect :aspect "~@[ -aspect ~(~a~)~]" "" aspect)
+    (autoSeparators :autoSeparators "~@[ -autoSeparators ~(~a~)~]" "" autoSeparators)
+    (background :background "~@[ -background ~(~a~)~]" "" background)
+    (bigIncrement :bigIncrement "~@[ -bigIncrement ~(~a~)~]" "" bigIncrement)
+    (bitmap :bitmap "~@[ -bitmap ~(~a~)~]" "" bitmap)
+    (borderWidth :borderWidth "~@[ -borderWidth ~(~a~)~]" "" borderWidth)
+    (class :class "~@[ -class ~(~a~)~]" "" class)
+    (closeEnough :closeEnough "~@[ -closeEnough ~(~a~)~]" "" closeEnough)
+    (colormap :colormap "~@[ -colormap ~(~a~)~]" "" colormap)
+    (command :command "~@[ -command ~(~a~)~]" "" command)
+    (compound :compound "~@[ -compound ~(~a~)~]" "" compound)
+    (confine :confine "~@[ -confine ~(~a~)~]" "" confine)
+    (container :container "~@[ -container ~(~a~)~]" "" container)
+    (cursor :cursor "~@[ -cursor ~(~a~)~]" "" cursor)
+    (default :default "~@[ -default ~(~a~)~]" "" default)
+    (digits :digits "~@[ -digits ~(~a~)~]" "" digits)
+    (direction :direction "~@[ -direction ~(~a~)~]" "" direction)
+    (disabledBackground :disabledBackground "~@[ -disabledBackground ~(~a~)~]" "" disabledBackground)
+    (elementBorderWidth :elementBorderWidth "~@[ -elementBorderWidth ~(~a~)~]" "" elementBorderWidth)
+    (exportSelection :exportSelection "~@[ -exportSelection ~(~a~)~]" "" exportSelection)
+    (font :font "~@[ -font {~a}~]" "" font)
+    (foreground :foreground "~@[ -foreground ~(~a~)~]" "" foreground)
+    (format :format "~@[ -format ~(~a~)~]" "" format)
+    (from :from "~@[ -from ~(~a~)~]" "" from)
+    (handlePad :handlePad "~@[ -handlePad ~(~a~)~]" "" handlePad)
+    (handleSize :handleSize "~@[ -handleSize ~(~a~)~]" "" handleSize)
+    (height :height "~@[ -height ~(~a~)~]" "" height)
+    (highlightBackground :highlightBackground "~@[ -highlightBackground ~(~a~)~]" "" highlightBackground)
+    (highlightColor :highlightColor "~@[ -highlightColor ~(~a~)~]" "" highlightColor)
+    (highlightThickness :highlightThickness "~@[ -highlightThickness ~(~a~)~]" "" highlightThickness)
+    (image :image "~@[ -image ~(~a~)~]" "" image)
+    (increment :increment "~@[ -increment ~(~a~)~]" "" increment)
+    (indicatorOn :indicatorOn "~@[ -indicatorOn ~(~a~)~]" "" indicatorOn)
+    (insertBackground :insertBackground "~@[ -insertBackground ~(~a~)~]" "" insertBackground)
+    (insertBorderWidth :insertBorderWidth "~@[ -insertBorderWidth ~(~a~)~]" "" insertBorderWidth)
+    (insertOffTime :insertOffTime "~@[ -insertOffTime ~(~a~)~]" "" insertOffTime)
+    (insertOnTime :insertOnTime "~@[ -insertOnTime ~(~a~)~]" "" insertOnTime)
+    (insertWidth :insertWidth "~@[ -insertWidth ~(~a~)~]" "" insertWidth)
+    (invalidCommand :invalidCommand "~@[ -invalidCommand ~(~a~)~]" "" invalidCommand)
+    (jump :jump "~@[ -jump ~(~a~)~]" "" jump)
+    (justify :justify "~@[ -justify ~(~a~)~]" "" justify)
+    (label :label "~@[ -label ~(~a~)~]" "" label)
+    (labelAnchor :labelAnchor "~@[ -labelAnchor ~(~a~)~]" "" labelAnchor)
+    (labelWidget :labelWidget "~@[ -labelWidget ~(~a~)~]" "" labelWidget)
+    (length :length "~@[ -length ~(~a~)~]" "" length)
+    (listVariable :listVariable "~@[ -listVariable ~(~a~)~]" "" listVariable)
+    (maxUndo :maxUndo "~@[ -maxUndo ~(~a~)~]" "" maxUndo)
+    (menu :menu "~@[ -menu ~(~a~)~]" "" menu)
+    (offRelief :offRelief "~@[ -offRelief ~(~a~)~]" "" offRelief)
+    (offValue :offValue "~@[ -offValue ~(~a~)~]" "" offValue)
+    (offset :offset "~@[ -offset ~(~a~)~]" "" offset)
+    (onValue :onValue "~@[ -onValue ~(~a~)~]" "" onValue)
+    (opaqueResize :opaqueResize "~@[ -opaqueResize ~(~a~)~]" "" opaqueResize)
+    (orient :orient "~@[ -orient ~(~a~)~]" "" orient)
+    (overRelief :overRelief "~@[ -overRelief ~(~a~)~]" "" overRelief)
+    (padX :padX "~@[ -padX ~(~a~)~]" "" padX)
+    (padY :padY "~@[ -padY ~(~a~)~]" "" padY)
+    (postCommand :postCommand "~@[ -postCommand ~(~a~)~]" "" postCommand)
+    (readonlyBackground :readonlyBackground "~@[ -readonlyBackground ~(~a~)~]" "" readonlyBackground)
+    (relief :relief "~@[ -relief ~(~a~)~]" "" relief)
+    (repeatDelay :repeatDelay "~@[ -repeatDelay ~(~a~)~]" "" repeatDelay)
+    (repeatInterval :repeatInterval "~@[ -repeatInterval ~(~a~)~]" "" repeatInterval)
+    (resolution :resolution "~@[ -resolution ~(~a~)~]" "" resolution)
+    (sashCursor :sashCursor "~@[ -sashCursor ~(~a~)~]" "" sashCursor)
+    (sashPad :sashPad "~@[ -sashPad ~(~a~)~]" "" sashPad)
+    (sashRelief :sashRelief "~@[ -sashRelief ~(~a~)~]" "" sashRelief)
+    (sashWidth :sashWidth "~@[ -sashWidth ~(~a~)~]" "" sashWidth)
+    (screen :screen "~@[ -screen ~(~a~)~]" "" screen)
+    (scrollRegion :scrollRegion "~@[ -scrollRegion ~(~a~)~]" "" scrollRegion)
+    (selectBackground :selectBackground "~@[ -selectBackground ~(~a~)~]" "" selectBackground)
+    (selectBorderWidth :selectBorderWidth "~@[ -selectBorderWidth ~(~a~)~]" "" selectBorderWidth)
+    (selectColor :selectColor "~@[ -selectColor ~(~a~)~]" "" selectColor)
+    (selectForeground :selectForeground "~@[ -selectForeground ~(~a~)~]" "" selectForeground)
+    (selectImage :selectImage "~@[ -selectImage ~(~a~)~]" "" selectImage)
+    (selectMode :selectMode "~@[ -selectMode ~(~a~)~]" "" selectMode)
+    (setGrid :setGrid "~@[ -setGrid ~(~a~)~]" "" setGrid)
+    (show :show "~@[ -show ~(~a~)~]" "" show)
+    (showHandle :showHandle "~@[ -showHandle ~(~a~)~]" "" showHandle)
+    (showValue :showValue "~@[ -showValue ~(~a~)~]" "" showValue)
+    (sliderLength :sliderLength "~@[ -sliderLength ~(~a~)~]" "" sliderLength)
+    (sliderRelief :sliderRelief "~@[ -sliderRelief ~(~a~)~]" "" sliderRelief)
+    (spacing1 :spacing1 "~@[ -spacing1 ~(~a~)~]" "" spacing1)
+    (spacing2 :spacing2 "~@[ -spacing2 ~(~a~)~]" "" spacing2)
+    (spacing3 :spacing3 "~@[ -spacing3 ~(~a~)~]" "" spacing3)
+    (state :state "~@[ -state ~(~a~)~]" "" state)
+    (tabs :tabs "~@[ -tabs ~(~a~)~]" "" tabs)
+    (takeFocus :takeFocus "~@[ -takeFocus ~(~a~)~]" "" takeFocus)
+    (tearOff :tearOff "~@[ -tearOff ~(~a~)~]" "" tearOff)
+    (tearOffCommand :tearOffCommand "~@[ -tearOffCommand ~(~a~)~]" "" tearOffCommand)
+    (text :text "~@[ -text \"~a\"~]" "" (tkescape text))
+    (textVariable :textVariable "~@[ -textVariable ~(~a~)~]" "" textVariable)
+    (tickInterval :tickInterval "~@[ -tickInterval ~(~a~)~]" "" tickInterval)
+    (title :title "~@[ -title ~(~a~)~]" "" title)
+    (to :to "~@[ -to ~(~a~)~]" "" to)
+    (troughColor :troughColor "~@[ -troughColor ~(~a~)~]" "" troughColor)
+    (type :type "~@[ -type ~(~a~)~]" "" type)
+    (underline :underline "~@[ -underline ~(~a~)~]" "" underline)
+    (undo :undo "~@[ -undo ~(~a~)~]" "" undo)
+    (use :use "~@[ -use ~(~a~)~]" "" use)
+    (validate :validate "~@[ -validate ~(~a~)~]" "" validate)
+    (validateCommand :validateCommand "~@[ -validateCommand ~(~a~)~]" "" validateCommand)
+    (value :value "~@[ -value ~(~a~)~]" "" value)
+    (values :values "~@[ -values ~(~a~)~]" "" values)
+    (variable :variable "~@[ -variable ~(~a~)~]" "" variable)
+    (visual :visual "~@[ -visual ~(~a~)~]" "" visual)
+    (width :width "~@[ -width ~(~a~)~]" "" width)
+    (wrap :wrap "~@[ -wrap ~(~a~)~]" "" wrap)
+    (wrapLength :wrapLength "~@[ -wrapLength ~(~a~)~]" "" wrapLength)
+    (xScrollCommand :xScrollCommand "~@[ -xScrollCommand ~(~a~)~]" "" xScrollCommand)
+    (xScrollIncrement :xScrollIncrement "~@[ -xScrollIncrement ~(~a~)~]" "" xScrollIncrement)
+    (yScrollCommand :yScrollCommand "~@[ -yScrollCommand ~(~a~)~]" "" yScrollCommand)
+    (yScrollIncrement :yScrollIncrement "~@[ -yScrollIncrement ~(~a~)~]" "" yScrollIncrement)
     ))
 
 (eval-when (:compile-toplevel)
@@ -1445,7 +1534,7 @@ toplevel             x
 (defgeneric (setf text) (val variable))
 
 (defmethod (setf text) (val (v tktextvariable))
-  (format-wish "set text_~a {~a}" (name v) val))
+  (format-wish "set text_~a \"~a\"" (name v) (tkescape val)))
 
 ;;; window menu bar
 
@@ -2758,10 +2847,10 @@ set y [winfo y ~a]
 
 
 (defun ask-yesno(message &optional (title ""))
-  (equal (message-box message title "yesno" "question") "yes"))
+  (equal (message-box message title "yesno" "question") :yes))
 
 (defun ask-okcancel(message &optional (title ""))
-  (equal (message-box message title "okcancel" "question") "ok"))
+  (equal (message-box message title "okcancel" "question") :ok))
 
 (defun do-msg(message  &optional (title ""))
   (message-box message title "ok" "info"))
