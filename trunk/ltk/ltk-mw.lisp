@@ -48,10 +48,11 @@ o history-entry
 	   "MENU-ENTRY"
 	   "APPEND-ITEM"
 	   "DELETE-ITEM"
+	   "TREELIST"
 	   ))
 
 (in-package :ltk-mw)
-
+ 
 
 ;;;; mixin class for widget construction
 ;;;; for widgets inheriting from redraw-on-resize the generic function
@@ -209,7 +210,7 @@ o history-entry
 
 
 (defun demo ()
-  (with-ltk
+  (with-ltk ()
    (let* ((status '(("critical" 10 "red")
 		    ("severe"  20 "orange")
 		    ("normal" 50 "darkgreen")
@@ -226,3 +227,71 @@ o history-entry
      (pack f2 :side :top)
      (pack entry :side :left)
      )))
+
+
+;;; tree list widget
+
+
+
+
+(defparameter *tree*
+  '(("BMW"
+     ("3er"
+      ("318")
+      ("320")
+      ("325"))
+     ("5er"
+      ("520")
+      ("530")
+      ("535")
+      ("M5")))
+    ("Mercedes"
+     ("A-Klasse"
+      ("A 160")
+      ("A 180"))
+     ("C-Klasse"
+      ("C 200")
+      ("C 250"))
+     ("S-Klasse"
+      ("400 S")
+      ("500 S")
+      ("600 S")))
+    ("VW"
+     ("Golf"
+      ("TDI")
+      ("GTI")))))
+     
+       
+       
+       
+      
+
+(defclass treelist (frame)
+  ((depth :reader depth :initarg :depth :initform 3)
+   (listbox :accessor listbox :initform nil)
+   (data :accessor data :initarg :data :initform nil)))
+
+(defun lbt-select (tree lb nr)
+  )
+
+(defmethod initialize-instance :after ((tree treelist) &key listwidth listheight (background :white) )
+  (setf (listbox tree) (make-array (depth tree)))
+  (dotimes (nr (depth tree))
+    (setf (aref (listbox tree) nr) (make-instance 'listbox :master tree :width listwidth :height listheight :background background :selectforeground :white :selectbackground :blue))
+    (pack (aref (listbox tree) nr) :side :left :expand t :fill :both)
+    (bind (aref (listbox tree) nr) "<<Listbox-selection>>" (lambda ()
+							     (lbt-select tree (aref (listbox tree) nr) nr)))
+    )
+
+  (when (data tree)
+    (data-select tree (caar (data *tree*))))
+
+  (dotimes (l (depth tree))
+    (listbox-clear (aref (listbox tree) l)))
+  (dolist (entry *tree*)
+    (listbox-append (aref (listbox tree) 0) (car entry)))
+  )
+
+(defun data-select (tree val)
+ 
+  )
