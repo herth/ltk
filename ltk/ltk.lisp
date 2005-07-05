@@ -231,9 +231,10 @@ toplevel             x
 	   "LOAD-TEXT"
 	   "LOWER"
 	   "MAINLOOP"
-	   "MAKE-BUTTON"
+
+;	   "MAKE-BUTTON"
 	   "MAKE-CANVAS"
-	   "MAKE-ENTRY"
+;	   "MAKE-ENTRY"
 	   "MAKE-FRAME"
 	   "MAKE-IMAGE"
 	   "MAKE-LABEL"
@@ -249,6 +250,7 @@ toplevel             x
 	   "MAKE-OVAL"
 	   "MAKE-POLYGON"
 	   "MAKE-RECTANGLE"
+
 	   "MASTER"
 	   "MAXSIZE"
 	   "MENU"
@@ -379,7 +381,7 @@ toplevel             x
 		   (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* 0.8761)
+(defvar *ltk-version* 0.878)
 ;;; global var for holding the communication stream
 (defvar *wish* nil)
 
@@ -529,14 +531,15 @@ toplevel             x
       while pos
       do
       (progn
-	(dbg "txt: ~a -> " txt)
+	;(dbg "txt: ~a -> " txt)
 	(setf txt (concatenate 'string (subseq txt 0 pos) with (subseq txt (1+ pos))))
-	(dbg " ~a~&" txt)
+	;(dbg " ~a~&" txt)
 	(setf pos (search char txt :start2 (+ pos (length with)))))))
   txt)
 
 
 (defun tkescape (txt)
+  (setf txt (format nil "~a" txt))
   (replace-char (replace-char (replace-char (replace-char (replace-char txt "\\" "\\\\") "$" "\\$") "[" "\\[") "]" "\\]") "\"" "\\\""))
   
 
@@ -616,142 +619,162 @@ toplevel             x
 		       "")))
     (format nil "~A.~A" master-path name)))
 
+  
+(eval-when (:compile-toplevel :load-toplevel :execute)
 ;;; widget class built helper functions
+
+(defun iarg-name (arg) (nth 0 arg))
+(defun iarg-key (arg) (nth 1 arg))
+(defun iarg-format (arg) (nth 2 arg))
+(defun iarg-code (arg) (nth 3 arg))
+(defun iarg-comment (arg) (nth 4 arg))
 
 (defparameter *initargs*
   '(
-    (button.background :Button.background "~@[ -Button.background ~(~a~)~]" "" button.background)
-    (Button.cursor :Button.cursor "~@[ -Button.cursor ~(~a~)~]" "" Button.cursor)
-    (Button.relief :Button.relief "~@[ -Button.relief ~(~a~)~]" "" Button.relief)
-    (activeBackground :activeBackground "~@[ -activeBackground ~(~a~)~]" "" activeBackground)
-    (activeBorderWidth :activeBorderWidth "~@[ -activeBorderWidth ~(~a~)~]" "" activeBorderWidth)
-    (activeForeground :activeForeground "~@[ -activeForeground ~(~a~)~]" "" activeForeground)
-    (activeRelief :activeRelief "~@[ -activeRelief ~(~a~)~]" "" activeRelief)
-    (activeStyle :activeStyle "~@[ -activeStyle ~(~a~)~]" "" activeStyle)
-    (anchor :anchor "~@[ -anchor ~(~a~)~]" "" anchor)
-    (aspect :aspect "~@[ -aspect ~(~a~)~]" "" aspect)
-    (autoSeparators :autoSeparators "~@[ -autoSeparators ~(~a~)~]" "" autoSeparators)
-    (background :background "~@[ -background ~(~a~)~]" "" background)
-    (bigIncrement :bigIncrement "~@[ -bigIncrement ~(~a~)~]" "" bigIncrement)
-    (bitmap :bitmap "~@[ -bitmap ~(~a~)~]" "" bitmap)
-    (borderWidth :borderWidth "~@[ -borderWidth ~(~a~)~]" "" borderWidth)
-    (class :class "~@[ -class ~(~a~)~]" "" class)
-    (closeEnough :closeEnough "~@[ -closeEnough ~(~a~)~]" "" closeEnough)
-    (colormap :colormap "~@[ -colormap ~(~a~)~]" "" colormap)
-    (command :command "~@[ -command ~(~a~)~]" "" command)
-    (compound :compound "~@[ -compound ~(~a~)~]" "" compound)
-    (confine :confine "~@[ -confine ~(~a~)~]" "" confine)
-    (container :container "~@[ -container ~(~a~)~]" "" container)
-    (cursor :cursor "~@[ -cursor ~(~a~)~]" "" cursor)
-    (default :default "~@[ -default ~(~a~)~]" "" default)
-    (digits :digits "~@[ -digits ~(~a~)~]" "" digits)
-    (direction :direction "~@[ -direction ~(~a~)~]" "" direction)
-    (disabledBackground :disabledBackground "~@[ -disabledBackground ~(~a~)~]" "" disabledBackground)
-    (elementBorderWidth :elementBorderWidth "~@[ -elementBorderWidth ~(~a~)~]" "" elementBorderWidth)
-    (exportSelection :exportSelection "~@[ -exportSelection ~(~a~)~]" "" exportSelection)
-    (font :font "~@[ -font {~a}~]" "" font)
-    (foreground :foreground "~@[ -foreground ~(~a~)~]" "" foreground)
-    (format :format "~@[ -format ~(~a~)~]" "" format)
-    (from :from "~@[ -from ~(~a~)~]" "" from)
-    (handlePad :handlePad "~@[ -handlePad ~(~a~)~]" "" handlePad)
-    (handleSize :handleSize "~@[ -handleSize ~(~a~)~]" "" handleSize)
-    (height :height "~@[ -height ~(~a~)~]" "" height)
-    (highlightBackground :highlightBackground "~@[ -highlightBackground ~(~a~)~]" "" highlightBackground)
-    (highlightColor :highlightColor "~@[ -highlightColor ~(~a~)~]" "" highlightColor)
-    (highlightThickness :highlightThickness "~@[ -highlightThickness ~(~a~)~]" "" highlightThickness)
-    (image :image "~@[ -image ~(~a~)~]" "" image)
-    (increment :increment "~@[ -increment ~(~a~)~]" "" increment)
-    (indicatorOn :indicatorOn "~@[ -indicatorOn ~(~a~)~]" "" indicatorOn)
-    (insertBackground :insertBackground "~@[ -insertBackground ~(~a~)~]" "" insertBackground)
-    (insertBorderWidth :insertBorderWidth "~@[ -insertBorderWidth ~(~a~)~]" "" insertBorderWidth)
-    (insertOffTime :insertOffTime "~@[ -insertOffTime ~(~a~)~]" "" insertOffTime)
-    (insertOnTime :insertOnTime "~@[ -insertOnTime ~(~a~)~]" "" insertOnTime)
-    (insertWidth :insertWidth "~@[ -insertWidth ~(~a~)~]" "" insertWidth)
-    (invalidCommand :invalidCommand "~@[ -invalidCommand ~(~a~)~]" "" invalidCommand)
-    (jump :jump "~@[ -jump ~(~a~)~]" "" jump)
-    (justify :justify "~@[ -justify ~(~a~)~]" "" justify)
-    (label :label "~@[ -label ~(~a~)~]" "" label)
-    (labelAnchor :labelAnchor "~@[ -labelAnchor ~(~a~)~]" "" labelAnchor)
-    (labelWidget :labelWidget "~@[ -labelWidget ~(~a~)~]" "" labelWidget)
-    (length :length "~@[ -length ~(~a~)~]" "" length)
-    (listVariable :listVariable "~@[ -listVariable ~(~a~)~]" "" listVariable)
-    (maxUndo :maxUndo "~@[ -maxUndo ~(~a~)~]" "" maxUndo)
-    (menu :menu "~@[ -menu ~(~a~)~]" "" menu)
-    (offRelief :offRelief "~@[ -offRelief ~(~a~)~]" "" offRelief)
-    (offValue :offValue "~@[ -offValue ~(~a~)~]" "" offValue)
-    (offset :offset "~@[ -offset ~(~a~)~]" "" offset)
-    (onValue :onValue "~@[ -onValue ~(~a~)~]" "" onValue)
-    (opaqueResize :opaqueResize "~@[ -opaqueResize ~(~a~)~]" "" opaqueResize)
-    (orient :orient "~@[ -orient ~(~a~)~]" "" orient)
-    (overRelief :overRelief "~@[ -overRelief ~(~a~)~]" "" overRelief)
-    (padX :padX "~@[ -padX ~(~a~)~]" "" padX)
-    (padY :padY "~@[ -padY ~(~a~)~]" "" padY)
-    (postCommand :postCommand "~@[ -postCommand ~(~a~)~]" "" postCommand)
-    (readonlyBackground :readonlyBackground "~@[ -readonlyBackground ~(~a~)~]" "" readonlyBackground)
-    (relief :relief "~@[ -relief ~(~a~)~]" "" relief)
-    (repeatDelay :repeatDelay "~@[ -repeatDelay ~(~a~)~]" "" repeatDelay)
-    (repeatInterval :repeatInterval "~@[ -repeatInterval ~(~a~)~]" "" repeatInterval)
-    (resolution :resolution "~@[ -resolution ~(~a~)~]" "" resolution)
-    (sashCursor :sashCursor "~@[ -sashCursor ~(~a~)~]" "" sashCursor)
-    (sashPad :sashPad "~@[ -sashPad ~(~a~)~]" "" sashPad)
-    (sashRelief :sashRelief "~@[ -sashRelief ~(~a~)~]" "" sashRelief)
-    (sashWidth :sashWidth "~@[ -sashWidth ~(~a~)~]" "" sashWidth)
-    (screen :screen "~@[ -screen ~(~a~)~]" "" screen)
-    (scrollRegion :scrollRegion "~@[ -scrollRegion ~(~a~)~]" "" scrollRegion)
-    (selectBackground :selectBackground "~@[ -selectBackground ~(~a~)~]" "" selectBackground)
-    (selectBorderWidth :selectBorderWidth "~@[ -selectBorderWidth ~(~a~)~]" "" selectBorderWidth)
-    (selectColor :selectColor "~@[ -selectColor ~(~a~)~]" "" selectColor)
-    (selectForeground :selectForeground "~@[ -selectForeground ~(~a~)~]" "" selectForeground)
-    (selectImage :selectImage "~@[ -selectImage ~(~a~)~]" "" selectImage)
-    (selectMode :selectMode "~@[ -selectMode ~(~a~)~]" "" selectMode)
-    (setGrid :setGrid "~@[ -setGrid ~(~a~)~]" "" setGrid)
-    (show :show "~@[ -show ~(~a~)~]" "" show)
-    (showHandle :showHandle "~@[ -showHandle ~(~a~)~]" "" showHandle)
-    (showValue :showValue "~@[ -showValue ~(~a~)~]" "" showValue)
-    (sliderLength :sliderLength "~@[ -sliderLength ~(~a~)~]" "" sliderLength)
-    (sliderRelief :sliderRelief "~@[ -sliderRelief ~(~a~)~]" "" sliderRelief)
-    (spacing1 :spacing1 "~@[ -spacing1 ~(~a~)~]" "" spacing1)
-    (spacing2 :spacing2 "~@[ -spacing2 ~(~a~)~]" "" spacing2)
-    (spacing3 :spacing3 "~@[ -spacing3 ~(~a~)~]" "" spacing3)
-    (state :state "~@[ -state ~(~a~)~]" "" state)
-    (tabs :tabs "~@[ -tabs ~(~a~)~]" "" tabs)
-    (takeFocus :takeFocus "~@[ -takeFocus ~(~a~)~]" "" takeFocus)
-    (tearOff :tearOff "~@[ -tearOff ~(~a~)~]" "" tearOff)
-    (tearOffCommand :tearOffCommand "~@[ -tearOffCommand ~(~a~)~]" "" tearOffCommand)
-    (text :text "~@[ -text \"~a\"~]" "" (tkescape text))
-    (textVariable :textVariable "~@[ -textVariable ~(~a~)~]" "" textVariable)
-    (tickInterval :tickInterval "~@[ -tickInterval ~(~a~)~]" "" tickInterval)
-    (title :title "~@[ -title ~(~a~)~]" "" title)
-    (to :to "~@[ -to ~(~a~)~]" "" to)
-    (troughColor :troughColor "~@[ -troughColor ~(~a~)~]" "" troughColor)
-    (type :type "~@[ -type ~(~a~)~]" "" type)
-    (underline :underline "~@[ -underline ~(~a~)~]" "" underline)
-    (undo :undo "~@[ -undo ~(~a~)~]" "" undo)
-    (use :use "~@[ -use ~(~a~)~]" "" use)
-    (validate :validate "~@[ -validate ~(~a~)~]" "" validate)
-    (validateCommand :validateCommand "~@[ -validateCommand ~(~a~)~]" "" validateCommand)
-    (value :value "~@[ -value ~(~a~)~]" "" value)
-    (values :values "~@[ -values ~(~a~)~]" "" values)
-    (variable :variable "~@[ -variable ~(~a~)~]" "" variable)
-    (visual :visual "~@[ -visual ~(~a~)~]" "" visual)
-    (width :width "~@[ -width ~(~a~)~]" "" width)
-    (wrap :wrap "~@[ -wrap ~(~a~)~]" "" wrap)
-    (wrapLength :wrapLength "~@[ -wrapLength ~(~a~)~]" "" wrapLength)
-    (xScrollCommand :xScrollCommand "~@[ -xScrollCommand ~(~a~)~]" "" xScrollCommand)
-    (xScrollIncrement :xScrollIncrement "~@[ -xScrollIncrement ~(~a~)~]" "" xScrollIncrement)
-    (yScrollCommand :yScrollCommand "~@[ -yScrollCommand ~(~a~)~]" "" yScrollCommand)
-    (yScrollIncrement :yScrollIncrement "~@[ -yScrollIncrement ~(~a~)~]" "" yScrollIncrement)
+    (button.background Button.background "~@[ -Button.background ~(~a~)~]" button.background "")
+    (Button.cursor Button.cursor "~@[ -Button.cursor ~(~a~)~]" Button.cursor "")
+    (Button.relief Button.relief "~@[ -Button.relief ~(~a~)~]" Button.relief "")
+    (activebackground activebackground "~@[ -activebackground ~(~a~)~]" activebackground "")
+    (activeborderwidth activeborderwidth "~@[ -activeborderwidth ~(~a~)~]" activeborderwidth "")
+    (activeforeground activeforeground "~@[ -activeforeground ~(~a~)~]" activeforeground "")
+    (activerelief activerelief "~@[ -activerelief ~(~a~)~]" activerelief "")
+    (activestyle activestyle "~@[ -activestyle ~(~a~)~]" activestyle "")
+    (anchor anchor "~@[ -anchor ~(~a~)~]" anchor "")
+    (aspect aspect "~@[ -aspect ~(~a~)~]" aspect "")
+    (autoseparators autoseparators "~@[ -autoseparators ~(~a~)~]" autoseparators "")
+    (background background "~@[ -background ~(~a~)~]" background "")
+    (bigincrement bigincrement "~@[ -bigincrement ~(~a~)~]" bigincrement "")
+    (bitmap bitmap "~@[ -bitmap ~(~a~)~]" bitmap "")
+    (borderwidth borderwidth "~@[ -borderwidth ~(~a~)~]" borderwidth "")
+    (class class "~@[ -class ~(~a~)~]" class "")
+    (closeenough closeenough "~@[ -closeenough ~(~a~)~]" closeenough "")
+    (colormap colormap "~@[ -colormap ~(~a~)~]" colormap "")
+    (command command "~@[ -command {callback ~a}~]" (and command 
+							   (progn
+							      (add-callback (name widget) command)
+							      (name widget)))"")
+    (cbcommand command "~@[ -command {callbackval ~{~a $~a~}}~]" (and command 
+								   (progn
+								     (add-callback (name widget) command)
+								     (list (name widget) (name widget)))) "")
+    (command-radio-button command "~@[ -command {callbackval ~{~a $~a~}}~]" (and command 
+									     (progn
+									       (add-callback (name widget) command)
+									       (list (name widget) (radio-button-variable widget)))) "")
+    (command-scrollbar command "~@[ -command {callback ~a}~]" (and command 
+								   (progn
+								     (add-callback (name widget) command)
+								     (name widget)))"")
+
+    (compound compound "~@[ -compound ~(~a~)~]" compound "")
+    (confine confine "~@[ -confine ~(~a~)~]" confine "")
+    (container container "~@[ -container ~(~a~)~]" container "")
+    (cursor cursor "~@[ -cursor ~(~a~)~]" cursor "")
+    (default default "~@[ -default ~(~a~)~]" default "")
+    (digits digits "~@[ -digits ~(~a~)~]" digits "")
+    (direction direction "~@[ -direction ~(~a~)~]" direction "")
+    (disabledbackground disabledbackground "~@[ -disabledbackground ~(~a~)~]" disabledbackground "")
+    (elementborderwidth elementborderwidth "~@[ -elementborderwidth ~(~a~)~]" elementborderwidth "")
+    (exportselection exportselection "~@[ -exportselection ~(~a~)~]" exportselection "")
+    (font font "~@[ -font {~a}~]" font "")
+    (foreground foreground "~@[ -foreground ~(~a~)~]" foreground "")
+    (format format "~@[ -format ~(~a~)~]" format "")
+    (from from "~@[ -from ~(~a~)~]" from "")
+    (handlepad handlepad "~@[ -handlepad ~(~a~)~]" handlepad "")
+    (handlesize handlesize "~@[ -handlesize ~(~a~)~]" handlesize "")
+    (height height "~@[ -height ~(~a~)~]" height "")
+    (highlightbackground highlightbackground "~@[ -highlightbackground ~(~a~)~]" highlightbackground "")
+    (highlightcolor highlightcolor "~@[ -highlightcolor ~(~a~)~]" highlightcolor "")
+    (highlightthickness highlightthickness "~@[ -highlightthickness ~(~a~)~]" highlightthickness "")
+    (image image "~@[ -image ~(~a~)~]" (and image (name image)) "")
+    (increment increment "~@[ -increment ~(~a~)~]" increment "")
+    (indicatorOn indicatorOn "~@[ -indicatorOn ~(~a~)~]" indicatorOn "")
+    (insertbackground insertbackground "~@[ -insertbackground ~(~a~)~]" insertbackground "")
+    (insertborderWidth insertborderWidth "~@[ -insertborderWidth ~(~a~)~]" insertborderWidth "")
+    (insertofftime insertofftime "~@[ -insertofftime ~(~a~)~]" insertofftime "")
+    (insertontime insertontime "~@[ -insertontime ~(~a~)~]" insertontime "")
+    (insertwidth insertwidth "~@[ -insertwidth ~(~a~)~]" insertwidth "")
+    (invalidcommand invalidcommand "~@[ -invalidcommand ~(~a~)~]" invalidcommand "")
+    (jump jump "~@[ -jump ~(~a~)~]" jump "")
+    (justify justify "~@[ -justify ~(~a~)~]" justify "")
+    (label label "~@[ -label ~(~a~)~]" label "")
+    (labelanchor labelanchor "~@[ -labelanchor ~(~a~)~]" labelanchor "")
+    (labelwidget labelwidget "~@[ -labelwidget ~(~a~)~]" labelwidget "")
+    (length length "~@[ -length ~(~a~)~]" length "")
+    (listvariable listvariable "~@[ -listvariable ~(~a~)~]" listvariable "")
+    (maxundo maxundo "~@[ -maxundo ~(~a~)~]" maxundo "")
+    (menu menu "~@[ -menu ~(~a~)~]" menu "")
+    (offrelief offrelief "~@[ -offrelief ~(~a~)~]" offrelief "")
+    (offvalue offvalue "~@[ -offvalue ~(~a~)~]" offvalue "")
+    (offset offset "~@[ -offset ~(~a~)~]" offset "")
+    (onvalue onvalue "~@[ -onvalue ~(~a~)~]" onvalue "")
+    (opaqueresize opaqueresize "~@[ -opaqueresize ~(~a~)~]" opaqueresize "")
+    (orient orientation "~@[ -orient ~(~a~)~]" orientation "")
+    (overrelief overrelief "~@[ -overrelief ~(~a~)~]" overrelief "")
+    (padx padx "~@[ -padx ~(~a~)~]" padx "")
+    (pady pady "~@[ -pady ~(~a~)~]" pady "")
+    (postcommand postcommand "~@[ -postcommand ~(~a~)~]" postcommand "")
+    (readonlybackground readonlybackground "~@[ -readonlybackground ~(~a~)~]" readonlybackground "")
+    (relief relief "~@[ -relief ~(~a~)~]" relief "")
+    (repeatdelay repeatdelay "~@[ -repeatdelay ~(~a~)~]" repeatdelay "")
+    (repeatinterval repeatinterval "~@[ -repeatinterval ~(~a~)~]" repeatinterval "")
+    (resolution resolution "~@[ -resolution ~(~a~)~]" resolution "")
+    (sashcursor sashcursor "~@[ -sashcursor ~(~a~)~]" sashcursor "")
+    (sashpad sashpad "~@[ -sashpad ~(~a~)~]" sashpad "")
+    (sashrelief sashrelief "~@[ -sashrelief ~(~a~)~]" sashrelief "")
+    (sashwidth sashwidth "~@[ -sashwidth ~(~a~)~]" sashwidth "")
+    (screen screen "~@[ -screen ~(~a~)~]" screen "")
+    (scrollregion scrollregion "~@[ -scrollregion ~(~a~)~]" scrollregion "")
+    (selectbackground selectbackground "~@[ -selectbackground ~(~a~)~]" selectbackground "")
+    (selectborderwidth selectborderwidth "~@[ -selectborderwidth ~(~a~)~]" selectborderwidth "")
+    (selectcolor selectcolor "~@[ -selectcolor ~(~a~)~]" selectcolor "")
+    (selectforeground selectforeground "~@[ -selectforeground ~(~a~)~]" selectforeground "")
+    (selectimage selectimage "~@[ -selectimage ~(~a~)~]" selectimage "")
+    (selectmode selectmode "~@[ -selectmode ~(~a~)~]" selectmode "")
+    (setgrid setgrid "~@[ -setgrid ~(~a~)~]" setgrid "")
+    (show show "~@[ -show ~(~a~)~]" show "")
+    (showhandle showhandle "~@[ -showhandle ~(~a~)~]" showhandle "")
+    (showvalue showvalue "~@[ -showvalue ~(~a~)~]" showvalue "")
+    (sliderlength sliderlength "~@[ -sliderlength ~(~a~)~]" sliderlength "")
+    (sliderrelief sliderrelief "~@[ -sliderrelief ~(~a~)~]" sliderrelief "")
+    (spacing1 spacing1 "~@[ -spacing1 ~(~a~)~]" spacing1 "")
+    (spacing2 spacing2 "~@[ -spacing2 ~(~a~)~]" spacing2 "")
+    (spacing3 spacing3 "~@[ -spacing3 ~(~a~)~]" spacing3 "")
+    (state state "~@[ -state ~(~a~)~]" state "")
+    (tabs tabs "~@[ -tabs ~(~a~)~]" tabs "")
+    (takefocus takefocus "~@[ -takefocus ~(~a~)~]" takefocus "")
+    (tearoff tearoff "~@[ -tearoff ~(~a~)~]" tearoff "")
+    (tearoffcommand tearoffcommand "~@[ -tearoffcommand ~(~a~)~]" tearoffcommand "")
+    (text text "~@[ -text \"~a\"~]" (tkescape text) "")
+    (textvariable textvariable "~@[ -textvariable text_~a~]" (and textvariable (name widget)) "")
+    (tickinterval tickinterval "~@[ -tickinterval ~(~a~)~]" tickinterval "")
+    (title title "~@[ -title ~(~a~)~]" title "")
+    (to to "~@[ -to ~(~a~)~]" to "")
+    (troughcolor troughcolor "~@[ -troughcolor ~(~a~)~]" troughcolor "")
+    (type type "~@[ -type ~(~a~)~]" type "")
+    (underline underline "~@[ -underline ~(~a~)~]" underline "")
+    (undo undo "~@[ -undo ~(~a~)~]" undo "")
+    (use use "~@[ -use ~(~a~)~]" use "")
+    (validate validate "~@[ -validate ~(~a~)~]" validate "")
+    (validatecommand validatecommand "~@[ -validatecommand ~(~a~)~]" validatecommand "")
+    (value value "~@[ -value ~(~a~)~]" value "")
+    (value-radio-button nil "~@[ -value ~(~a~)~]" (radio-button-value widget) "")
+    (values values "~@[ -values ~(~a~)~]" values "")
+    (variable variable "~@[ -variable ~(~a~)~]" variable "")
+    (variable-radio-button nil "~@[ -variable ~(~a~)~]" (radio-button-variable widget) "")
+    (visual visual "~@[ -visual ~(~a~)~]" visual "")
+    (width width "~@[ -width ~(~a~)~]" width "")
+    (wrap wrap "~@[ -wrap ~(~a~)~]" wrap "")
+    (wraplength wraplength "~@[ -wraplength ~(~a~)~]" wraplength "")
+    (xscrollcommand xscrollcommand "~@[ -xscrollcommand ~(~a~)~]" xscrollcommand "")
+    (xscrollincrement xscrollincrement "~@[ -xscrollincrement ~(~a~)~]" xscrollincrement "")
+    (yscrollcommand yscrollcommand "~@[ -yscrollcommand ~(~a~)~]" yscrollcommand "")
+    (yscrollincrement yscrollincrement "~@[ -yscrollincrement ~(~a~)~]" yscrollincrement "")
     ))
 
-(eval-when (:compile-toplevel)
+
   (defparameter *class-args*
-   '()))
-
-(eval-when (:load-toplevel :execute)
- (defparameter *class-args*
-   '()))
-
-(eval-when (:compile-toplevel :load-toplevel :execute)
+    '())
  
   (defun build-args (class parents defs)
     (format t  "class ~s parents ~s defs ~s~%" class parents defs) (force-output)
@@ -796,571 +819,99 @@ toplevel             x
 ;(defargs text (widget button) :delete anchor color)
 
 (defargs button (widget) 
-  activeBackground
-  activeForeground
-  anchor
-  bitmap
-  command
-  compound
-  default
-  disabledForeground
-  font
-  foreground
-  height
-  highlightBackground
-  highlightColor
-  highlightThickness
-  image
-  justify
-  overRelief
-  padX
-  padY
-  repeatDelay
-  repeatInterval
-  state
-  takeFocus
-  text
-  textVariable
-  underline
-  width
-  wrapLength
-  )
+  activebackground activeforeground anchor bitmap command compound default disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image justify overrelief padx pady repeatdelay repeatinterval state takefocus text textvariable underline width wraplength)
 
 (defargs canvas ()
-  background
-  borderWidth
-  background
-  borderWidth
-  closeEnough
-  confine
-  cursor
-  height
-  highlightBackground
-  highlightColor
-  highlightThickness
-  insertBackground
-  insertBorderWidth
-  insertOffTime
-  insertOnTime
-  insertWidth
-  offset
-  relief
-  scrollRegion
-  selectBackground
-  selectBorderWidth
-  selectForeground
-  state
-  takeFocus
-  width
-  xScrollCommand
-  xScrollIncrement
-  yScrollCommand
-  yScrollIncrement
-  )
+  background borderwidth closeenough confine cursor height highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth offset relief scrollregion selectbackground selectborderwidth selectforeground state takefocus width xscrollcommand xscrollincrement yscrollcommand yscrollincrement)
 	
-(defargs checkbutton ()
-  activeBackground
-  activeForeground
-  anchor
-  background
-  bitmap
-  borderWidth
-  command
-  compound
-  cursor
-  disabledForeground
-  font
-  foreground
-  height
-  highlightBackground
-  highlightColor
-  highlightThickness
-  image
-  indicatorOn
-  justify
-  offRelief
-  offValue
-  onValue
-  overRelief
-  padX
-  padY
-  relief
-  selectColor
-  selectImage
-  state
-  takeFocus
-  text
-  textVariable
-  underline
-  variable
-  width
-  wrapLength
-  )
-(defargs entry ()
-  background
-  borderWidth
-  cursor
-  disabledBackground
-  disabledForeground
-  exportSelection
-  font
-  foreground
-  highlightBackground
-  highlightColor
-  highlightThickness
-  insertBackground
-  insertBorderWidth
-  insertOffTime
-  insertOnTime
-  insertWidth
-  invalidCommand
-  justify
-  readonlyBackground
-  relief
-  selectBackground
-  selectBorderWidth
-  selectForeground
-  show
-  state
-  takeFocus
-  textVariable
-  validate
-  validateCommand
-  width
-  xScrollCommand
-  )
+(defargs check-button ()
+  activebackground activeforeground anchor background bitmap borderwidth cbcommand compound cursor disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify offrelief offvalue onvalue overrelief padx pady relief selectcolor selectimage state takefocus text textvariable underline variable width wraplength)
+
+(defargs entry () background borderwidth cursor disabledbackground disabledForeground exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth invalidcommand justify readonlybackground relief selectbackground selectborderwidth selectforeground show state takefocus textvariable validate validatecommand width xscrollcommand )
+
 (defargs frame ()
-  borderWidth
-  class
-  relief
-  background
-  colormap
-  container
-  cursor
-  height
-  highlightBackground
-  highlightColor
-  highlightThickness
-  padX
-  padY
-  takeFocus
-  visual
-  width
-  )
+  borderwidth class relief background colormap container cursor height highlightbackground highlightcolor highlightthickness padx pady takefocus visual width)
+
 (defargs label ()
-  activeBackground
-  activeForeground
-  anchor
-  background
-  bitmap
-  borderWidth
-  compound
-  cursor
-  disabledForeground
-  font
-  foreground
-  height
-  highlightBackground
-  highlightColor
-  highlightThickness
-  image
-  justify
-  padX
-  padY
-  relief
-  state
-  takeFocus
-  text
-  textVariable
-  underline
-  width
-  wrapLength
-  )
+  activebackground activeforeground anchor background bitmap borderwidth compound cursor disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image justify padx pady relief state takefocus text textvariable underline width wraplength )
+
 (defargs labelframe ()
-  borderWidth
-  class
-  font
-  foreground
-  labelAnchor
-  labelWidget
-  relief
-  text
-  background
-  colormap
-  container
-  cursor
-  height
-  highlightBackground
-  highlightColor
-  highlightThickness
-  padX
-  padY
-  takeFocus
-  visual
-  width
-  )
+  borderwidth class font foreground labelanchor labelwidget relief text background colormap container cursor height highlightbackground highlightcolor highlightthickness padx pady takefocus visual width)
+
 (defargs listbox ()
-  activeStyle
-  background
-  borderWidth
-  cursor
-  disabledForeground
-  exportSelection
-  font
-  foreground
-  height
-  highlightBackground
-  highlightColor
-  highlightThickness
-  relief
-  selectBackground
-  selectBorderWidth
-  selectForeground
-  selectMode
-  setGrid
-  state
-  takeFocus
-  width
-  xScrollCommand
-  yScrollCommand
-  listVariable
-  )
+  activestyle background borderwidth cursor disabledForeground exportselection font foreground height highlightbackground highlightcolor highlightthickness relief selectbackground selectborderwidth selectforeground selectmode setgrid state takefocus width xscrollcommand yscrollcommand listvariable)
+
 (defargs menu ()
-  activeBackground
-  activeBorderWidth
-  activeForeground
-  background
-  borderWidth
-  cursor
-  disabledForeground
-  font
-  foreground
-  postCommand
-  relief
-  selectColor
-  takeFocus
-  tearOff
-  tearOffCommand
-  title
-  type
-  )
+  activebackground activeborderwidth activeforeground background borderwidth cursor disabledForeground font foreground postcommand relief selectcolor takefocus tearoff tearoffcommand title type)
+
 (defargs menubutton ()
-  activeBackground
-  activeForeground
-  anchor
-  background
-  bitmap
-  borderWidth
-  cursor
-  direction
-  disabledForeground
-  font
-  foreground
-  height
-  highlightBackground
-  highlightColor
-  highlightThickness
-  image
-  indicatorOn
-  justify
-  menu
-  padX
-  padY
-  relief
-  compound
-  state
-  takeFocus
-  text
-  textVariable
-  underline
-  width
-  wrapLength
-  )
+  activebackground activeforeground anchor background bitmap borderwidth cursor direction disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify menu padx pady relief compound state takefocus text textvariable underline width wraplength)
+
 (defargs message ()
-  anchor
-  aspect
-  background
-  borderWidth
-  cursor
-  font
-  foreground
-  highlightBackground
-  highlightColor
-  highlightThickness
-  justify
-  padX
-  padY
-  relief
-  takeFocus
-  text
-  textVariable
-  width
-  )
-(defargs panedwindow ()
-  background
-  borderWidth
-  cursor
-  handlePad
-  handleSize
-  height
-  opaqueResize
-  orient
-  relief
-  sashCursor
-  sashPad
-  sashRelief
-  sashWidth
-  showHandle
-  width
-  )
-(defargs radiobutton ()
-  activeBackground
-  activeForeground
-  anchor
-  background
-  bitmap
-  borderWidth
-  command
-  compound
-  cursor
-  disabledForeground
-  font
-  foreground
-  height
-  highlightBackground
-  highlightColor
-  highlightThickness
-  image
-  indicatorOn
-  justify
-  offRelief
-  overRelief
-  padX
-  padY
-  relief
-  selectColor
-  selectImage
-  state
-  takeFocus
-  text
-  textVariable
-  underline
-  value
-  variable
-  width
-  wrapLength
-  )
+  anchor aspect background borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness justify padx pady relief takefocus text textvariable width)
+
+(defargs paned-window ()
+  background borderwidth cursor handlepad handlesize height opaqueresize orient relief sashcursor sashpad sashrelief sashwidth showhandle width)
+
+(defargs radio-button ()
+  activebackground activeforeground anchor background bitmap borderwidth command-radiobuton compound cursor disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify offrelief overrelief padx pady relief selectcolor selectimage state takefocus text textvariable underline value-radio-button variable-radio-button width wraplength)
+
 (defargs scale ()
-  activeBackground
-  background
-  bigIncrement
-  borderWidth
-  command
-  cursor
-  digits
-  font
-  foreground
-  from
-  highlightBackground
-  highlightColor
-  highlightThickness
-  label
-  length
-  orient
-  relief
-  repeatDelay
-  repeatInterval
-  resolution
-  showValue
-  sliderLength
-  sliderRelief
-  state
-  takeFocus
-  tickInterval
-  to
-  troughColor
-  variable
-  width
-  )
+  activebackground background bigincrement borderwidth command cursor digits font foreground from highlightbackground highlightcolor highlightthickness label length orient relief repeatdelay repeatinterval resolution showvalue sliderlength sliderrelief state takefocus tickinterval to troughcolor variable width)
+
 (defargs scrollbar ()
-  activeBackground
-  activeRelief
-  background
-  borderWidth
-  background
-  borderWidth
-  command
-  cursor
-  elementBorderWidth
-  highlightBackground
-  highlightColor
-  highlightThickness
-  jump
-  orient
-  relief
-  repeatDelay
-  repeatInterval
-  takeFocus
-  troughColor
-  width
-  )
+  activebackground activerelief background borderwidth command-scrollbar cursor elementborderwidth highlightbackground highlightcolor highlightthickness jump orient relief repeatdelay repeatinterval takefocus troughcolor width)
+
 (defargs spinbox ()
-  activeBackground
-  background
-  borderWidth
-  Button.background
-  Button.cursor
-  Button.relief
-  Button.relief
-  command
-  cursor
-  disabledBackground
-  disabledForeground
-  exportSelection
-  font
-  foreground
-  format
-  from
-  highlightBackground
-  highlightColor
-  highlightThickness
-  increment
-  insertBackground
-  insertBorderWidth
-  insertOffTime
-  insertOnTime
-  insertWidth
-  invalidCommand
-  justify
-  relief
-  readonlyBackground
-  repeatDelay
-  repeatInterval
-  selectBackground
-  selectBorderWidth
-  selectForeground
-  state
-  takeFocus
-  textVariable
-  to
-  validate
-  validateCommand
-  values
-  width
-  wrap
-  xScrollCommand
-  )
+  activebackground background borderwidth Button.background Button.cursor Button.relief command cursor disabledbackground disabledForeground exportselection font foreground format from highlightbackground highlightcolor highlightthickness increment insertbackground insertborderwidth insertofftime insertontime insertwidth invalidcommand justify relief readonlybackground repeatdelay repeatinterval selectbackground selectborderwidth selectforeground state takefocus textvariable to validate validatecommand values width wrap xscrollcommand)
+
 (defargs text ()
-  autoSeparators
-  background
-  borderWidth
-  background
-  borderWidth
-  cursor
-  exportSelection
-  foreground
-  font
-  foreground
-  height
-  highlightBackground
-  highlightColor
-  highlightThickness
-  insertBackground
-  insertBorderWidth
-  insertOffTime
-  insertOnTime
-  insertWidth
-  maxUndo
-  padX
-  padY
-  relief
-  selectBackground
-  selectBorderWidth
-  selectForeground
-  setGrid
-  spacing1
-  spacing2
-  spacing3
-  state
-  tabs
-  takeFocus
-  undo
-  width
-  wrap
-  xScrollCommand
-  yScrollCommand
-  )
+  autoseparators  background borderwidth cursor exportselection font foreground height highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth maxundo padx  pady relief selectbackground selectborderwidth selectforeground setgrid spacing1 spacing2 spacing3 state tabs takefocus undo width wrap xscrollcommand yscrollcommand)
+
 (defargs toplevel ()
-  borderWidth
-  class
-  menu
-  relief
-  screen
-  use
-  background
-  colormap
-  container
-  cursor
-  height
-  highlightBackground
-  highlightColor
-  highlightThickness
-  padX
-  padY
-  takeFocus
-  visual
-  width
-  )
-
-
+  borderwidth class menu relief screen use background colormap container cursor height highlightbackground highlightcolor highlightthickness padx pady takefocus visual width)
 
 (defmacro defwidget (class parents slots cmd &rest code)
-  (let ((args (rest (assoc class *class-args*))))
-    (format t "args; ~a~&" args)
-    (let ((cmdstring (format nil "~a ~~A " cmd)))
+  (let ((args (sort (copy-list (rest (assoc class *class-args*)))
+		    (lambda (x y)
+		      (string< (symbol-name x) (symbol-name y))))))
+    (let ((cmdstring (format nil "~a ~~A " cmd))
+	  (codelist nil)
+	  (keylist nil))
+      (format t "args::~s~%" args)
       (dolist (arg args)
 	(let ((entry (assoc arg *initargs*)))
 	  (cond
 	   (entry 
 	    (setf cmdstring (concatenate 'string cmdstring (third entry)))
+	    (when (iarg-key entry)
+	      (setf keylist (append keylist (list (iarg-key entry)))))
+	    (setf codelist (append codelist (list (iarg-code entry))))
 	    )
 	   (t 
-	    (setf cmdstring (concatenate 'string cmdstring (format nil "~~@[ -~(~a~) ~~(~~A~~)~~]" arg)))))	
-	  ))
+	    (setf cmdstring (concatenate 'string cmdstring (format nil "~~@[ -~(~a~) ~~(~~A~~)~~]" arg)))
+	    (setf keylist (append keylist (list arg)))
+	    (setf codelist (append codelist (list arg)))
+	  ))))
+
+      ;;(format t "~s~&" 
+      (pprint `(progn
+	 (defclass ,class (,@parents)
+	   ,slots
+	    )
+	 (defmethod initialize-instance :after ((widget ,class) &key ,@keylist)
+	   (format-wish ,cmdstring (widget-path widget) ,@codelist)
+	   ,@code
+	   )))
       `(progn
 	 (defclass ,class (,@parents)
 	   ,slots
 	    )
-	 (defmethod initialize-instance :after ((widget ,class) &key ,@args)
-	   (format-wish ,cmdstring (widget-path widget) ,@(rest code) ,@args))
+	 (defmethod initialize-instance :after ((widget ,class) &key ,@keylist)
+	   (format-wish ,cmdstring (widget-path widget) ,@codelist)
+	   ,@code
+	   )	 
 	 ))))
-
-
-
-(defmacro defwidgetinit  (wclass cmd code)
-  (let ((args (rest (assoc wclass *class-args*))))
-    (format t "args; ~a~&" args)
-    (let ((cmdstring (format nil "~a ~~A " cmd)))
-      (when code
-	(setf cmdstring (concatenate 'string cmdstring (first code))))
-      (dolist (arg args)
-	(let ((entry (assoc arg *initargs*)))
-	  (cond
-	   (entry 
-	    (setf cmdstring (concatenate 'string cmdstring (third entry)))
-	    )
-	   (t 
-	    (setf cmdstring (concatenate 'string cmdstring (format nil "~~@[ -~(~a~) ~~(~~A~~)~~]" arg)))))	
-	  ))
-      `(defmethod initialize-instance :after ((widget ,wclass) &key ,@args)
-	 (format-wish ,cmdstring (widget-path widget) ,@(rest code) ,@args)
-	 ;;(format-wish ,cmdstring (widget-path widget) ,@args)
-	 ;; ,@code
-	 )
-
-      )
-    )
-  )
 
 ;;; the library implementation 
 
@@ -1419,7 +970,7 @@ toplevel             x
     (setf (name w) (create-name)))
   (unless (widget-path w)			; and pathname
     (setf (slot-value w 'widget-path) (create-path (master w) (name w))))
-  (create w)				; call the widget specific creation method - every 
+  ;(create w)				; call the widget specific creation method - every 
   )					; widget class needs to overload that
 
 (defgeneric create (w))
@@ -1525,7 +1076,8 @@ toplevel             x
 
 (defmethod initialize-instance :around ((v tktextvariable) &key)
   (call-next-method)
-  (format-wish "~a configure -textvariable text_~a" (widget-path v) (name v)))
+  (format-wish "~a configure -textvariable text_~a" (widget-path v) (name v))
+  )
 
 (defmethod text ((v tktextvariable))
   (format-wish "senddatastring $text_~a" (name v))
@@ -1651,55 +1203,19 @@ toplevel             x
   (format-wish "~A delete ~A" (widget-path menu) index))
 
 
+
+
 ;;; standard button widget
 
-(defclass button (tktextvariable widget)
-  ((text :accessor button-text :initarg :text :initform "")
-   ))
-
-(defmethod initialize-instance :after ((bt button) &key (text "") activebackground command
-				       activeforeground anchor background bitmap borderwidth cursor
-				       disabledforeground font foreground highlightbackground
-				       highlightcolor highlightthickness image justify padx pady
-				       relief repeatdelay repeatinterval takefocus underline
-				       wraplength compound default height overrelief state width)
-  (when command (add-callback (name bt) command))
-  (format-wish "button ~A -command {callback ~A} ~
-                    -text {~A}~@[ -activebackground ~(~a~)~]~@[ -activeforeground ~(~a~)~]~
-                     ~@[ -anchor ~(~a~)~]~@[ -background ~(~a~)~]~@[ -bitmap ~(~a~)~]~
-                     ~@[ -borderwidth ~(~a~)~]~@[ -cursor ~(~a~)~]~@[ -disabledforeground ~(~a~)~]~
-                     ~@[ -font {~a}~]~@[ -foreground ~(~a~)~]~@[ -highlightbackground ~(~a~)~]~
-                     ~@[ -highlightcolor ~(~a~)~]~@[ -highlightthickness ~(~a~)~]~@[ -image ~(~a~)~]~
-                     ~@[ -justify ~(~a~)~]~@[ -padx ~(~a~)~]~@[ -pady ~(~a~)~]~@[ -relief ~(~a~)~]~
-                     ~@[ -repeatdelay ~(~a~)~]~@[ -repeatinterval ~(~a~)~]~@[ -takefocus ~(~a~)~]~
-                     ~@[ -underline ~(~a~)~]~@[ -wraplength ~(~a~)~]~@[ -compound ~(~a~)~]~
-                     ~@[ -default ~(~a~)~]~@[ -height ~(~a~)~]~@[ -overrelief ~(~a~)~]~
-                     ~@[ -state ~(~a~)~]~@[ -width ~(~a~)~]"
-	       (widget-path bt) (name bt) text activebackground activeforeground anchor background
-	       bitmap borderwidth cursor disabledforeground font foreground highlightbackground
-	       highlightcolor highlightthickness (and image (name image)) justify padx pady relief repeatdelay
-	       repeatinterval takefocus
-	       underline wraplength compound default height overrelief state width
-	       ))
+(defwidget button (widget tktextvariable) () "button")
 
 (defmethod (setf command) (val (button button))
   (add-callback (name button) val)
   (format-wish "~a configure -command {callback ~a}" (widget-path button) (name button)))
 
-(defun make-button (master text command)
-  (let* ((b (make-instance 'button :master master :text text :command command)))
-    b))
-
 ;;; check button widget
 
-(defclass check-button (tktextvariable tkvariable widget)
-  (;(text :accessor cb-text :initarg :text :initform "")
-   ))
-
-(defmethod initialize-instance :after ((cb check-button) &key command activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image indicatoron justify offrelief offvalue onvalue overrelief padx pady relief selectcolor selectimage state takefocus text underline width wraplength)
-  (format-wish "checkbutton ~A ~@[ -activebackground ~(~A~)~]~@[ -activeforeground ~(~A~)~]~@[ -anchor ~(~A~)~]~@[ -background ~(~A~)~]~@[ -bitmap ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -height ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -image ~(~A~)~]~@[ -indicatoron ~(~A~)~]~@[ -justify ~(~A~)~]~@[ -offrelief ~(~A~)~]~@[ -offvalue ~(~A~)~]~@[ -onvalue ~(~A~)~]~@[ -overrelief ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -selectcolor ~(~A~)~]~@[ -selectimage ~(~A~)~]~@[ -state ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text {~A}~]~@[ -underline ~(~A~)~]~@[ -width ~(~A~)~]~@[ -wraplength ~(~A~)~]" (widget-path cb) activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness (and image (name image)) indicatoron justify offrelief offvalue onvalue overrelief padx pady relief selectcolor selectimage state takefocus text underline width wraplength)
-  (when command
-    (setf (command cb) command)))
+(defwidget check-button (widget tktextvariable tkvariable) () "checkbutton")
 
 (defmethod (setf command) (val (check-button check-button))
   (add-callback (name check-button) val)
@@ -1708,24 +1224,10 @@ toplevel             x
 
 ;;; radio button widget
 
-(defclass radio-button (tktextvariable widget)
-  (;(command :accessor command :initarg :command :initform nil)
-   ;(text :accessor text :initarg :text :initform "")
-   (val :accessor radio-button-value :initarg :value :initform nil)
-   (var :accessor radio-button-variable :initarg :variable :initform nil)
-   ))
-
-(defmethod initialize-instance :after ((rb radio-button) &key command activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image indicatoron justify offrelief overrelief padx pady relief selectcolor selectimage state takefocus text underline width wraplength)
-  (format-wish "radiobutton ~A ~@[ -value ~A~]~@[ -variable ~A~]~@[ -activebackground ~(~A~)~]~@[ -activeforeground ~(~A~)~]~@[ -anchor ~(~A~)~]~@[ -background ~(~A~)~]~@[ -bitmap ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -height ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -image ~(~A~)~]~@[ -indicatoron ~(~A~)~]~@[ -justify ~(~A~)~]~@[ -offrelief ~(~A~)~]~@[ -overrelief ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -selectcolor ~(~A~)~]~@[ -selectimage ~(~A~)~]~@[ -state ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text {~A}~]~@[ -underline ~(~A~)~]~@[ -width ~(~A~)~]~@[ -wraplength ~(~A~)~]"
-	    (widget-path rb) 
-	    (radio-button-value rb)
-	    (radio-button-variable rb)	    
-	    activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness (and image (name image)) indicatoron justify offrelief overrelief padx pady relief selectcolor selectimage state takefocus text underline width wraplength)
-  (when command
-    (setf (command rb) command)))
-
-
-
+(defwidget radio-button (tktextvariable widget) 
+  ((val :accessor radio-button-value :initarg :value :initform nil)
+   (var :accessor radio-button-variable :initarg :variable :initform nil)) 
+  "radiobutton")
 
 (defmethod value ((rb radio-button))
   "reads the content of the shared variable of the radio button set"
@@ -1748,52 +1250,29 @@ toplevel             x
 
 ;; text entry widget
 
-(defclass entry (tktextvariable widget)
-  (;(width :accessor width :initarg :width :initform nil)
-   )
-  )
-
-(defmethod initialize-instance :after ((e entry) &key background borderwidth cursor exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth justify relief selectbackground selectborderwidth selectforeground takefocus xscrollcommand disabledbackground disabledforeground invalidcommand readonlybackground show state validate validatecommand width)
-  (format-wish "entry ~A ~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -exportselection ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -insertbackground ~(~A~)~]~@[ -insertborderwidth ~(~A~)~]~@[ -insertofftime ~(~A~)~]~@[ -insertontime ~(~A~)~]~@[ -insertwidth ~(~A~)~]~@[ -justify ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -selectbackground ~(~A~)~]~@[ -selectborderwidth ~(~A~)~]~@[ -selectforeground ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -xscrollcommand ~(~A~)~]~@[ -disabledbackground ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -invalidcommand ~(~A~)~]~@[ -readonlybackground ~(~A~)~]~@[ -show {~(~A~)}~]~@[ -state ~(~A~)~]~@[ -validate ~(~A~)~]~@[ -validatecommand ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path e)
-	       background borderwidth cursor exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth justify relief selectbackground selectborderwidth selectforeground takefocus xscrollcommand disabledbackground disabledforeground invalidcommand readonlybackground show state validate validatecommand width
-	       ))
-
-(defun make-entry (master)
-  (make-instance 'entry :master master))
+(defwidget entry (widget tktextvariable) () "entry")
 
 (defun entry-select (e from to)
   (format-wish "~a selection range ~a ~a" (widget-path e) from to))
 
 ;;; frame widget 
 
-(defclass frame (widget)  ())
+(defwidget frame (widget) () "frame")
 
-(defmethod initialize-instance :after ((f frame) &key borderwidth cursor highlightbackground highlightcolor highlightthickness padx pady relief takefocus background class colormap container height visual width)
-   (format-wish "frame ~A~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -background ~(~A~)~]~@[ -class ~(~A~)~]~@[ -colormap ~(~A~)~]~@[ -container ~(~A~)~]~@[ -height ~(~A~)~]~@[ -visual ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path f)	borderwidth cursor highlightbackground highlightcolor highlightthickness padx pady relief takefocus background class colormap container height visual width))
-
-(defun make-frame (master)
-  (make-instance 'frame :master master))
+;(defun make-frame (master)
+;  (make-instance 'frame :master master))
 
 ;;; labelframe widget 
 
-(defclass labelframe(widget)
-  (;(text :accessor text :initarg :text :initform "")
-   ))
-
-(defmethod initialize-instance :after ((l labelframe) &key borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness padx pady relief takefocus text background class colormap container height labelanchor labelwidget visual width)  
-  (format-wish "labelframe ~A ~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -font {~A}~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text {~A}~]~@[ -background ~(~A~)~]~@[ -class ~(~A~)~]~@[ -colormap ~(~A~)~]~@[ -container ~(~A~)~]~@[ -height ~(~A~)~]~@[ -labelanchor ~(~A~)~]~@[ -labelwidget ~(~A~)~]~@[ -visual ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path l) borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness padx pady relief takefocus text background class colormap container height labelanchor labelwidget visual width))
+(defwidget labelframe (widget) () "labelframe")
 
 (defmethod (setf text) :after (val (l labelframe))
   (format-wish "~a configure -text {~a}" (widget-path l) val))
 
 ;;; panedwindow widget
 
-(defclass paned-window (widget)
-  (;(orient :accessor pane-orient :initarg :orient  :initform nil)
-   ))
 
-(defmethod initialize-instance :after ((pw paned-window) &key background borderwidth cursor handlepad handlesize height opaqueresize orient relief sashcursor sashpad sashrelief sashwidth showhandle width)  
-  (format-wish "panedwindow ~a ~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -handlepad ~(~A~)~]~@[ -handlesize ~(~A~)~]~@[ -height ~(~A~)~]~@[ -opaqueresize ~(~A~)~]~@[ -orient ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -sashcursor ~(~A~)~]~@[ -sashpad ~(~A~)~]~@[ -sashrelief ~(~A~)~]~@[ -sashwidth ~(~A~)~]~@[ -showhandle ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path pw) background borderwidth cursor handlepad handlesize height opaqueresize orient relief sashcursor sashpad sashrelief sashwidth showhandle width))
+(defwidget paned-window (widget) () "panedwindow")
 
 (defgeneric pane-configure (window option value))
 (defmethod pane-configure ((pw paned-window) option value)
@@ -1809,16 +1288,11 @@ toplevel             x
 
 ;;; listbox widget
 
-(defclass listbox (widget)
-  (;(width  :accessor width  :initarg :width  :initform nil)
-   ;(height :accessor height :initarg :height :initform nil)
-   (xscroll :accessor xscroll :initarg :xscroll :initform nil)
+(defwidget listbox (widget)
+  ((xscroll :accessor xscroll :initarg :xscroll :initform nil)
    (yscroll :accessor yscroll :initarg :yscroll :initform nil)
-   ))
+   ) "listbox")
 
-(defmethod initialize-instance :after ((l listbox) &key activestyle background borderwidth cursor disabledforeground exportselection font foreground height highlightbackground highlightcolor highlightthickness relief selectbackground selectborderwidth selectforeground setgrid state takefocus width xscrollcommand yscrollcommand listvariable selectmode)
-  (format-wish "listbox ~a ~@[ -activestyle ~(~A~)~]~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -exportselection ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -height ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -selectbackground ~(~A~)~]~@[ -selectborderwidth ~(~A~)~]~@[ -selectforeground ~(~A~)~]~@[ -setgrid ~(~A~)~]~@[ -state ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -width ~(~A~)~]~@[ -xscrollcommand ~(~A~)~]~@[ -yscrollcommand ~(~A~)~]~@[ -listvariable ~(~A~)~]~@[ -selectmode ~(~A~)~]" 
-	    (widget-path l) activestyle background borderwidth cursor disabledforeground exportselection font foreground height highlightbackground highlightcolor highlightthickness relief selectbackground selectborderwidth selectforeground setgrid state takefocus width xscrollcommand yscrollcommand listvariable selectmode))
 
 (defmethod (setf command) (val (listbox listbox))
   (add-callback (name listbox) val)
@@ -1939,13 +1413,7 @@ a list of numbers may be given"
 
 ;;; scale widget
 
-(defclass scale (tkvariable widget)
-  ())
-
-(defmethod initialize-instance :after ((sc scale) &key command activebackground background bigincrement borderwidth cursor digits font foreground from highlightbackground highlightcolor highlightthickness label length orient relief repeatdelay repeatinterval resolution showvalue sliderlength sliderrelief state takefocus tickinterval to troughcolor width)
-  (format-wish "scale ~a ~@[ -activebackground ~(~A~)~]~@[ -background ~(~A~)~]~@[ -bigincrement ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -digits ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -from ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -label ~(~A~)~]~@[ -length ~(~A~)~]~@[ -orient ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -repeatdelay ~(~A~)~]~@[ -repeatinterval ~(~A~)~]~@[ -resolution ~(~A~)~]~@[ -showvalue ~(~A~)~]~@[ -sliderlength ~(~A~)~]~@[ -sliderrelief ~(~A~)~]~@[ -state ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -tickinterval ~(~A~)~]~@[ -to ~(~A~)~]~@[ -troughcolor ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path sc) activebackground background bigincrement borderwidth cursor digits font foreground from highlightbackground highlightcolor highlightthickness label length orient relief repeatdelay repeatinterval resolution showvalue sliderlength sliderrelief state takefocus tickinterval to troughcolor width)
-  (when command
-    (setf (command sc) command)))
+(defwidget scale (tkvariable widget) () "scale")
 
 (defmethod (setf command) (val (scale scale))
   (add-callback (name scale) val)					
@@ -1954,16 +1422,7 @@ a list of numbers may be given"
 
 ;;; spinbox widget
 
-(defclass spinbox (tktextvariable widget)
-  ())
-
-(defmethod initialize-instance :after ((sp spinbox) &key  command activebackground background borderwidth cursor exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth justify relief repeatdelay repeatinterval selectbackground selectborderwidth selectforeground takefocus textvariable xscrollcommand buttonbackground buttondownrelief buttonuprelief disabledbackground disabledforeground format from invalidcommand increment readonlybackground state to validate validatecommand values width wrap )
-  (format-wish "spinbox ~a ~@[ -activebackground ~(~A~)~]~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -exportselection ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -insertbackground ~(~A~)~]~@[ -insertborderwidth ~(~A~)~]~@[ -insertofftime ~(~A~)~]~@[ -insertontime ~(~A~)~]~@[ -insertwidth ~(~A~)~]~@[ -justify ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -repeatdelay ~(~A~)~]~@[ -repeatinterval ~(~A~)~]~@[ -selectbackground ~(~A~)~]~@[ -selectborderwidth ~(~A~)~]~@[ -selectforeground ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -textvariable ~(~A~)~]~@[ -xscrollcommand ~(~A~)~]~@[ -buttonbackground ~(~A~)~]~@[ -buttondownrelief ~(~A~)~]~@[ -buttonuprelief ~(~A~)~]~@[ -disabledbackground ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -format ~(~A~)~]~@[ -from ~(~A~)~]~@[ -invalidcommand ~(~A~)~]~@[ -increment ~(~A~)~]~@[ -readonlybackground ~(~A~)~]~@[ -state ~(~A~)~]~@[ -to ~(~A~)~]~@[ -validate ~(~A~)~]~@[ -validatecommand ~(~A~)~]~@[ -values ~(~A~)~]~@[ -width ~(~A~)~]~@[ -wrap ~(~A~)~]"
-	       (widget-path sp) activebackground background borderwidth cursor exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth justify relief repeatdelay repeatinterval selectbackground selectborderwidth selectforeground takefocus textvariable xscrollcommand buttonbackground buttondownrelief buttonuprelief disabledbackground disabledforeground format from invalidcommand increment readonlybackground state to validate validatecommand values width wrap)
-  (when command
-    (setf (command sp) command)))
-
-
+(defwidget spinbox (tktextvariable widget) () "spinbox")
 
 (defmethod (setf command) (val (sp spinbox))
   (add-callback (name sp) val)					
@@ -1971,54 +1430,36 @@ a list of numbers may be given"
 
 ;;; toplevel (window) widget 
 
-(defclass toplevel (widget)
+(defwidget toplevel (widget) 
   ((protocol-destroy :accessor protocol-destroy :initarg :on-close :initform nil)
-   ))
-
-(defmethod initialize-instance :after ((w toplevel) &key borderwidth cursor highlightbackground highlightcolor highlightthickness padx pady relief takefocus background class colormap containerheight menu screen use visual width title)
-  (format-wish "toplevel ~A ~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -background ~(~A~)~]~@[ -class ~(~A~)~]~@[ -colormap ~(~A~)~]~@[ -containerheight ~(~A~)~]~@[ -menu ~(~A~)~]~@[ -screen ~(~A~)~]~@[ -use ~(~A~)~]~@[ -visual ~(~A~)~]~@[ -width ~(~A~)~]"
-	       (widget-path w) borderwidth cursor highlightbackground highlightcolor highlightthickness padx pady relief takefocus background class colormap containerheight menu screen use visual width
-)
-  (when title
-    (wm-title w title))
-  (unless (protocol-destroy w)
-    (format-wish "wm protocol ~a WM_DELETE_WINDOW {wm withdraw ~a}" (widget-path w) (widget-path w))))
+   (title :accessor title :initarg :title)
+   ) 
+  "toplevel"
+  (when (title widget)
+    (wm-title widget (title widget)))
+  (unless (protocol-destroy widget)
+    (format-wish "wm protocol ~a WM_DELETE_WINDOW {wm withdraw ~a}" (widget-path widget) (widget-path widget))))
 
 (defun make-toplevel (master)
   (make-instance 'toplevel :master master))
 
 ;;; label widget
 
-(defclass label(tktextvariable widget)
-  (;(text :accessor label-text :initarg :text :initform "")
-   ))
+(defwidget label (tktextvariable widget) () "label")
 
-(defmethod initialize-instance :after ((l label) &key activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground highlightbackground highlightcolor highlightthickness image justify padx pady relief takefocus text underline wraplength compound height state width)
-  (format-wish "label ~A ~@[ -activebackground ~(~A~)~]~@[ -activeforeground ~(~A~)~]~@[ -anchor ~(~A~)~]~@[ -background ~(~A~)~]~@[ -bitmap ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -disabledforeground ~(~A~)~]~@[ -font {~A}~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -image ~(~A~)~]~@[ -justify ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -text {~A}~]~@[ -underline ~(~A~)~]~@[ -wraplength ~(~A~)~]~@[ -compound ~(~A~)~]~@[ -height ~(~A~)~]~@[ -state ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path l) activebackground activeforeground anchor background bitmap borderwidth cursor disabledforeground font foreground highlightbackground highlightcolor highlightthickness (and image (name image)) justify padx pady relief takefocus text underline wraplength compound height state width))
-
-(defun make-label (master text)
-  (make-instance 'label :master master  :text text))
+;(defun make-label (master text)
+;  (make-instance 'label :master master  :text text))
 
 ;;; message widget
 
-(defclass message (tktextvariable widget)
-  ())
-
-(defmethod initialize-instance :after ((m message) &key text aspect justify width)
-  (format-wish "message ~A ~@[ -text {~A}~]~@[ -aspect ~A~]~@[ -justify ~(~A~)~]~@[ -width ~A~]"
-	    (widget-path m) text aspect justify width))
+(defwidget message (tktextvariable widget) () "message")
 
 ;;; scrollbar
 
-(defclass scrollbar (widget)
-  (;(orientation :accessor orientation :initarg :orientation :initform "vertical")
-   ))
+(defwidget scrollbar (widget) () "scrollbar")
 
 (defun make-scrollbar(master &key (orientation "vertical"))
   (make-instance 'scrollbar :master master :orientation orientation))
-
-(defmethod initialize-instance :after ((sb scrollbar) &key orientation activebackground activerelief background borderwidth command cursor elementborderwidth highlightbackground highlightcolor highlightthickness jump relief repeatdelay repeatinterval takefocus troughcolor width)
-  (send-wish (format nil "scrollbar ~a~@[ -orient ~(~A~)~]~@[ -activebackground ~(~A~)~]~@[ -activerelief ~(~A~)~]~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -command ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -elementborderwidth ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -jump ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -repeatdelay ~(~A~)~]~@[ -repeatinterval ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -troughcolor ~(~A~)~]~@[ -width ~(~A~)~]" (widget-path sb) orientation activebackground activerelief background borderwidth command cursor elementborderwidth highlightbackground highlightcolor highlightthickness jump relief repeatdelay repeatinterval takefocus troughcolor width)))
 
 (defclass scrolled-canvas (frame)
   ((canvas :accessor canvas)
@@ -2121,14 +1562,16 @@ set y [winfo y ~a]
 
 ;;; canvas widget
 
-(defclass canvas (widget)
+(defwidget canvas (widget)
   ((xscroll :accessor xscroll :initarg :xscroll :initform nil)
    (yscroll :accessor yscroll :initarg :yscroll :initform nil)
    (scrollregion-x0 :accessor scrollregion-x0 :initform nil)
    (scrollregion-y0 :accessor scrollregion-y0 :initform nil)
    (scrollregion-x1 :accessor scrollregion-x1 :initform nil)
    (scrollregion-y1 :accessor scrollregion-y1 :initform nil)
-   ))
+   ) 
+  "canvas"
+  )
 
 ;; wrapper class for canvas items
 (defclass canvas-item ()
@@ -2137,32 +1580,6 @@ set y [winfo y ~a]
   )
 
 (defmethod canvas ((canvas canvas)) canvas)
-
-(defmethod initialize-instance :after ((c canvas) &key background borderwidth cursor highlightbackground
-				       highlightcolor
-				       highlightthickness insertbackground insertborderwidth
-				       insertofftime insertontime insertwidth relief
-				       selectbackground selectborderwidth selectforeground
-				       takefocus xscrollcommand yscrollcommand closeenough
-				       confine  height scrollregion state width xscrollincrement
-				       yscrollincrement)
-  (format-wish "canvas ~A~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~
-                ~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~
-                ~@[ -highlightthickness ~(~A~)~]~@[ -insertbackground ~(~A~)~]~
-                ~@[ -insertborderwidth ~(~A~)~]~@[ -insertofftime ~(~A~)~]~
-                ~@[ -insertontime ~(~A~)~]~@[ -insertwidth ~(~A~)~]~@[ -relief ~(~A~)~]~
-                ~@[ -selectbackground ~(~A~)~]~@[ -selectborderwidth ~(~A~)~]~
-                ~@[ -selectforeground ~(~A~)~]~@[ -takefocus ~(~A~)~]~
-                ~@[ -xscrollcommand ~(~A~)~]~@[ -yscrollcommand ~(~A~)~]~@[ -closeenough ~(~A~)~]~
-                ~@[ -confine ~(~A~)~]~@[ -height ~(~A~)~]~@[ -scrollregion ~(~A~)~]~
-                ~@[ -state ~(~A~)~]~@[ -width ~(~A~)~]~@[ -xscrollincrement ~(~A~)~]~
-                ~@[ -yscrollincrement ~(~A~)~]"
-	       (widget-path c) background
-	       borderwidth cursor highlightbackground highlightcolor highlightthickness
-	       insertbackground insertborderwidth insertofftime insertontime insertwidth
-	       relief selectbackground selectborderwidth selectforeground takefocus
-	       xscrollcommand yscrollcommand closeenough confine  height
-	       scrollregion state width xscrollincrement yscrollincrement))
 
 (defun make-canvas (master &key (width nil) (height nil) (xscroll nil) (yscroll nil))
   (make-instance 'canvas :master master :width width :height height :xscroll xscroll :yscroll yscroll))
@@ -2397,17 +1814,10 @@ set y [winfo y ~a]
 
 ;;; text widget
 
-(defclass text (widget)
-  (;(width  :accessor width  :initarg :width  :initform nil)
-   ;(height :accessor height :initarg :height :initform nil)
-   (xscroll :accessor xscroll :initarg :xscroll :initform nil)
+(defwidget text (widget)
+  ((xscroll :accessor xscroll :initarg :xscroll :initform nil)
    (yscroll :accessor yscroll :initarg :yscroll :initform nil)
-  ))
-
-(defmethod textbox ((text text)) text)
-
-(defmethod initialize-instance :after ((txt text) &key background borderwidth cursor exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth padx pady relief selectbackground selectborderwidth selectforeground setgrid takefocus xscrollcommand yscrollcommand autoseparators height maxundo spacing1 spacing2 spacing3 state tabs undo width wrap)
-  (format-wish "text ~a ~@[ -background ~(~A~)~]~@[ -borderwidth ~(~A~)~]~@[ -cursor ~(~A~)~]~@[ -exportselection ~(~A~)~]~@[ -font ~(~A~)~]~@[ -foreground ~(~A~)~]~@[ -highlightbackground ~(~A~)~]~@[ -highlightcolor ~(~A~)~]~@[ -highlightthickness ~(~A~)~]~@[ -insertbackground ~(~A~)~]~@[ -insertborderwidth ~(~A~)~]~@[ -insertofftime ~(~A~)~]~@[ -insertontime ~(~A~)~]~@[ -insertwidth ~(~A~)~]~@[ -padx ~(~A~)~]~@[ -pady ~(~A~)~]~@[ -relief ~(~A~)~]~@[ -selectbackground ~(~A~)~]~@[ -selectborderwidth ~(~A~)~]~@[ -selectforeground ~(~A~)~]~@[ -setgrid ~(~A~)~]~@[ -takefocus ~(~A~)~]~@[ -xscrollcommand ~(~A~)~]~@[ -yscrollcommand ~(~A~)~]~@[ -autoseparators ~(~A~)~]~@[ -height ~(~A~)~]~@[ -maxundo ~(~A~)~]~@[ -spacing1 ~(~A~)~]~@[ -spacing2 ~(~A~)~]~@[ -spacing3 ~(~A~)~]~@[ -state ~(~A~)~]~@[ -tabs ~(~A~)~]~@[ -undo ~(~A~)~]~@[ -width ~(~A~)~]~@[ -wrap ~(~A~)~]" (widget-path txt) background borderwidth cursor exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth padx pady relief selectbackground selectborderwidth selectforeground setgrid takefocus xscrollcommand yscrollcommand autoseparators height maxundo spacing1 spacing2 spacing3 state tabs undo width wrap))
+  )  "text")
 
 (defun make-text (master &key (width nil) (height nil))
   (make-instance 'text :master master :width width :height height))
@@ -2924,8 +2334,8 @@ set y [winfo y ~a]
 (defun error-popup (message title icon)
   (ecase (message-box message title
                      (if (find-restart 'continue)
-                         :yesno
-                         :ok)
+                         "yesno"
+                         "ok")
                      icon)
     (:yes (continue))
     ((:ok :no) (abort))))
@@ -2933,17 +2343,17 @@ set y [winfo y ~a]
 (defun debug-popup (condition title)
   (ecase (message-box (format nil "~A~%~%Do you wish to invoke the debugger?"
 			      condition)
-		      title :yesno :question)
+		      title "yesno" "question")
     (:yes (invoke-debugger condition))
     (:no (abort))))
 
 (defun show-error (error)
   (error-popup (format nil "~A~@[~%~%~A?~]" error (find-restart 'continue))
-	       "Error" :error))
+	       "Error" "error"))
 
 (defun note-error (error)
   (declare (ignore error))
-  (error-popup "An internal error has occured." "Error" :error))
+  (error-popup "An internal error has occured." "Error" "error"))
 
 (defun debug-error (error)
   (debug-popup error "Error"))
@@ -3120,7 +2530,7 @@ tk input to terminate"
 	     (lines nil)
 	     (mb (make-menubar))
 	     (mfile (make-menu mb "File" ))
-	     (mf-load (make-menubutton mfile "Load" (lambda ()
+	     (mf-load (make-menubutton mfile "Load" (lambda () (error)
 						      (format t "Load pressed~&")
 						      (force-output))
 				       :underline 1))
