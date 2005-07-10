@@ -1,6 +1,7 @@
 #|
 
  This software is Copyright (c) 2003, 2004, 2005  Peter Herth <herth@peter-herth.de>
+ Parts Copyright (c) 2005 Thomas F. Burdick
 
  Peter Herth grants you the rights to distribute
  and use this software as governed by the terms
@@ -381,7 +382,8 @@ toplevel             x
 		   (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* 0.878)
+(defvar *ltk-version* 0.8782)
+
 ;;; global var for holding the communication stream
 (defvar *wish* nil)
 
@@ -877,7 +879,8 @@ toplevel             x
 		      (string< (symbol-name x) (symbol-name y))))))
     (let ((cmdstring (format nil "~a ~~A " cmd))
 	  (codelist nil)
-	  (keylist nil))
+	  (keylist nil)
+	  (accessors nil))
       (format t "args::~s~%" args)
       (dolist (arg args)
 	(let ((entry (assoc arg *initargs*)))
@@ -887,6 +890,33 @@ toplevel             x
 	    (when (iarg-key entry)
 	      (setf keylist (append keylist (list (iarg-key entry)))))
 	    (setf codelist (append codelist (list (iarg-code entry))))
+
+	    (format t "~s~%"
+	     `(defmethod (setf ,(iarg-key entry)) (value (widget ,class))
+		(format-wish ,(format nil "configure ~~a ~a"(third entry)) (widget-path widget) value)))
+
+	    (when (and (iarg-key entry)
+		       (not (equal (iarg-key entry) 'variable))
+		       (not (equal (iarg-key entry) 'class))
+		       (not (equal (iarg-key entry) 'length))
+		       (not (equal (iarg-key entry) 'values))
+		       (not (equal (iarg-key entry) 'format))
+		       (not (equal (iarg-key entry) 'scrollregion))
+
+
+		       
+		       )
+	      (push
+	       `(defmethod (setf ,(iarg-key entry)) (value (widget ,class))
+		  (format-wish ,(format nil "~~a configure ~a"(third entry)) (widget-path widget) value))	   
+	       accessors)
+
+	      (push
+	       `(defmethod ,(iarg-key entry) ((widget ,class))
+		  (format-wish ,(format nil "senddata \"[~~a cget -~(~a~)]\"" (iarg-key entry)) (widget-path widget))
+		  (read-data))
+	       accessors))
+
 	    )
 	   (t 
 	    (setf cmdstring (concatenate 'string cmdstring (format nil "~~@[ -~(~a~) ~~(~~A~~)~~]" arg)))
@@ -910,7 +940,8 @@ toplevel             x
 	 (defmethod initialize-instance :after ((widget ,class) &key ,@keylist)
 	   (format-wish ,cmdstring (widget-path widget) ,@codelist)
 	   ,@code
-	   )	 
+	   )
+	 ,@accessors
 	 ))))
 
 ;;; the library implementation 
@@ -1432,7 +1463,7 @@ a list of numbers may be given"
 
 (defwidget toplevel (widget) 
   ((protocol-destroy :accessor protocol-destroy :initarg :on-close :initform nil)
-   (title :accessor title :initarg :title)
+   (title :accessor title :initform nil :initarg :title)
    ) 
   "toplevel"
   (when (title widget)
@@ -2004,12 +2035,12 @@ set y [winfo y ~a]
   (format-wish "senddatastring [~a cget -~(~a~)]" (widget-path widget) option)
   (read-data))
 
-(defun background (widget)
-  (cget widget :background))
+;(defun background (widget)
+;  (cget widget :background))
 
 #-:gcl
-(defun (setf background) (val widget)
-  (configure widget :background val))
+;(defun (setf background) (val widget)
+;  (configure widget :background val))
 
 #|
 (defmacro defoption (option)
@@ -2252,7 +2283,7 @@ set y [winfo y ~a]
 ;;; see make-string-output-string/get-output-stream-string
 (defun message-box (message title type icon)
   ;;; tk_messageBox function
-  (format-wish "senddatastring [tk_messageBox -message {~a} -title {~a} -type {~a} -icon {~a}]" message title type icon)
+  (format-wish "senddatastring [tk_messageBox -message {~a} -title {~a} -type ~(~a~) -icon ~(~a~)]" message title type icon)
   (read-keyword))
 
 
@@ -2470,8 +2501,174 @@ tk input to terminate"
 (defun exit-wish()
   (send-wish "exit"))
 
+#|
+:HANDLE-ERRORS determines what to do if an error is signaled.  It can be set to
+T, NIL, :SIMPLE, or :DEBUG.
+
+When an error is signalled, there are four things LTk can do:
+
+ (default)
+     The simplest is to do nothing, which usually means you will end out in the
+     SLIME debugger (although see the discussion of :DEBUGGER below).
+
+ note
+     Show a dialog box indicating that an error has occured.  The only thing
+     the user can do in this case is to hit "OK" and try to keep using the
+     application.  The "OK" button will invoke the ABORT restart, which in most
+     cases will just return to the LTk main loop.
+
+ show, offer to continue
+     Show a dialog box containing the error message.  If there is a CONTINUE
+     restart, the user will be prompted with a question and presented with
+     "Yes" button and a "No" button.  If there is not CONTINUE restart, the
+     only thing the user can do is to hit "OK".  The "Yes" button will invoke
+     the CONTINUE restart.  The "No" and "OK" buttons will invoke the ABORT
+     restart (see above).
+
+     CONTINUE restarts are usually created by the CERROR function.  In a
+     situation where "show, offer to continue" is handling the error, the
+     following code:
+
+        (when (= (+ 1 1) 2)
+          (cerror "Continue anyway"
+                  "One plus one is two."))
+
+     Will tell you that there is an error, display the error message "One plus
+     one is two", and ask you "Continue anyway?".  Contrast this with the
+     following:
+
+        (when (= (+ 1 1) 2)
+          (error "One plus one is two."))
+
+     This will show the user the error "One plus one is two" and allow them to
+     hit "OK".
+
+ show, offer to start the debugger
+     Show a dialog box containing the error message, and ask the user if they
+     want to start the debugger.  Answering "No" will abort (usually to the LTk
+     main loop).  Answering "Yes" will invoke the debugger; usually this means
+     you will see the SLIME debugger, but see the description of :DEBUGGER
+     below.
+
+LTk considers two types of errors: SIMPLE-ERRORs and all others.  SIMPLE-ERROR
+is what is signalled when you type a form like (error "Something is wrong.").
+
+If :HANDLE-ERRORS is T, SIMPLE-ERRORs will be shown to the user, and all others
+(such as those generated by the Lisp system itself, eg, if you attempt to divide
+by zero) will be noted.  In this model, you can call ERROR yourself to send an
+error message to the user in a user-friendly manner.  If :HANDLE-ERRORS is NIL,
+LTk will not interfere with the normal error handling mechanism.
+
+For details of all the options, see the tables below.
+
+:HANDLE-WARNINGS can be T, NIL, or :DEBUG.
+
+:DEBUGGER can be T or NIL.  If it is NIL, LTk will prevent the user from ever
+seeing the Lisp debugger.  In the event that the debugger would be invoked, LTk
+will use its "trivial debugger" which dumps a stack trace and quits (note that
+this is only implemented on SBCL and CMUCL).  This is useful in conjunction with
+:HANDLE-ERRORS T, which should never call the debugger; if :HANDLE-ERRORS is T
+and the debugger is called, this means that the system is confused beyond all
+hope, and dumping a stack trace is probably the right thing to do.
+
+
+                                   :HANDLE-ERRORS T
+             +--------------+--------------+--------------+--------------+
+             |  (default)   |     note     | show, offer  | show, offer  |
+             |              |              | to continue  | to start the |
+             |              |              |              | debugger     |
+             +--------------+--------------+--------------+--------------+
+             |              |              |    XX  XX    |              |
+SIMPLE-ERROR |              |              |      XX      |              |
+             |              |              |    XX  XX    |              |
+             +--------------+--------------+--------------+--------------+
+             |              |    XX  XX    |              |              |
+       ERROR |              |      XX      |              |              |
+             |              |    XX  XX    |              |              |
+             +--------------+--------------+--------------+--------------+
+
+                               :HANDLE-ERRORS :SIMPLE
+             +--------------+--------------+--------------+--------------+
+             |  (default)   |     note     | show, offer  | show, offer  |
+             |              |              | to continue  | to start the |
+             |              |              |              | debugger     |
+             +--------------+--------------+--------------+--------------+
+             |              |              |    XX  XX    |              |
+SIMPLE-ERROR |              |              |      XX      |              |
+             |              |              |    XX  XX    |              |
+             +--------------+--------------+--------------+--------------+
+             |    XX  XX    |              |              |              |
+       ERROR |      XX      |              |              |              |
+             |    XX  XX    |              |              |              |
+             +--------------+--------------+--------------+--------------+
+
+                               :HANDLE-ERRORS :DEBUG
+             +--------------+--------------+--------------+--------------+
+             |  (default)   |     note     | show, offer  | show, offer  |
+             |              |              | to continue  | to start the |
+             |              |              |              | debugger     |
+             +--------------+--------------+--------------+--------------+
+             |              |              |              |    XX  XX    |
+SIMPLE-ERROR |              |              |              |      XX      |
+             |              |              |              |    XX  XX    |
+             +--------------+--------------+--------------+--------------+
+             |              |              |              |    XX  XX    |
+       ERROR |              |              |              |      XX      |
+             |              |              |              |    XX  XX    |
+             +--------------+--------------+--------------+--------------+
+
+                                 :HANDLE-ERRORS NIL
+             +--------------+--------------+--------------+--------------+
+             |  (default)   |     note     | show, offer  | show, offer  |
+             |              |              | to continue  | to start the |
+             |              |              |              | debugger     |
+             +--------------+--------------+--------------+--------------+
+             |    XX  XX    |              |              |              |
+SIMPLE-ERROR |      XX      |              |              |              |
+             |    XX  XX    |              |              |              |
+             +--------------+--------------+--------------+--------------+
+             |    XX  XX    |              |              |              |
+       ERROR |      XX      |              |              |              |
+             |    XX  XX    |              |              |              |
+             +--------------+--------------+--------------+--------------+
+
+                         :HANDLE-WARNINGS T
+             +--------------+--------------+--------------+
+             |  (default)   |     show     | show, offer  |
+             |              |              | to start the |
+             |              |              | debugger     |
+             +--------------+--------------+--------------+
+             |              |    XX  XX    |              |
+    WARNING  |              |      XX      |              |
+             |              |    XX  XX    |              |
+             +--------------+--------------+--------------+
+
+                       :HANDLE-WARNINGS :DEBUG
+             +--------------+--------------+--------------+
+             |  (default)   |     show     | show, offer  |
+             |              |              | to start the |
+             |              |              | debugger     |
+             +--------------+--------------+--------------+
+             |              |              |    XX  XX    |
+     WARNING |              |              |      XX      |
+             |              |              |    XX  XX    |
+             +--------------+--------------+--------------+
+ 
+                        :HANDLE-WARNINGS NIL
+             +--------------+--------------+--------------+
+             |  (default)   |     show     | show, offer  |
+             |              |              | to start the |
+             |              |              | debugger     |
+             +--------------+--------------+--------------+
+             |    XX  XX    |              |              |
+     WARNING |      XX      |              |              |
+             |    XX  XX    |              |              |
+             +--------------+--------------+--------------+
+|#
+
+
+
 ;;; wrapper macro - initializes everything, calls body and then mainloop
-;;; since 
 
 (defmacro with-ltk ((&rest keys &key handle-errors handle-warnings (debugger t))
 		    &body body)
@@ -2530,7 +2727,7 @@ tk input to terminate"
 	     (lines nil)
 	     (mb (make-menubar))
 	     (mfile (make-menu mb "File" ))
-	     (mf-load (make-menubutton mfile "Load" (lambda () (error)
+	     (mf-load (make-menubutton mfile "Load" (lambda () ;(error "asdf")
 						      (format t "Load pressed~&")
 						      (force-output))
 				       :underline 1))
