@@ -117,6 +117,7 @@ toplevel             x
 
 |#
 
+
 (defpackage "LTK"
   (:use "COMMON-LISP"
 	#+:cmu "EXT"
@@ -207,6 +208,7 @@ toplevel             x
 	   "GRID"
 	   "GRID-COLUMNCONFIGURE"
 	   "GRID-CONFIGURE"
+	   "GRID-FORGET"
 	   "GRID-ROWCONFIGURE"
 	   "ICONIFY"
 	   "ICONWINDOW"
@@ -228,6 +230,7 @@ toplevel             x
 	   "LISTBOX-CLEAR"
 	   "LISTBOX-CONFIGURE"
 	   "LISTBOX-GET-SELECTION"
+	   "LISTBOX-NEAREST"
 	   "LISTBOX-SELECT"
 	   "LOAD-TEXT"
 	   "LOWER"
@@ -304,6 +307,7 @@ toplevel             x
 	   "SET-GEOMETRY"
 	   "SET-GEOMETRY-WH"
 	   "SET-GEOMETRY-XY"
+	   "SET-WM-OVERRIDEREDIRECT"
 	   "SPINBOX"
 	   "START-WISH"
 	   "TAG-BIND"
@@ -382,7 +386,7 @@ toplevel             x
 		   (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* 0.8782)
+(defvar *ltk-version* 0.8785)
 
 ;;; global var for holding the communication stream
 (defvar *wish* nil)
@@ -625,6 +629,8 @@ toplevel             x
 (eval-when (:compile-toplevel :load-toplevel :execute)
 ;;; widget class built helper functions
 
+;;(defparameter *generate-accessors* nil)
+  
 (defun iarg-name (arg) (nth 0 arg))
 (defun iarg-key (arg) (nth 1 arg))
 (defun iarg-format (arg) (nth 2 arg))
@@ -881,7 +887,7 @@ toplevel             x
 	  (codelist nil)
 	  (keylist nil)
 	  (accessors nil))
-      (format t "args::~s~%" args)
+      ;;(format t "args::~s~%" args)
       (dolist (arg args)
 	(let ((entry (assoc arg *initargs*)))
 	  (cond
@@ -891,32 +897,24 @@ toplevel             x
 	      (setf keylist (append keylist (list (iarg-key entry)))))
 	    (setf codelist (append codelist (list (iarg-code entry))))
 
-	    (format t "~s~%"
-	     `(defmethod (setf ,(iarg-key entry)) (value (widget ,class))
-		(format-wish ,(format nil "configure ~~a ~a"(third entry)) (widget-path widget) value)))
 
+	    #+:generate-accessors
 	    (when (and (iarg-key entry)
 		       (not (equal (iarg-key entry) 'variable))
 		       (not (equal (iarg-key entry) 'class))
 		       (not (equal (iarg-key entry) 'length))
 		       (not (equal (iarg-key entry) 'values))
 		       (not (equal (iarg-key entry) 'format))
-		       (not (equal (iarg-key entry) 'scrollregion))
-
-
-		       
-		       )
+		       (not (equal (iarg-key entry) 'scrollregion)))
 	      (push
 	       `(defmethod (setf ,(iarg-key entry)) (value (widget ,class))
 		  (format-wish ,(format nil "~~a configure ~a"(third entry)) (widget-path widget) value))	   
 	       accessors)
-
 	      (push
 	       `(defmethod ,(iarg-key entry) ((widget ,class))
 		  (format-wish ,(format nil "senddata \"[~~a cget -~(~a~)]\"" (iarg-key entry)) (widget-path widget))
 		  (read-data))
 	       accessors))
-
 	    )
 	   (t 
 	    (setf cmdstring (concatenate 'string cmdstring (format nil "~~@[ -~(~a~) ~~(~~A~~)~~]" arg)))
@@ -924,23 +922,20 @@ toplevel             x
 	    (setf codelist (append codelist (list arg)))
 	  ))))
 
-      ;;(format t "~s~&" 
       (pprint `(progn
-	 (defclass ,class (,@parents)
-	   ,slots
-	    )
-	 (defmethod initialize-instance :after ((widget ,class) &key ,@keylist)
-	   (format-wish ,cmdstring (widget-path widget) ,@codelist)
-	   ,@code
-	   )))
+		 (defclass ,class (,@parents)
+		   ,slots)
+		 (defmethod initialize-instance :after ((widget ,class) &key ,@keylist)
+		   (format-wish ,cmdstring (widget-path widget) ,@codelist)
+		   ,@code)
+		   ,@accessors
+		   ))
       `(progn
 	 (defclass ,class (,@parents)
-	   ,slots
-	    )
+	   ,slots)
 	 (defmethod initialize-instance :after ((widget ,class) &key ,@keylist)
 	   (format-wish ,cmdstring (widget-path widget) ,@codelist)
-	   ,@code
-	   )
+	   ,@code)
 	 ,@accessors
 	 ))))
 
@@ -1238,7 +1233,7 @@ toplevel             x
 
 ;;; standard button widget
 
-(defwidget button (widget tktextvariable) () "button")
+(defwidget button (tktextvariable widget) () "button")
 
 (defmethod (setf command) (val (button button))
   (add-callback (name button) val)
@@ -1246,7 +1241,7 @@ toplevel             x
 
 ;;; check button widget
 
-(defwidget check-button (widget tktextvariable tkvariable) () "checkbutton")
+(defwidget check-button (tktextvariable widget tkvariable) () "checkbutton")
 
 (defmethod (setf command) (val (check-button check-button))
   (add-callback (name check-button) val)
@@ -1281,7 +1276,7 @@ toplevel             x
 
 ;; text entry widget
 
-(defwidget entry (widget tktextvariable) () "entry")
+(defwidget entry (tktextvariable widget) () "entry")
 
 (defun entry-select (e from to)
   (format-wish "~a selection range ~a ~a" (widget-path e) from to))
@@ -1364,8 +1359,12 @@ a list of numbers may be given"
 
 (defgeneric listbox-configure (l i &rest options))
 (defmethod listbox-configure ((l listbox) index &rest options)
-  (format-wish "~a itemconfigure ~a ~{ -~(~a~) {~(~a~)}~}" (widget-path l) index options)
-  )
+  (format-wish "~a itemconfigure ~a ~{ -~(~a~) {~(~a~)}~}" (widget-path l) index options))
+
+(defgeneric listbox-nearest (listbox y))
+(defmethod listbox-nearest ((l listbox) y)
+  (format-wish "senddata [~a nearest ~a]" (widget-path l) y)
+  (read-data))
 
 
 (defclass scrolled-listbox (frame)
@@ -1427,9 +1426,9 @@ a list of numbers may be given"
   (configure (textbox st) "yscrollcommand" (concatenate 'string (widget-path (vscroll st)) " set"))
   )
 
-(defgeneric append-text (txt text &optional tag))
-(defmethod append-text ((txt scrolled-text) text &optional (tag nil))
-  (format-wish "~a insert end {~a}~@[ ~(~a~)~]" (widget-path (textbox txt)) text tag))
+(defgeneric append-text (txt text &rest tags))
+(defmethod append-text ((txt scrolled-text) text &rest tags )
+  (format-wish "~a insert end \"~a\" {~{ ~(~a~)~}}" (widget-path (textbox txt)) (tkescape text) tags))
 
 (defmethod (setf text) (new-text (self scrolled-text))
   (setf (text (textbox self)) new-text))
@@ -1702,6 +1701,7 @@ set y [winfo y ~a]
 (defgeneric itemmove (canvas item dx dy))
 (defmethod itemmove ((canvas canvas) (item integer) dx dy)
   (format-wish "~a move ~a ~a ~a" (widget-path canvas) item dx dy))
+
 (defmethod itemmove ((canvas canvas) (item canvas-item) dx dy)
   (itemmove (canvas item) (handle item) dx dy))
 
@@ -1853,8 +1853,8 @@ set y [winfo y ~a]
 (defun make-text (master &key (width nil) (height nil))
   (make-instance 'text :master master :width width :height height))
 
-(defmethod append-text ((txt text) text &optional (tag nil))
-  (format-wish "~a insert end {~a}~@[ ~(~a~)~]" (widget-path txt) text tag))
+(defmethod append-text ((txt text) text &rest tags)
+  (format-wish "~a insert end \"~a\" {~{ ~(~a~)~}}" (widget-path txt) (tkescape text) tags))
 
 (defmethod insert-object ((txt text) obj)
   (format-wish "~a window create end -window ~a" (widget-path txt) (widget-path obj)))
@@ -1999,6 +1999,8 @@ set y [winfo y ~a]
 (defmethod grid-configure (widget option value)
   (format-wish "grid configure ~a -~(~a~) {~a}" (widget-path widget) option value))
 
+(defmethod grid-forget ((w widget))
+  (format-wish "grid forget ~A" (widget-path w)))
 
 ;;; configure a widget parameter
 
@@ -2094,6 +2096,9 @@ set y [winfo y ~a]
   (format-wish "grab release ~a" (widget-path toplevel)))
 
 ;;; wm functions
+
+(defmethod set-wm-overrideredirect ((w widget) val)
+  (format-wish "wm overrideredirect ~a ~a" (widget-path w) val))
 
 (defgeneric wm-title (widget title))
 (defmethod wm-title ((w widget) title)
@@ -2687,6 +2692,7 @@ SIMPLE-ERROR |      XX      |              |              |              |
 	 (send-wish "exit")
 	 (close ltk::*wish*)
 	 (setf ltk::*wish* nil))
+       #+:allegro (system:reap-os-subprocess)
        )))
        
 
