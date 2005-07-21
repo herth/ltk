@@ -49,6 +49,9 @@ o history-entry
 	   "APPEND-ITEM"
 	   "DELETE-ITEM"
 	   "TREELIST"
+	   "TREELIST-HAS-CHILDREN"
+	   "TREELIST-CHILDREN"
+	   "TREELIST-NAME"
 	   ))
 
 (in-package :ltk-mw)
@@ -231,67 +234,108 @@ o history-entry
 
 ;;; tree list widget
 
-
-
-
 (defparameter *tree*
-  '(("BMW"
+  '(nil
+    ("BMW"
      ("3er"
-      ("318")
-      ("320")
-      ("325"))
+      "318"
+      "320"
+      "325")
      ("5er"
-      ("520")
-      ("530")
-      ("535")
-      ("M5")))
+      "520"
+      "530"
+      "535"
+      "M5"))
     ("Mercedes"
      ("A-Klasse"
-      ("A 160")
-      ("A 180"))
+      "A 160"
+      "A 180")
      ("C-Klasse"
-      ("C 200")
-      ("C 250"))
+      "C 200"
+      "C 250")
      ("S-Klasse"
-      ("400 S")
-      ("500 S")
-      ("600 S")))
+      "400 S"
+      "500 S"
+      "600 S"))
     ("VW"
      ("Golf"
-      ("TDI")
-      ("GTI")))))
-     
-       
-       
+      ("TDI"
+       "1.8"
+       "2.0"
+       "16 V")
+      "GTI"))))
        
       
 
 (defclass treelist (frame)
   ((depth :reader depth :initarg :depth :initform 3)
    (listbox :accessor listbox :initform nil)
-   (data :accessor data :initarg :data :initform nil)))
-
-(defun lbt-select (tree lb nr)
-  )
+   (data :accessor data :initarg :data :initform nil)
+   (lists :accessor lists)
+   ))
 
 (defmethod initialize-instance :after ((tree treelist) &key listwidth listheight (background :white) )
   (setf (listbox tree) (make-array (depth tree)))
-  (dotimes (nr (depth tree))
-    (setf (aref (listbox tree) nr) (make-instance 'listbox :master tree :width listwidth :height listheight :background background :selectforeground :white :selectbackground :blue))
-    (pack (aref (listbox tree) nr) :side :left :expand t :fill :both)
-    (bind (aref (listbox tree) nr) "<<Listbox-selection>>" (lambda ()
-							     (lbt-select tree (aref (listbox tree) nr) nr)))
-    )
-
+  (setf (lists tree) (make-array (depth tree)))
+  (dotimes (i (depth tree))
+    (let ((nr i)
+	  (sb (make-instance 'scrolled-listbox :master tree :width listwidth :height listheight )))
+      (grid-forget (ltk::hscroll sb))
+      (setf (aref (listbox tree) nr) (listbox sb))
+      (configure (listbox sb) :background background :selectforeground :white :selectbackground :blue)
+      (pack sb :side :left :expand t :fill :both)
+      (bind (aref (listbox tree) nr) "<<ListboxSelect>>" (lambda (event)
+							   (declare (ignore event))
+							   ;;(ltk::dbg "event nr:~a" nr)
+							   (treelist-listbox-select tree (aref (listbox tree) nr) nr)))
+    ))
   (when (data tree)
-    (data-select tree (caar (data *tree*))))
+    (treelist-setlist tree (data tree) 0)))
 
-  (dotimes (l (depth tree))
-    (listbox-clear (aref (listbox tree) l)))
-  (dolist (entry *tree*)
-    (listbox-append (aref (listbox tree) 0) (car entry)))
+(defmethod treelist-setlist ((tree treelist) data nr)
+  (listbox-append (aref (listbox tree) nr) 
+		  (mapcar #'treelist-name (treelist-children data)))
+  (setf (aref (lists tree) nr) (treelist-children data)))
+
+(defmethod treelist-listbox-select ((tree treelist) (listbox listbox) nr)
+  ;;(ltk::dbg "t-l-s nr:~s ~s ~a~%" tree listbox nr)
+  (let ((sel (car (listbox-get-selection listbox))))
+    (when sel
+      ;;(ltk::dbg "sel: ~a~%" sel)
+      (loop for i from (1+ nr) below (depth tree)
+	    do 
+	    (listbox-clear (aref (listbox tree) i)))
+      (let ((selected-node (nth sel (aref (lists tree) nr))))
+	(treelist-select tree selected-node)
+	(when (treelist-has-children selected-node)
+	  (listbox-append (aref (listbox tree) (1+ nr))
+			  (mapcar #'treelist-name (treelist-children selected-node)))
+	  (setf (aref (lists tree) (1+ nr)) (treelist-children selected-node)))))))
+
+(defmethod treelist-select (tree node)
   )
 
-(defun data-select (tree val)
- 
-  )
+(defmethod treelist-children (node)
+  nil)
+
+(defmethod treelist-has-children (node)
+  (> (length (treelist-children node)) 0))
+
+(defmethod treelist-has-children ((node string))
+  nil)
+
+(defmethod treelist-has-children ((node list))
+  (rest node))
+
+(defmethod treelist-children ((node string))
+  nil)
+
+(defmethod treelist-children ((node list))
+  (rest node))
+
+(defmethod treelist-name ((node string))
+  node)
+
+(defmethod treelist-name ((node list))
+  (car node))
+
