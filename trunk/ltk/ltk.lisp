@@ -324,6 +324,8 @@ toplevel             x
 	   "WINDOW-WIDTH"
 	   "WINDOW-X"
 	   "WINDOW-Y"
+	   "MAKE-LTK-CONNECTION"
+	   "WITH-LTK-CONNECTION"
 	   "WITH-LTK"
 	   "WITH-REMOTE-LTK"
 	   "WITHDRAW"
@@ -386,7 +388,7 @@ toplevel             x
 		   (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* 0.8785)
+(defvar *ltk-version* 0.8786)
 
 ;;; global var for holding the communication stream
 (defvar *wish* nil)
@@ -998,6 +1000,18 @@ toplevel             x
     (setf (slot-value w 'widget-path) (create-path (master w) (name w))))
   ;(create w)				; call the widget specific creation method - every 
   )					; widget class needs to overload that
+
+;; around - initializer
+
+(defmethod initialize-instance :around ((w widget) &key pack place grid)
+  (call-next-method)
+  ;; pack widget if parameter has been supplied
+  (when pack
+    (apply #'pack w pack))
+  (when place
+    (apply #'place w place))
+  (when grid
+    (apply #'grid w grid)))
 
 (defgeneric create (w))
 
@@ -2424,9 +2438,14 @@ set y [winfo y ~a]
 		       ((t) #'show-warning)
 		       (:debug #'debug-warning)
 		       ((nil) #'nothing)))
-	    (*debugger-hook* (ecase debugger
+	    (*debugger-hook* (case debugger
 			       ((t) *debugger-hook*)
-			       ((nil) #'trivial-debugger))))
+			       ((nil) #'trivial-debugger)
+			       (t (if (or (functionp debugger)
+					  (and (symbolp debugger)
+					       (fboundp debugger)))
+				      debugger
+				    (error "Not a function specifier: ~S" debugger))))))
 	(handler-bind ((simple-error simple-error)
 		       (error error)
 		       (warning warning))
@@ -2673,28 +2692,92 @@ SIMPLE-ERROR |      XX      |              |              |              |
 
 
 
+			     
+
+(defstruct (ltk-connection (:constructor make-ltk-connection ()))
+  (wish nil)
+  (callbacks (make-hash-table :test #'equal))
+  (counter 1)
+  (after-counter 1)
+  (event-queue nil))
+
+(defmacro with-ltk-connection ((&optional connection) &body body)
+  (let ((cxn (gensym)))
+    `(let ((,cxn (or ,connection (make-ltk-connection))))
+       (let ((*wish* (ltk-connection-wish ,cxn))
+            (*callbacks* (ltk-connection-callbacks ,cxn))
+            (*counter* (ltk-connection-counter ,cxn))
+            (*after-counter* (ltk-connection-after-counter ,cxn))
+            (*event-queue* (ltk-connection-event-queue ,cxn)))
+        (unwind-protect (progn ,@body)
+          (setf (ltk-connection-wish ,cxn) *wish*
+                (ltk-connection-callbacks ,cxn) *callbacks*
+                (ltk-connection-counter ,cxn) *counter*
+                (ltk-connection-after-counter ,cxn) *after-counter*
+                (ltk-connection-event-queue ,cxn) *event-queue*))))))
+
 ;;; wrapper macro - initializes everything, calls body and then mainloop
 
 (defmacro with-ltk ((&rest keys &key handle-errors handle-warnings (debugger t))
 		    &body body)
   (declare (ignore handle-errors handle-warnings debugger))
-  `(let ((ltk::*wish* nil)
-	 (ltk::*callbacks* (make-hash-table :test #'equal))
-	 (ltk::*counter* 1)
-	 (ltk::*after-counter* 1)
-	 (ltk::*event-queue* nil))
-     (unwind-protect 
-         (with-ltk-handlers (,@keys)
-			    (start-wish)
-			    ,@body
-			    (mainloop))
-       (when ltk::*wish*
-	 (send-wish "exit")
-	 (close ltk::*wish*)
-	 (setf ltk::*wish* nil))
-       #+:allegro (system:reap-os-subprocess)
-       )))
+  `(with-ltk-connection ()
+			(unwind-protect 
+			    (with-ltk-handlers (,@keys)
+					       (start-wish)
+					       ,@body
+					       (mainloop))
+			  (when *wish*
+			    (send-wish "exit")
+			    (close *wish*)
+			    (setf *wish* nil))
+			  #+:allegro (system:reap-os-subprocess)
+			  )))
        
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defun process-layout (line parent)
+    (let ((class-name (first line))
+	  (instance-name (second line)))
+      (multiple-value-bind (kvp sls)
+
+	  (do ((lst (cddr line))
+	       (keywords+values nil)
+	       (sublists nil))
+	      ((endp lst) (values (reverse keywords+values) (reverse sublists)))
+	  
+	    (cond ((listp (car lst))
+		   (dolist (retlist (process-layout (car lst) instance-name))
+		     (push retlist sublists))
+		   (setq lst (cdr lst)))
+		  (t (push (car lst) keywords+values)
+		     (push (cadr lst) keywords+values)
+		     (setq lst (cddr lst)))))
+
+	(append
+	 (list (list instance-name
+		     (append
+		      (list 'MAKE-INSTANCE (list 'QUOTE class-name))
+		      (if parent (list :master parent) nil)
+		      kvp)))
+	 sls))))
+
+  (defmacro with-widgets (layout &rest body)
+    (append (list 'LET* (process-layout layout nil)) body))
+  )
+;; example-usage
+;;
+
+(defun with-widgets-test ()
+  (with-ltk ()
+    (with-widgets
+	(toplevel top-frame :title "with-widgets-test"
+		  (label lb1 :text "Test, Test!" :pack '(:side :top))
+		  (entry en1 :pack '(:side :top))
+		  (frame fr1 :pack '(:side :bottom)
+			 (button bt1 :text "OK" :pack '(:side :right)
+				 :command (lambda () (format t "Pressed OK~%")))
+			 (button bt2 :text "CANCEL" :pack '(:side :left)
+				 :command (lambda () (withdraw top-frame))))))))
 
 ;;;; testing functions
 

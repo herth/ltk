@@ -339,3 +339,22 @@ o history-entry
 (defmethod treelist-name ((node list))
   (car node))
 
+
+(defclass tooltip (toplevel)
+  ((label :accessor tooltip-label :initarg :label)
+   ))
+
+(defmethod initialize-instance :after ((tooltip tooltip) &key)
+  (withdraw tooltip)
+  (setf (tooltip-label tooltip) (make-instance 'label :text "" :background :yellow3))
+  (set-wm-overrideredirect tooltip 1)
+  (pack (tooltip-label tooltip) :side :left :expand t :fill :both))
+
+(defmethod show ((tooltip tooltip) text x y)
+  (setf (text (tooltip-label tooltip)) text)
+  (set-geometry-xy tooltip x y)
+  (normalize tooltip))
+
+(defmethod clear ((tooltip tooltip))
+  (withdraw tooltip))
+
