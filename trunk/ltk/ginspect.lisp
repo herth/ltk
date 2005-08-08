@@ -49,7 +49,7 @@
 (defun ginspect (inspected-value)
   "inspect the value with a graphical user interface"
   (let ((*debug-tk* nil))
-  (with-ltk
+  (with-ltk ()
    (setf *debug-tk* nil)
    (let* ((inspector (make-instance 'ginspector))	   
 	  (f (make-instance 'frame))
