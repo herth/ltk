@@ -325,9 +325,11 @@ toplevel             x
 	   "WINDOW-X"
 	   "WINDOW-Y"
 	   "MAKE-LTK-CONNECTION"
+	   "WIDGET-CLASS-NAME"
 	   "WITH-LTK-CONNECTION"
 	   "WITH-LTK"
 	   "WITH-REMOTE-LTK"
+	   "WITH-WIDGETS"
 	   "WITHDRAW"
 	   "WM-TITLE"
 	   ))
@@ -756,7 +758,12 @@ toplevel             x
     (tearoff tearoff "~@[ -tearoff ~(~a~)~]" tearoff "")
     (tearoffcommand tearoffcommand "~@[ -tearoffcommand ~(~a~)~]" tearoffcommand "")
     (text text "~@[ -text \"~a\"~]" (tkescape text) "")
-    (textvariable textvariable "~@[ -textvariable text_~a~]" (and textvariable (name widget)) "")
+    ;(textvariable textvariable "~@[ -textvariable text_~a~]" (and textvariable (name widget)) "")
+    (textvariable text "~@[ -textvariable text_~a~]" (progn
+						       (when text
+							 (format-wish "set text_~a \"~a\"" (name widget) (tkescape text)))
+						       (name widget)) "")
+
     (tickinterval tickinterval "~@[ -tickinterval ~(~a~)~]" tickinterval "")
     (title title "~@[ -title ~(~a~)~]" title "")
     (to to "~@[ -to ~(~a~)~]" to "")
@@ -787,11 +794,11 @@ toplevel             x
     '())
  
   (defun build-args (class parents defs)
-    (format t  "class ~s parents ~s defs ~s~%" class parents defs) (force-output)
+    ;;(format t  "class ~s parents ~s defs ~s~%" class parents defs) (force-output)
     (let ((args nil))
       (dolist (p parents)
 	(let ((arglist (rest (assoc p *class-args*))))
-	  (format t "parent: ~s arglist: ~s~%" p arglist) (force-output)
+	  ;;(format t "parent: ~s arglist: ~s~%" p arglist) (force-output)
 	  (dolist (arg arglist)
 	    (unless (member arg args)
 	      (setf args (append args (list arg)))))))
@@ -811,7 +818,7 @@ toplevel             x
 	   (setf args (delete (pop defs) args)))	    
 	  (t
 	   (setf args (append args (list arg)))))))
-      (format t "class: ~a args: ~a~&" class args) (force-output)
+      ;;(format t "class: ~a args: ~a~&" class args) (force-output)
       args
       ))
   )
@@ -829,13 +836,13 @@ toplevel             x
 ;(defargs text (widget button) :delete anchor color)
 
 (defargs button (widget) 
-  activebackground activeforeground anchor bitmap command compound default disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image justify overrelief padx pady repeatdelay repeatinterval state takefocus text textvariable underline width wraplength)
+  activebackground activeforeground anchor bitmap command compound default disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image justify overrelief padx pady repeatdelay repeatinterval state takefocus textvariable underline width wraplength)
 
 (defargs canvas ()
   background borderwidth closeenough confine cursor height highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth offset relief scrollregion selectbackground selectborderwidth selectforeground state takefocus width xscrollcommand xscrollincrement yscrollcommand yscrollincrement)
 	
 (defargs check-button ()
-  activebackground activeforeground anchor background bitmap borderwidth cbcommand compound cursor disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify offrelief offvalue onvalue overrelief padx pady relief selectcolor selectimage state takefocus text textvariable underline variable width wraplength)
+  activebackground activeforeground anchor background bitmap borderwidth cbcommand compound cursor disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify offrelief offvalue onvalue overrelief padx pady relief selectcolor selectimage state takefocus textvariable underline variable width wraplength)
 
 (defargs entry () background borderwidth cursor disabledbackground disabledForeground exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth invalidcommand justify readonlybackground relief selectbackground selectborderwidth selectforeground show state takefocus textvariable validate validatecommand width xscrollcommand )
 
@@ -843,7 +850,7 @@ toplevel             x
   borderwidth class relief background colormap container cursor height highlightbackground highlightcolor highlightthickness padx pady takefocus visual width)
 
 (defargs label ()
-  activebackground activeforeground anchor background bitmap borderwidth compound cursor disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image justify padx pady relief state takefocus text textvariable underline width wraplength )
+  activebackground activeforeground anchor background bitmap borderwidth compound cursor disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image justify padx pady relief state takefocus textvariable underline width wraplength )
 
 (defargs labelframe ()
   borderwidth class font foreground labelanchor labelwidget relief text background colormap container cursor height highlightbackground highlightcolor highlightthickness padx pady takefocus visual width)
@@ -855,16 +862,16 @@ toplevel             x
   activebackground activeborderwidth activeforeground background borderwidth cursor disabledForeground font foreground postcommand relief selectcolor takefocus tearoff tearoffcommand title type)
 
 (defargs menubutton ()
-  activebackground activeforeground anchor background bitmap borderwidth cursor direction disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify menu padx pady relief compound state takefocus text textvariable underline width wraplength)
+  activebackground activeforeground anchor background bitmap borderwidth cursor direction disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify menu padx pady relief compound state takefocus textvariable underline width wraplength)
 
 (defargs message ()
-  anchor aspect background borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness justify padx pady relief takefocus text textvariable width)
+  anchor aspect background borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness justify padx pady relief takefocus textvariable width)
 
 (defargs paned-window ()
   background borderwidth cursor handlepad handlesize height opaqueresize orient relief sashcursor sashpad sashrelief sashwidth showhandle width)
 
 (defargs radio-button ()
-  activebackground activeforeground anchor background bitmap borderwidth command-radiobuton compound cursor disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify offrelief overrelief padx pady relief selectcolor selectimage state takefocus text textvariable underline value-radio-button variable-radio-button width wraplength)
+  activebackground activeforeground anchor background bitmap borderwidth command-radiobuton compound cursor disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify offrelief overrelief padx pady relief selectcolor selectimage state takefocus textvariable underline value-radio-button variable-radio-button width wraplength)
 
 (defargs scale ()
   activebackground background bigincrement borderwidth command cursor digits font foreground from highlightbackground highlightcolor highlightthickness label length orient relief repeatdelay repeatinterval resolution showvalue sliderlength sliderrelief state takefocus tickinterval to troughcolor variable width)
@@ -885,11 +892,10 @@ toplevel             x
   (let ((args (sort (copy-list (rest (assoc class *class-args*)))
 		    (lambda (x y)
 		      (string< (symbol-name x) (symbol-name y))))))
-    (let ((cmdstring (format nil "~a ~~A " cmd))
+    (let ((cmdstring (format nil "~~a ~~~~A "))
 	  (codelist nil)
 	  (keylist nil)
 	  (accessors nil))
-      ;;(format t "args::~s~%" args)
       (dolist (arg args)
 	(let ((entry (assoc arg *initargs*)))
 	  (cond
@@ -898,7 +904,6 @@ toplevel             x
 	    (when (iarg-key entry)
 	      (setf keylist (append keylist (list (iarg-key entry)))))
 	    (setf codelist (append codelist (list (iarg-code entry))))
-
 
 	    #+:generate-accessors
 	    (when (and (iarg-key entry)
@@ -923,20 +928,15 @@ toplevel             x
 	    (setf keylist (append keylist (list arg)))
 	    (setf codelist (append codelist (list arg)))
 	  ))))
-
-      (pprint `(progn
-		 (defclass ,class (,@parents)
-		   ,slots)
-		 (defmethod initialize-instance :after ((widget ,class) &key ,@keylist)
-		   (format-wish ,cmdstring (widget-path widget) ,@codelist)
-		   ,@code)
-		   ,@accessors
-		   ))
+      (push `(widget-class-name :accessor widget-class-name :initform ,cmd :allocation :class) slots)
       `(progn
 	 (defclass ,class (,@parents)
 	   ,slots)
 	 (defmethod initialize-instance :after ((widget ,class) &key ,@keylist)
-	   (format-wish ,cmdstring (widget-path widget) ,@codelist)
+	   ;(format-wish ,cmdstring (widget-class-name widget) (widget-path widget) ,@codelist)
+	   ;;(format t "setting initarg for ~a~%" (quote ,class)) (force-output)
+	   (setf (init-command widget)
+		 (format nil ,cmdstring (widget-class-name widget) ,@codelist))
 	   ,@code)
 	 ,@accessors
 	 ))))
@@ -982,13 +982,11 @@ toplevel             x
    )
   (:documentation "Base class for every Tk object"))
 
-(defgeneric widget-path (w))
-(defmethod widget-path ((w (eql nil))) nil)
-
 ;; basic class for all widgets 
 (defclass widget(tkobject)
   ((master :accessor master :initarg :master :initform nil) ;; parent widget or nil
-   (widget-path :reader widget-path :initarg :path :initform nil)         ;; pathname to refer to the widget
+   (widget-path  :initarg :path :initform nil)         ;; pathname to refer to the widget
+   (init-command :accessor init-command :initform nil :initarg :init-command)
    )
   (:documentation "Base class for all widget types"))
 
@@ -996,9 +994,7 @@ toplevel             x
 (defmethod initialize-instance :after ((w widget) &key)
   (unless (name w)			; generate name if not given 
     (setf (name w) (create-name)))
-  (unless (widget-path w)			; and pathname
-    (setf (slot-value w 'widget-path) (create-path (master w) (name w))))
-  ;(create w)				; call the widget specific creation method - every 
+;  (create w)				; call the widget specific creation method - every 
   )					; widget class needs to overload that
 
 ;; around - initializer
@@ -1013,11 +1009,24 @@ toplevel             x
   (when grid
     (apply #'grid w grid)))
 
+(defgeneric widget-path (widget))
+(defmethod widget-path ((w (eql nil))) nil)
+
+(defmethod widget-path ((widget widget))
+  "retrieve the slot value widget-path, if not given, create it"
+  (or (slot-value widget 'widget-path)
+      (prog1
+	  (setf (slot-value widget 'widget-path)
+		(create-path (master widget) (name widget)))
+	(create widget))))
+	     
+
 (defgeneric create (w))
 
-(defmethod create ((w widget))
-  )
-
+(defmethod create ((widget widget))
+  (when (init-command widget)
+    ;;(format t "creating: ~a~%" (init-command widget)) (force-output)
+    (format-wish (init-command widget) (widget-path widget))))
 
 (defgeneric (setf command) (value widget))
 (defgeneric command (widget))
@@ -1116,7 +1125,7 @@ toplevel             x
 
 (defmethod initialize-instance :around ((v tktextvariable) &key)
   (call-next-method)
-  (format-wish "~a configure -textvariable text_~a" (widget-path v) (name v))
+  ;(format-wish "~a configure -textvariable text_~a" (widget-path v) (name v))
   )
 
 (defmethod text ((v tktextvariable))
@@ -1237,13 +1246,9 @@ toplevel             x
 (defmethod popup ((menu menu) x y)
   (format-wish "tk_popup ~A ~A ~A" (widget-path menu) x y))
 
-
 (defgeneric menu-delete (menu index))
 (defmethod menu-delete ((menu menu) index)
   (format-wish "~A delete ~A" (widget-path menu) index))
-
-
-
 
 ;;; standard button widget
 
@@ -1514,8 +1519,6 @@ a list of numbers may be given"
 (defun make-scrolled-canvas (master)
   (make-instance 'scrolled-canvas :master master ))
 
-(defmethod create ((sc scrolled-canvas)))
-
 (defmethod initialize-instance :after ((sc scrolled-canvas) &key)
   (setf (hscroll sc) (make-scrollbar sc :orientation "horizontal"))
   (setf (vscroll sc) (make-scrollbar sc))
@@ -1673,7 +1676,8 @@ set y [winfo y ~a]
 (defun process-coords (input)
   (with-output-to-string (s)
 			 (format-number s input)))
- 
+
+(defgeneric (setf coords) (val item))
 (defmethod (setf coords) (val (item canvas-item))
   (let ((coord-list (process-coords val)))
     (format-wish "~a coords ~a ~a" (widget-path (canvas item)) (handle item) coord-list)
@@ -1929,7 +1933,7 @@ set y [winfo y ~a]
 
 (defmethod widget-path ((photo photo-image))
   (name photo))
-;(defmethod create ((p photo-image))
+
 (defmethod initialize-instance :after ((p photo-image) &key width height)
   (setf (name p) (create-name))
   (format-wish "image create photo ~A~@[ -width ~a~]~@[ -height ~a~]" (name p) width height))
@@ -2013,6 +2017,7 @@ set y [winfo y ~a]
 (defmethod grid-configure (widget option value)
   (format-wish "grid configure ~a -~(~a~) {~a}" (widget-path widget) option value))
 
+(defgeneric grid-forget (widget))
 (defmethod grid-forget ((w widget))
   (format-wish "grid forget ~A" (widget-path w)))
 
@@ -2111,6 +2116,7 @@ set y [winfo y ~a]
 
 ;;; wm functions
 
+(defgeneric set-wm-overrideredirect (widget value))
 (defmethod set-wm-overrideredirect ((w widget) val)
   (format-wish "wm overrideredirect ~a ~a" (widget-path w) val))
 
@@ -2738,31 +2744,30 @@ SIMPLE-ERROR |      XX      |              |              |              |
   (defun process-layout (line parent)
     (let ((class-name (first line))
 	  (instance-name (second line)))
-      (multiple-value-bind (kvp sls)
-
-	  (do ((lst (cddr line))
-	       (keywords+values nil)
-	       (sublists nil))
-	      ((endp lst) (values (reverse keywords+values) (reverse sublists)))
-	  
-	    (cond ((listp (car lst))
-		   (dolist (retlist (process-layout (car lst) instance-name))
-		     (push retlist sublists))
-		   (setq lst (cdr lst)))
-		  (t (push (car lst) keywords+values)
-		     (push (cadr lst) keywords+values)
-		     (setq lst (cddr lst)))))
-
-	(append
-	 (list (list instance-name
-		     (append
-		      (list 'MAKE-INSTANCE (list 'QUOTE class-name))
-		      (if parent (list :master parent) nil)
-		      kvp)))
-	 sls))))
+      (multiple-value-bind (keyargs subwidgets)
+	  (do ((params (cddr line))	; all other parameters to the widget/subwidget defs
+	       (keywords+values nil)    ; keyword args for the widget
+	       (sublists nil))		; list of the subwidgets	      
+ 	      ((null params) (values (reverse keywords+values) (reverse sublists)))
+ 	    (cond ((listp (car params))
+ 		   (dolist (subwidget (process-layout (pop params) instance-name))
+ 		     (push subwidget sublists)))
+ 		  (t (push (pop params) keywords+values)
+ 		     (push (pop params) keywords+values))))
+	(cons
+	 (list instance-name
+	       (append
+		(list 'MAKE-INSTANCE (list 'QUOTE class-name))
+		(if parent (list :master parent) nil)
+		keyargs))
+	 subwidgets))))
 
   (defmacro with-widgets (layout &rest body)
-    (append (list 'LET* (process-layout layout nil)) body))
+    (let* ((defs (process-layout layout nil))
+	   (widgets (mapcar #'car defs)))
+      `(let* ,defs
+	 (declare (ignorable ,@widgets))
+	 ,@body)))
   )
 ;; example-usage
 ;;
@@ -2777,7 +2782,9 @@ SIMPLE-ERROR |      XX      |              |              |              |
 			 (button bt1 :text "OK" :pack '(:side :right)
 				 :command (lambda () (format t "Pressed OK~%")))
 			 (button bt2 :text "CANCEL" :pack '(:side :left)
-				 :command (lambda () (withdraw top-frame))))))))
+				 :command (lambda () (withdraw top-frame)))))
+	(setf (text lb1) "Test, Test, Test!")
+	)))
 
 ;;;; testing functions
 
