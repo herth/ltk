@@ -25,7 +25,7 @@
    #:style-element-names
    #:theme-names
    #:use-theme
-   
+   #:tile-test
    ))
 
 (in-package :ltk-tile)
@@ -55,3 +55,22 @@
 
 (defun style-default (style &rest params)
   (format-wish "style default ~A ~{ -~(~a~) {~a}~}" style params))
+
+(defun tile-test ()
+  (activate-tile)
+  (with-ltk ()
+     (let* ((mb (make-menubar))
+	    (mtheme (make-menu mb "Theme" ))
+	    (b (make-instance 'button :text "a button"))
+	    (l (make-instance 'label :text "a label"))
+	    (e (make-instance 'entry :text "an entry"))
+	    )
+       (pack (list l e b) :side :left)
+       (dolist (theme (theme-names))
+	 (let ((theme theme))
+	   (make-menubutton mtheme theme (lambda ()
+					   (use-theme theme)))))
+       )))
+
+	     
+       
