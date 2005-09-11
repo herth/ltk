@@ -58,6 +58,7 @@ o tooltip
 	   "TREELIST-CHILDREN"
 	   "TREELIST-NAME"
 	   "TREELIST-SELECT"
+	   #:gtree
 	   ))
 
 (in-package :ltk-mw)
@@ -372,3 +373,63 @@ o tooltip
 (defmethod clear ((tooltip tooltip))
   (withdraw tooltip))
 
+;;;; graphical tree widget
+
+(defclass gtree (canvas)
+  ((data :accessor data :initform nil :initarg :data)
+   ))
+
+(defmethod render-tree ((g gtree) data x y)
+  (let ((h 0))
+    (when (gtree-content g data)
+      (if (gtree-children g data)
+	(dolist (c (gtree-children g data))
+	  (incf h (render-tree g c (+ x 100) (+ y h))))
+	(incf h 30))
+      (let* ((c (gtree-render-node g (gtree-content g data)))
+	     (w (create-window g x (+ y (truncate h 2)) c)))
+	
+	))
+    h))
+  
+
+(defmethod initialize-instance :after ((g gtree) &key)q
+  (render-tree g (data g) 0 0)
+  )
+
+(defgeneric gtree-children (gtree node)
+  )
+
+(defgeneric gtree-content (gtree node)
+  )
+
+(defgeneric gtree-render-node (gtree node))
+
+
+(defclass gtree-demo (gtree)
+  ())
+
+(defmethod gtree-children ((d gtree-demo) (node list))
+  (rest node))
+
+(defmethod gtree-content ((d gtree-demo) (node list))
+  (first node))
+
+(defmethod gtree-render-node ((d gtree-demo) node )
+  (make-instance 'label :master d :text node :borderwidth 3 :relief :raised :background :grey :height 1 :width 10))
+
+
+(defun gtree-demo ()
+  (with-ltk
+   ()
+   (let* ((tree (make-instance 'gtree-demo
+			       :data '(a (b (d (h)
+					       (i))
+					    (e (j)
+					       (k)))
+					 (c (f)
+					    (g))))))
+     (pack tree :side :left :expand t :fill :both)
+     (format t "data: ~s~%" (data tree)) (force-output)
+     )))
+	    
