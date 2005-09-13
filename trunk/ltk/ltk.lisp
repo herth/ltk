@@ -134,6 +134,7 @@ toplevel             x
 	   "*WISH*"
 	   "*WISH-ARGS*"
 	   "*WISH-PATHNAME*"
+	   "*WISH-STREAM*"
 	   "ADD-PANE"
 	   "ADD-SEPARATOR"
 	   "AFTER"
@@ -326,7 +327,6 @@ toplevel             x
 	   "WINDOW-Y"
 	   "MAKE-LTK-CONNECTION"
 	   "WIDGET-CLASS-NAME"
-	   "WITH-LTK-CONNECTION"
 	   "WITH-LTK"
 	   "WITH-REMOTE-LTK"
 	   "WITH-WIDGETS"
@@ -393,7 +393,19 @@ toplevel             x
 (defvar *ltk-version* 0.8786)
 
 ;;; global var for holding the communication stream
-(defvar *wish* nil)
+(defstruct (ltk-connection (:constructor make-ltk-connection ())
+                          (:conc-name #:wish-))
+  (stream nil)
+  (callbacks (make-hash-table :test #'equal))
+  (counter 1)
+  (after-counter 1)
+  (event-queue nil)
+  (call-with-condition-handlers-function (lambda (f) (funcall f)))
+  (input-handler nil))
+
+;;; global connection information
+(defvar *wish* (make-ltk-connection))
+
 
 ;;; verbosity of debug messages, if true, then all communication
 ;;; with tk is echoed to stdout
@@ -444,19 +456,39 @@ toplevel             x
   (dolist (fun *init-wish-hook*)	; run init hook funktions 
     (funcall fun)))
 
-;;; start wish and set *wish*
-(defun start-wish ()
-  (setf *wish* (do-execute *wish-pathname* *wish-args*))  ; open subprocess
-  (init-wish)				               ; perform tcl initialisations
-  )
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defvar *start-wish-key-args*
+    '((handle-errors :debug) handle-warnings (debugger t)))
+  (defvar *start-wish-keywords* '(:handle-errors :handle-warnings :debugger)))
+
+;;; start wish and set (wish-stream *wish*)
+(defun start-wish (&rest keys &key . #.*start-wish-key-args*)
+  (declare (ignore handle-errors handle-warnings debugger))
+  ;; open subprocess
+  (setf (wish-stream *wish*) (do-execute *wish-pathname* *wish-args*)
+       (wish-call-with-condition-handlers-function *wish*)
+       (apply #'make-condition-handler-function keys))
+  ;; perform tcl initialisations
+  (init-wish))
+
+(defun exit-wish ()
+  (when (wish-stream *wish*)
+    (remove-input-handler)
+    (when (open-stream-p (wish-stream *wish*))
+      (send-wish "exit"))
+    (close (wish-stream *wish*))
+    (setf (wish-stream *wish*) nil)
+    #+:allegro (system:reap-os-subprocess))
+  nil)
 
 ;;; send a string to wish
 (defun send-wish (text)
   (when *debug-tk*
     (format t "~A~%" text)
     (force-output))
-  (format *wish* "~A~%" text)
-  (force-output *wish*))
+  (format (wish-stream *wish*) "~A~%" text)
+  (force-output (wish-stream *wish*)))
+
 
 (defun format-wish (control &rest args)
   "format args using control as control string to wish"
@@ -464,9 +496,9 @@ toplevel             x
     (apply #'format t control args)
     (format t "~%")
     (force-output))
-  (apply #'format *wish* control args)
-  (format *wish* "~%")
-  (force-output *wish*))
+  (apply #'format (wish-stream *wish*) control args)
+  (format (wish-stream *wish*) "~%")
+  (force-output (wish-stream *wish*)))
 
 ;; differences:
 ;; cmucl/sbcl READ expressions only if there is one more character in the stream, if
@@ -492,9 +524,8 @@ toplevel             x
 (defun read-wish()
   (let ((*read-eval* nil)
 	(*package* (find-package :ltk)))
-    (read *wish* nil nil)))
+    (read (wish-stream *wish*) nil nil)))
 
-(defvar *event-queue* nil)
 
 (defun can-read (stream)
   (let ((c (read-char-no-hang stream)))
@@ -507,10 +538,11 @@ toplevel             x
       (unread-char c stream)
       t)))
 
-(defun read-event (&key (blocking t))
-  (or (pop *event-queue*)
-      (when (or blocking (can-read *wish*))
-        (read-preserving-whitespace *wish* nil nil))))
+(defun read-event (&key (blocking t) (no-event-value nil))
+  (or (pop (wish-event-queue *wish*))
+      (if (or blocking (can-read (wish-stream *wish*)))
+         (read-preserving-whitespace (wish-stream *wish*) nil nil)
+         no-event-value)))
 
 (defun read-data ()
   (let ((d (read-wish)))
@@ -518,12 +550,13 @@ toplevel             x
 	(progn
 	  (loop while (not (equal (first d) :data))
 	    do
-	    (setf *event-queue* (append *event-queue* (list d)))
+	    (setf (wish-event-queue *wish*)
+		  (append (wish-event-queue *wish*) (list d)))	 
 	    ;;(format t "postponing event: ~a ~%" d) (force-output)
 	    (setf d (read-wish)))
 					;(format t "readdata: ~s~%" d) (force-output)
 	  (second d))
-      (format t "read-data:~a~a~%" d (read-all *wish*)))
+      (format t "read-data:~a~a~%" d (read-all (wish-stream *wish*))))
     ))
 
 
@@ -532,7 +565,7 @@ toplevel             x
     (when (> (length string) 0)
       (values (intern (string-upcase string) :keyword)))))
 
-;;; sanitizing strings: lisp -> tcl (format *wish* "{~a}" string)
+;;; sanitizing strings: lisp -> tcl (format (wish-stream *wish*) "{~a}" string)
 ;;; in string escaped : {} mit \{ bzw \}  und \ mit \\
 
 (defun replace-char (txt char with)
@@ -563,27 +596,20 @@ toplevel             x
 ;;; table used for callback every callback consists of a name of a widget and
 ;;; a function to call
 
-(defvar *callbacks* (make-hash-table :test #'equal))
-
-(defvar *counter* 1)			; counter for creating unique widget names
-(defvar *after-counter* 1)		; counter for creating unique after callbacks
-
 (defun add-callback (sym fun)
   "create a callback sym is the name to use for storage, fun is the function to call"
   (when *debug-tk*
     (format t "add-callback (~A ~A)~%" sym fun))
-  (setf (gethash sym *callbacks*) fun))
+  (setf (gethash sym (wish-callbacks *wish*)) fun))
 
 (defun remove-callback (sym)
   (when *debug-tk*
     (format t "remove-callback (~A)~%" sym))
-  (setf (gethash sym *callbacks*) nil))
+  (setf (gethash sym (wish-callbacks *wish*)) nil))
 
 (defun callback (sym arg)
   "perform the call of the function associated with sym and the args arg"
-  (let ((fun (gethash sym *callbacks*)))
-    ;(format t "sym:~A fun:~A~%" sym fun)
-    ;(force-output)
+  (let ((fun (gethash sym (wish-callbacks *wish*))))
     (when fun
       (apply fun arg))))
 
@@ -591,21 +617,21 @@ toplevel             x
 ;;; several events scheduled at the same time
 
 (defun after (time fun)
-  (let ((name (format nil "after~a" (incf *after-counter*))))
-    (ltk::add-callback name
-		       (lambda ()
-			 (funcall fun)
-			 (remove-callback name)))
+  (let ((name (format nil "after~a" (incf (wish-after-counter *wish*)))))
+    (add-callback name
+		  (lambda ()
+		    (funcall fun)
+		    (remove-callback name)))
     (format-wish "senddatastring [after ~a {callback ~A}]" time name)
     (read-data)))
 
 (defun after-idle (fun)
- (let ((name (format nil "afteridle~a" (incf *after-counter*))))
-   (ltk::add-callback name
-		      (lambda ()
-			(funcall fun)
-			(remove-callback name)))
-   (ltk::format-wish "senddatastring [after idle {callback ~A}]" name)
+ (let ((name (format nil "afteridle~a" (incf (wish-after-counter *wish*)))))
+   (add-callback name
+		 (lambda ()
+		   (funcall fun)
+		   (remove-callback name)))
+   (format-wish "senddatastring [after idle {callback ~A}]" name)
    (read-data)))
 
 (defun after-cancel (id)
@@ -616,7 +642,7 @@ toplevel             x
 ;; incremental counter to create unique numbers
 
 (defun get-counter()
-  (incf *counter*))
+  (incf (wish-counter *wish*)))
 
 ;; create unique widget name, append unique number to "w"
 (defun create-name ()
@@ -1032,7 +1058,7 @@ toplevel             x
 (defgeneric command (widget))
 
 (defmethod command ((widget widget))
-  (gethash (name widget) *callbacks*))
+  (gethash (name widget) (wish-callbacks *wish*)))
 
 
 (defgeneric lower (widget &optional other))
@@ -1355,9 +1381,6 @@ toplevel             x
 (defmethod listbox-get-selection ((l listbox))
   (format-wish "senddata \"([~a curselection])\"" (widget-path l))
   (read-data))
-
-;  (format-wish "puts -nonewline {(};puts -nonewline [~a curselection];puts {)};flush stdout" (widget-path l))
-;  (read *wish*))
 
 (defgeneric listbox-select (l val))
 (defmethod listbox-select ((l listbox) val)
@@ -1915,7 +1938,7 @@ set y [winfo y ~a]
 (defmethod save-text ((txt text) filename)
   "save the content of the text widget into the file <filename>"
   (format-wish "set file [open {~a} \"w\"];puts $file [~a get 1.0 end];close $file;puts \"asdf\"" filename (widget-path txt))
-  (read-line *wish*)
+  (read-line (wish-stream *wish*))
   )
 
 (defgeneric load-text (txt filename))
@@ -2429,33 +2452,57 @@ set y [winfo y ~a]
   #+cmu (progn (debug:backtrace most-positive-fixnum *error-output*)
 	       (quit)))
 
-(defmacro with-ltk-handlers ((&rest keys) &body body)
-  `(call-with-ltk-handlers (lambda () ,@body) ,@keys))
+(defmacro with-ltk-handlers (() &body body)
+  `(funcall (wish-call-with-condition-handlers-function *wish*)
+           (lambda () ,@body)))
 
-(defun call-with-ltk-handlers (thunk &key handle-errors handle-warnings (debugger t))
-  (labels ((nothing (e) (declare (ignore e)) nil))
-    (multiple-value-bind (simple-error error)
-	(ecase handle-errors
-	  ((t) (values #'show-error #'note-error))
-	  (:simple (values #'show-error #'nothing))
-	  (:debug (values #'nothing #'debug-error))
-	  ((nil) (values #'nothing #'nothing)))
-      (let ((warning (ecase handle-warnings
-		       ((t) #'show-warning)
-		       (:debug #'debug-warning)
-		       ((nil) #'nothing)))
-	    (*debugger-hook* (case debugger
-			       ((t) *debugger-hook*)
-			       ((nil) #'trivial-debugger)
-			       (t (if (or (functionp debugger)
-					  (and (symbolp debugger)
-					       (fboundp debugger)))
-				      debugger
-				    (error "Not a function specifier: ~S" debugger))))))
-	(handler-bind ((simple-error simple-error)
-		       (error error)
-		       (warning warning))
-		      (funcall thunk))))))
+(defun compute-error-handlers (handle-errors)
+  (let ((nothing (constantly nil)))
+    (ecase handle-errors
+      ((t) (values #'show-error #'note-error))
+      (:simple (values #'show-error nothing))
+      (:debug (values nothing #'debug-error))
+      ((nil) (values nothing nothing)))))
+
+(defun compute-warning-handler (handle-warnings)
+  (let ((nothing (constantly nil)))
+    (ecase handle-warnings
+      ((t) #'show-warning)
+      (:debug #'debug-warning)
+      ((nil) nothing))))
+
+(defun compute-call-with-debugger-hook (debugger)
+  "Return a function that will call a thunk with debugger-hook bound appropriately."
+  (labels ((use-existing-debugger (thunk)
+            (funcall thunk))
+          (use-trivial-debugger (thunk)
+            (let ((*debugger-hook* #'trivial-debugger))
+              (funcall thunk)))
+          (use-custom-debugger (thunk)
+            (let ((*debugger-hook* debugger))
+              (funcall thunk))))
+    (case debugger
+      ((t) #'use-existing-debugger)
+      ((nil) #'use-trivial-debugger)
+      (t (if (or (functionp debugger)
+                (and (symbolp debugger)
+                     (fboundp debugger)))
+            #'use-custom-debugger
+            (error "Not a function specifier: ~S" debugger))))))
+
+(defun make-condition-handler-function (&key . #.*start-wish-key-args*)
+  "Return a function that will call a thunk with the appropriate condition handlers in place, and *debugger-hook* bound as needed."
+  (multiple-value-bind (simple-error error) (compute-error-handlers handle-errors)
+    (let ((warning (compute-warning-handler handle-warnings))
+         (call-with-debugger-hook (compute-call-with-debugger-hook debugger)))
+      (lambda (thunk)
+       (funcall call-with-debugger-hook
+                (lambda ()
+                  (handler-bind ((simple-error simple-error)
+                                 (error error)
+                                 (warning warning))
+                    (funcall thunk))))))))
+
 
 
 ;;;; main event loop, runs until stream is closed by wish (wish exited) or
@@ -2499,37 +2546,103 @@ tk input to terminate"
      do
      (process-one-event event))))
 
-(defun mainloop (&rest keys &key handle-errors handle-warnings debugger)
-  (declare (ignore handle-errors handle-warnings debugger))
-
-  (let ((*exit-mainloop* nil)
-	(*break-mainloop* nil)
-	(*read-eval* nil)) ;;safety against malicious clients
+(defun main (&key (blocking t))
+  "The heart of the main loop.  Returns true as long as the main loop should continue."
+  (let ((no-event (cons nil nil)))
     (labels ((proc-event ()
-			 (let ((event (read-event)))
-			   (when (null event)
-			     (close *wish*)
-			     (setf *wish* nil)
-			     (return-from mainloop))
-			   (process-one-event event)
-			   (when *break-mainloop*
-			     (return-from mainloop))
-			   (when *exit-mainloop*
-			     (when ltk::*wish*
-			       (send-wish "exit")
-			       (close ltk::*wish*)
-			       (setf ltk::*wish* nil)
-			       (return-from mainloop)))))
-	     (main ()
-		   (loop (restart-case (proc-event)
-				       (abort () :report "Abort handling Tk event")))))
-      (apply #'call-with-ltk-handlers #'main keys))))
+	(let ((event (read-event :blocking blocking
+				 :no-event-value no-event)))
+	  (cond
+	   ((null event)
+	    (close (wish-stream *wish*))
+	    (setf (wish-stream *wish*) nil)
+	    nil)
+	   ((eql event no-event)
+	    t)
+	   (t (process-one-event event)
+	      (cond
+	       (*break-mainloop* nil)
+	       (*exit-mainloop*
+		(exit-wish)
+		nil)
+	       (t t)))))))
+      (restart-case (proc-event)
+		    (abort ()
+			   :report "Abort handling Tk event"
+			   t)
+		    (exit ()
+			  :report "Exit Ltk main loop"
+			  nil)))))
 
 
-;;; another way to terminate the running app, send exit command to wish
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defvar *mainloop-key-args*
+    '((serve-event #+(and sbcl (not sb-threads)) t
+                   #+(and sbcl sb-threads) nil
+                   #+cmu t
+                   #-(or sbcl cmu) nil)))
+  (defvar *mainloop-keywords* '(:serve-event)))
 
-(defun exit-wish()
-  (send-wish "exit"))
+(defun mainloop (&key . #.*mainloop-key-args*)
+  (if serve-event
+      (install-input-handler)
+    (let ((*exit-mainloop* nil)
+	  (*break-mainloop* nil)
+	  (*read-eval* nil)) ;;safety against malicious clients
+      (remove-input-handler)
+      (loop while (with-ltk-handlers ()
+				     (main))))))
+
+;;; Event server
+
+#-(or sbcl cmu)
+(progn
+  (defun install-input-handler ()
+    (error "SERVE-EVENT is not implemented on this system"))
+  (defun remove-input-handler ()
+    nil))
+
+
+#+(or sbcl cmu)
+(progn
+  (defun add-fd-handler (fd direction function)
+    #+sbcl (sb-sys:add-fd-handler fd direction function)
+    #+cmu (system:add-fd-handler fd direction function))
+
+  (defun remove-fd-handler (handler)
+    #+sbcl (sb-sys:remove-fd-handler handler)
+    #+cmu (system:remove-fd-handler handler))
+
+  (defun fd-stream-fd (stream)
+    #+sbcl (sb-sys:fd-stream-fd stream)
+    #+cmu (system:fd-stream-fd stream))
+
+  (defun make-input-handler (wish)
+    (let ((fd-stream (two-way-stream-input-stream (wish-stream wish))))
+      (flet ((ltk-input-handler (fd)
+              (declare (ignore fd))
+              (let ((*wish* wish))
+                (handler-bind ((end-of-file
+                                (lambda (e)
+                                  (when (eql (stream-error-stream e)
+                                             fd-stream)
+                                    (close (wish-stream *wish*))
+                                    (exit-wish)
+                                    (return-from ltk-input-handler)))))
+                  (unless (with-ltk-handlers () (main :blocking nil))
+                    (remove-input-handler))))))
+       #'ltk-input-handler)))
+
+  (defun install-input-handler ()
+    (unless (wish-input-handler *wish*)
+      (let ((fd (fd-stream-fd (two-way-stream-input-stream (wish-stream *wish*)))))
+       (setf (wish-input-handler *wish*)
+             (add-fd-handler fd :input (make-input-handler *wish*))))))
+
+  (defun remove-input-handler ()
+    (remove-fd-handler (wish-input-handler *wish*))
+    (setf (wish-input-handler *wish*) nil)))
+
 
 #|
 :HANDLE-ERRORS determines what to do if an error is signaled.  It can be set to
@@ -2696,50 +2809,33 @@ SIMPLE-ERROR |      XX      |              |              |              |
              +--------------+--------------+--------------+
 |#
 
+;;
 
+(defun filter-keys (desired-keys keyword-arguments)
+  (loop for (key val) on keyword-arguments by #'cddr
+	when (find key desired-keys) nconc (list key val)))
 
 			     
-
-(defstruct (ltk-connection (:constructor make-ltk-connection ()))
-  (wish nil)
-  (callbacks (make-hash-table :test #'equal))
-  (counter 1)
-  (after-counter 1)
-  (event-queue nil))
-
-(defmacro with-ltk-connection ((&optional connection) &body body)
-  (let ((cxn (gensym)))
-    `(let ((,cxn (or ,connection (make-ltk-connection))))
-       (let ((*wish* (ltk-connection-wish ,cxn))
-            (*callbacks* (ltk-connection-callbacks ,cxn))
-            (*counter* (ltk-connection-counter ,cxn))
-            (*after-counter* (ltk-connection-after-counter ,cxn))
-            (*event-queue* (ltk-connection-event-queue ,cxn)))
-        (unwind-protect (progn ,@body)
-          (setf (ltk-connection-wish ,cxn) *wish*
-                (ltk-connection-callbacks ,cxn) *callbacks*
-                (ltk-connection-counter ,cxn) *counter*
-                (ltk-connection-after-counter ,cxn) *after-counter*
-                (ltk-connection-event-queue ,cxn) *event-queue*))))))
-
 ;;; wrapper macro - initializes everything, calls body and then mainloop
 
-(defmacro with-ltk ((&rest keys &key handle-errors handle-warnings (debugger t))
+
+(defmacro with-ltk ((&rest keys &key . #.(append *start-wish-key-args*
+                                                *mainloop-key-args*))
 		    &body body)
-  (declare (ignore handle-errors handle-warnings debugger))
-  `(with-ltk-connection ()
-			(unwind-protect 
-			    (with-ltk-handlers (,@keys)
-					       (start-wish)
-					       ,@body
-					       (mainloop))
-			  (when *wish*
-			    (send-wish "exit")
-			    (close *wish*)
-			    (setf *wish* nil))
-			  #+:allegro (system:reap-os-subprocess)
-			  )))
-       
+  (declare (ignore handle-errors handle-warnings debugger serve-event))
+  `(call-with-ltk (lambda () ,@body) ,@keys))
+
+(defun call-with-ltk (thunk &rest keys &key . #.(append *start-wish-key-args*
+							*mainloop-key-args*))
+  
+  (unwind-protect
+      (progn (apply #'start-wish (filter-keys *start-wish-keywords* keys))
+	     (funcall thunk)
+             (apply #'mainloop (filter-keys *mainloop-keywords* keys)))
+    (unless serve-event
+      (exit-wish))))
+
+;;; with-widget stuff
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defun process-layout (line parent)
     (let ((class-name (first line))
