@@ -132,9 +132,9 @@ toplevel             x
 	   "*MB-ICONS*"
 	   "*TK*"
 	   "*WISH*"
+	   "WISH-STREAM"
 	   "*WISH-ARGS*"
 	   "*WISH-PATHNAME*"
-	   "*WISH-STREAM*"
 	   "ADD-PANE"
 	   "ADD-SEPARATOR"
 	   "AFTER"
@@ -394,18 +394,39 @@ toplevel             x
 
 ;;; global var for holding the communication stream
 (defstruct (ltk-connection (:constructor make-ltk-connection ())
-                          (:conc-name #:wish-))
+			   (:conc-name #:wish-))
   (stream nil)
   (callbacks (make-hash-table :test #'equal))
   (counter 1)
   (after-counter 1)
   (event-queue nil)
+  ;; This is should be a function that takes a thunk, and calls it in
+  ;; an environment with some condition handling in place.  It is what
+  ;; allows the user to specify error-handling in START-WISH, and have
+  ;; it take place inside of MAINLOOP.
   (call-with-condition-handlers-function (lambda (f) (funcall f)))
+  ;; This is only used to support SERVE-EVENT.
   (input-handler nil))
 
 ;;; global connection information
-(defvar *wish* (make-ltk-connection))
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (setf
+   (documentation 'make-ltk-connection 'function)
+   "Create a new LTK-CONNECTION object.  This represents a connection to a
+    specific wish.  You can maintain connections to several distinct wish
+    processes by binding *WISH* to the one you desire to communicate with, and
+    using LTK functions within that dynamic scope."))
+
+(define-condition ltk-error (simple-error) ())
+(defun ltk-error (format &rest args)
+  (error 'ltk-error :format-control format :format-arguments args))
+
+(defvar *wish* (make-ltk-connection)
+  "The current connection to an inferior wish.")
+
+(defvar *wish-connections* ()
+  "Connections pushed aside by invoking the NEW-WISH restart in START-WISH.")
 
 ;;; verbosity of debug messages, if true, then all communication
 ;;; with tk is echoed to stdout
@@ -465,11 +486,22 @@ toplevel             x
 (defun start-wish (&rest keys &key . #.*start-wish-key-args*)
   (declare (ignore handle-errors handle-warnings debugger))
   ;; open subprocess
-  (setf (wish-stream *wish*) (do-execute *wish-pathname* *wish-args*)
-       (wish-call-with-condition-handlers-function *wish*)
-       (apply #'make-condition-handler-function keys))
-  ;; perform tcl initialisations
-  (init-wish))
+  (if (null (wish-stream *wish*))
+      (progn
+	(setf (wish-stream *wish*) (do-execute *wish-pathname* *wish-args*)
+	      (wish-call-with-condition-handlers-function *wish*)
+	      (apply #'make-condition-handler-function keys))
+	;; perform tcl initialisations
+	(init-wish))
+      ;; By default, we don't automatically create a new connection, because the
+      ;; user may have simply been careless and doesn't want to push the old
+      ;; connection aside.  The NEW-WISH restart makes it easy to start another.
+      (restart-case (ltk-error "There is already an inferior wish.")
+	(new-wish ()
+	  :report "Create an additional inferior wish."
+	  (push *wish* *wish-connections*)
+	  (setf *wish* (make-ltk-connection))
+	  (apply #'start-wish keys)))))
 
 (defun exit-wish ()
   (when (wish-stream *wish*)
@@ -478,7 +510,8 @@ toplevel             x
       (send-wish "exit"))
     (close (wish-stream *wish*))
     (setf (wish-stream *wish*) nil)
-    #+:allegro (system:reap-os-subprocess))
+    #+:allegro (system:reap-os-subprocess)
+    (setf *wish-connections* (remove *wish* *wish-connections*)))
   nil)
 
 ;;; send a string to wish
@@ -488,7 +521,6 @@ toplevel             x
     (force-output))
   (format (wish-stream *wish*) "~A~%" text)
   (force-output (wish-stream *wish*)))
-
 
 (defun format-wish (control &rest args)
   "format args using control as control string to wish"
@@ -526,7 +558,6 @@ toplevel             x
 	(*package* (find-package :ltk)))
     (read (wish-stream *wish*) nil nil)))
 
-
 (defun can-read (stream)
   (let ((c (read-char-no-hang stream)))
     (loop 
@@ -541,8 +572,8 @@ toplevel             x
 (defun read-event (&key (blocking t) (no-event-value nil))
   (or (pop (wish-event-queue *wish*))
       (if (or blocking (can-read (wish-stream *wish*)))
-         (read-preserving-whitespace (wish-stream *wish*) nil nil)
-         no-event-value)))
+	  (read-preserving-whitespace (wish-stream *wish*) nil nil)
+	  no-event-value)))
 
 (defun read-data ()
   (let ((d (read-wish)))
@@ -551,12 +582,12 @@ toplevel             x
 	  (loop while (not (equal (first d) :data))
 	    do
 	    (setf (wish-event-queue *wish*)
-		  (append (wish-event-queue *wish*) (list d)))	 
+		  (append (wish-event-queue *wish*) (list d)))
 	    ;;(format t "postponing event: ~a ~%" d) (force-output)
 	    (setf d (read-wish)))
 					;(format t "readdata: ~s~%" d) (force-output)
 	  (second d))
-      (format t "read-data:~a~a~%" d (read-all (wish-stream *wish*))))
+	(format t "read-data:~a~a~%" d (read-all (wish-stream *wish*))))
     ))
 
 
@@ -619,18 +650,18 @@ toplevel             x
 (defun after (time fun)
   (let ((name (format nil "after~a" (incf (wish-after-counter *wish*)))))
     (add-callback name
-		  (lambda ()
-		    (funcall fun)
-		    (remove-callback name)))
+		       (lambda ()
+			 (funcall fun)
+			 (remove-callback name)))
     (format-wish "senddatastring [after ~a {callback ~A}]" time name)
     (read-data)))
 
 (defun after-idle (fun)
  (let ((name (format nil "afteridle~a" (incf (wish-after-counter *wish*)))))
    (add-callback name
-		 (lambda ()
-		   (funcall fun)
-		   (remove-callback name)))
+		      (lambda ()
+			(funcall fun)
+			(remove-callback name)))
    (format-wish "senddatastring [after idle {callback ~A}]" name)
    (read-data)))
 
@@ -672,33 +703,37 @@ toplevel             x
     (button.background Button.background "~@[ -Button.background ~(~a~)~]" button.background "")
     (Button.cursor Button.cursor "~@[ -Button.cursor ~(~a~)~]" Button.cursor "")
     (Button.relief Button.relief "~@[ -Button.relief ~(~a~)~]" Button.relief "")
-    (activebackground activebackground "~@[ -activebackground ~(~a~)~]" activebackground "")
+
+    (activebackground activebackground "~@[ -activebackground ~(~a~)~]" activebackground "background of the active area")
     (activeborderwidth activeborderwidth "~@[ -activeborderwidth ~(~a~)~]" activeborderwidth "")
-    (activeforeground activeforeground "~@[ -activeforeground ~(~a~)~]" activeforeground "")
+    (activeforeground activeforeground "~@[ -activeforeground ~(~a~)~]" activeforeground "foreground of the active area")
     (activerelief activerelief "~@[ -activerelief ~(~a~)~]" activerelief "")
     (activestyle activestyle "~@[ -activestyle ~(~a~)~]" activestyle "")
     (anchor anchor "~@[ -anchor ~(~a~)~]" anchor "")
     (aspect aspect "~@[ -aspect ~(~a~)~]" aspect "")
     (autoseparators autoseparators "~@[ -autoseparators ~(~a~)~]" autoseparators "")
-    (background background "~@[ -background ~(~a~)~]" background "")
-    (bigincrement bigincrement "~@[ -bigincrement ~(~a~)~]" bigincrement "")
+    (background background "~@[ -background ~(~a~)~]" background "background color of the widget")
+    (bigincrement bigincrement "~@[ -bigincrement ~(~a~)~]" bigincrement "size of the big step increment")
     (bitmap bitmap "~@[ -bitmap ~(~a~)~]" bitmap "")
-    (borderwidth borderwidth "~@[ -borderwidth ~(~a~)~]" borderwidth "")
+    (borderwidth borderwidth "~@[ -borderwidth ~(~a~)~]" borderwidth "width of the border around the widget in pixels")
     (class class "~@[ -class ~(~a~)~]" class "")
     (closeenough closeenough "~@[ -closeenough ~(~a~)~]" closeenough "")
     (colormap colormap "~@[ -colormap ~(~a~)~]" colormap "")
     (command command "~@[ -command {callback ~a}~]" (and command 
 							   (progn
 							      (add-callback (name widget) command)
-							      (name widget)))"")
+							      (name widget)))
+     "function to call when the action of the widget is executed")
     (cbcommand command "~@[ -command {callbackval ~{~a $~a~}}~]" (and command 
 								   (progn
 								     (add-callback (name widget) command)
-								     (list (name widget) (name widget)))) "")
+								     (list (name widget) (name widget))))
+     "function to call when the action of the widget is executed")
     (command-radio-button command "~@[ -command {callbackval ~{~a $~a~}}~]" (and command 
 									     (progn
 									       (add-callback (name widget) command)
-									       (list (name widget) (radio-button-variable widget)))) "")
+									       (list (name widget) (radio-button-variable widget))))
+     "function to call when the action of the widget is executed")
     (command-scrollbar command "~@[ -command {callback ~a}~]" (and command 
 								   (progn
 								     (add-callback (name widget) command)
@@ -707,25 +742,26 @@ toplevel             x
     (compound compound "~@[ -compound ~(~a~)~]" compound "")
     (confine confine "~@[ -confine ~(~a~)~]" confine "")
     (container container "~@[ -container ~(~a~)~]" container "")
-    (cursor cursor "~@[ -cursor ~(~a~)~]" cursor "")
+    (cursor cursor "~@[ -cursor ~(~a~)~]" cursor "mouse pointer to display on the widget (valid values are listed in *cursors*)")
     (default default "~@[ -default ~(~a~)~]" default "")
     (digits digits "~@[ -digits ~(~a~)~]" digits "")
     (direction direction "~@[ -direction ~(~a~)~]" direction "")
     (disabledbackground disabledbackground "~@[ -disabledbackground ~(~a~)~]" disabledbackground "")
+    (disabledforeground disabledforeground "~@[ -disabledforeground ~(~a~)~]" disabledforeground "")
     (elementborderwidth elementborderwidth "~@[ -elementborderwidth ~(~a~)~]" elementborderwidth "")
     (exportselection exportselection "~@[ -exportselection ~(~a~)~]" exportselection "")
-    (font font "~@[ -font {~a}~]" font "")
-    (foreground foreground "~@[ -foreground ~(~a~)~]" foreground "")
+    (font font "~@[ -font {~a}~]" font "font to use to display text on the widget")
+    (foreground foreground "~@[ -foreground ~(~a~)~]" foreground "foreground color of the widget")
     (format format "~@[ -format ~(~a~)~]" format "")
     (from from "~@[ -from ~(~a~)~]" from "")
     (handlepad handlepad "~@[ -handlepad ~(~a~)~]" handlepad "")
     (handlesize handlesize "~@[ -handlesize ~(~a~)~]" handlesize "")
-    (height height "~@[ -height ~(~a~)~]" height "")
+    (height height "~@[ -height ~(~a~)~]" height "height of the widget")
     (highlightbackground highlightbackground "~@[ -highlightbackground ~(~a~)~]" highlightbackground "")
     (highlightcolor highlightcolor "~@[ -highlightcolor ~(~a~)~]" highlightcolor "")
     (highlightthickness highlightthickness "~@[ -highlightthickness ~(~a~)~]" highlightthickness "")
-    (image image "~@[ -image ~(~a~)~]" (and image (name image)) "")
-    (increment increment "~@[ -increment ~(~a~)~]" increment "")
+    (image image "~@[ -image ~(~a~)~]" (and image (name image)) "image to display on the widget")
+    (increment increment "~@[ -increment ~(~a~)~]" increment "size of the increment of the widget")
     (indicatorOn indicatorOn "~@[ -indicatorOn ~(~a~)~]" indicatorOn "")
     (insertbackground insertbackground "~@[ -insertbackground ~(~a~)~]" insertbackground "")
     (insertborderWidth insertborderWidth "~@[ -insertborderWidth ~(~a~)~]" insertborderWidth "")
@@ -734,8 +770,8 @@ toplevel             x
     (insertwidth insertwidth "~@[ -insertwidth ~(~a~)~]" insertwidth "")
     (invalidcommand invalidcommand "~@[ -invalidcommand ~(~a~)~]" invalidcommand "")
     (jump jump "~@[ -jump ~(~a~)~]" jump "")
-    (justify justify "~@[ -justify ~(~a~)~]" justify "")
-    (label label "~@[ -label ~(~a~)~]" label "")
+    (justify justify "~@[ -justify ~(~a~)~]" justify "justification of the text on the widget")
+    (label label "~@[ -label ~(~a~)~]" label "text to display on the widget")
     (labelanchor labelanchor "~@[ -labelanchor ~(~a~)~]" labelanchor "")
     (labelwidget labelwidget "~@[ -labelwidget ~(~a~)~]" labelwidget "")
     (length length "~@[ -length ~(~a~)~]" length "")
@@ -747,13 +783,13 @@ toplevel             x
     (offset offset "~@[ -offset ~(~a~)~]" offset "")
     (onvalue onvalue "~@[ -onvalue ~(~a~)~]" onvalue "")
     (opaqueresize opaqueresize "~@[ -opaqueresize ~(~a~)~]" opaqueresize "")
-    (orient orientation "~@[ -orient ~(~a~)~]" orientation "")
-    (overrelief overrelief "~@[ -overrelief ~(~a~)~]" overrelief "")
-    (padx padx "~@[ -padx ~(~a~)~]" padx "")
-    (pady pady "~@[ -pady ~(~a~)~]" pady "")
+    (orient orientation "~@[ -orient ~(~a~)~]" orientation "orientation of the widget (horizontal, vertical)")
+    (overrelief overrelief "~@[ -overrelief ~(~a~)~]" overrelief "relief of the border, when the mouse is over the widget")
+    (padx padx "~@[ -padx ~(~a~)~]" padx "padding around text displayed on the widget")
+    (pady pady "~@[ -pady ~(~a~)~]" pady "padding around text displayed on the widget")
     (postcommand postcommand "~@[ -postcommand ~(~a~)~]" postcommand "")
     (readonlybackground readonlybackground "~@[ -readonlybackground ~(~a~)~]" readonlybackground "")
-    (relief relief "~@[ -relief ~(~a~)~]" relief "")
+    (relief relief "~@[ -relief ~(~a~)~]" relief "relief of the widgets border (raised, sunken, ridge, groove)")
     (repeatdelay repeatdelay "~@[ -repeatdelay ~(~a~)~]" repeatdelay "")
     (repeatinterval repeatinterval "~@[ -repeatinterval ~(~a~)~]" repeatinterval "")
     (resolution resolution "~@[ -resolution ~(~a~)~]" resolution "")
@@ -761,8 +797,8 @@ toplevel             x
     (sashpad sashpad "~@[ -sashpad ~(~a~)~]" sashpad "")
     (sashrelief sashrelief "~@[ -sashrelief ~(~a~)~]" sashrelief "")
     (sashwidth sashwidth "~@[ -sashwidth ~(~a~)~]" sashwidth "")
-    (screen screen "~@[ -screen ~(~a~)~]" screen "")
-    (scrollregion scrollregion "~@[ -scrollregion ~(~a~)~]" scrollregion "")
+    (screen screen "~@[ -screen ~(~a~)~]" screen "screen on which the toplevel is to be shown")
+    (scrollregion scrollregion "~@[ -scrollregion ~(~a~)~]" scrollregion "region in which the canvas should be scolled")
     (selectbackground selectbackground "~@[ -selectbackground ~(~a~)~]" selectbackground "")
     (selectborderwidth selectborderwidth "~@[ -selectborderwidth ~(~a~)~]" selectborderwidth "")
     (selectcolor selectcolor "~@[ -selectcolor ~(~a~)~]" selectcolor "")
@@ -780,8 +816,8 @@ toplevel             x
     (spacing3 spacing3 "~@[ -spacing3 ~(~a~)~]" spacing3 "")
     (state state "~@[ -state ~(~a~)~]" state "")
     (tabs tabs "~@[ -tabs ~(~a~)~]" tabs "")
-    (takefocus takefocus "~@[ -takefocus ~(~a~)~]" takefocus "")
-    (tearoff tearoff "~@[ -tearoff ~(~a~)~]" tearoff "")
+    (takefocus takefocus "~@[ -takefocus ~(~a~)~]" takefocus "if true, the widget can take the focus")
+    (tearoff tearoff "~@[ -tearoff ~(~a~)~]" tearoff "if true, the menu can be torn off")
     (tearoffcommand tearoffcommand "~@[ -tearoffcommand ~(~a~)~]" tearoffcommand "")
     (text text "~@[ -text \"~a\"~]" (tkescape text) "")
     ;(textvariable textvariable "~@[ -textvariable text_~a~]" (and textvariable (name widget)) "")
@@ -803,10 +839,10 @@ toplevel             x
     (value value "~@[ -value ~(~a~)~]" value "")
     (value-radio-button nil "~@[ -value ~(~a~)~]" (radio-button-value widget) "")
     (values values "~@[ -values ~(~a~)~]" values "")
-    (variable variable "~@[ -variable ~(~a~)~]" variable "")
+    (variable variable "~@[ -variable ~(~a~)~]" variable "name of the variable associated with the widget")
     (variable-radio-button nil "~@[ -variable ~(~a~)~]" (radio-button-variable widget) "")
     (visual visual "~@[ -visual ~(~a~)~]" visual "")
-    (width width "~@[ -width ~(~a~)~]" width "")
+    (width width "~@[ -width ~(~a~)~]" width "width of the widget")
     (wrap wrap "~@[ -wrap ~(~a~)~]" wrap "")
     (wraplength wraplength "~@[ -wraplength ~(~a~)~]" wraplength "")
     (xscrollcommand xscrollcommand "~@[ -xscrollcommand ~(~a~)~]" xscrollcommand "")
@@ -820,6 +856,7 @@ toplevel             x
     '())
  
   (defun build-args (class parents defs)
+    (declare (ignore class))
     ;;(format t  "class ~s parents ~s defs ~s~%" class parents defs) (force-output)
     (let ((args nil))
       (dolist (p parents)
@@ -862,33 +899,33 @@ toplevel             x
 ;(defargs text (widget button) :delete anchor color)
 
 (defargs button (widget) 
-  activebackground activeforeground anchor bitmap command compound default disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image justify overrelief padx pady repeatdelay repeatinterval state takefocus textvariable underline width wraplength)
+  activebackground activeforeground anchor bitmap command compound default disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image justify overrelief padx pady repeatdelay repeatinterval state takefocus textvariable underline width wraplength)
 
 (defargs canvas ()
   background borderwidth closeenough confine cursor height highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth offset relief scrollregion selectbackground selectborderwidth selectforeground state takefocus width xscrollcommand xscrollincrement yscrollcommand yscrollincrement)
 	
 (defargs check-button ()
-  activebackground activeforeground anchor background bitmap borderwidth cbcommand compound cursor disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify offrelief offvalue onvalue overrelief padx pady relief selectcolor selectimage state takefocus textvariable underline variable width wraplength)
+  activebackground activeforeground anchor background bitmap borderwidth cbcommand compound cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify offrelief offvalue onvalue overrelief padx pady relief selectcolor selectimage state takefocus textvariable underline variable width wraplength)
 
-(defargs entry () background borderwidth cursor disabledbackground disabledForeground exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth invalidcommand justify readonlybackground relief selectbackground selectborderwidth selectforeground show state takefocus textvariable validate validatecommand width xscrollcommand )
+(defargs entry () background borderwidth cursor disabledbackground disabledforeground exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth invalidcommand justify readonlybackground relief selectbackground selectborderwidth selectforeground show state takefocus textvariable validate validatecommand width xscrollcommand )
 
 (defargs frame ()
   borderwidth class relief background colormap container cursor height highlightbackground highlightcolor highlightthickness padx pady takefocus visual width)
 
 (defargs label ()
-  activebackground activeforeground anchor background bitmap borderwidth compound cursor disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image justify padx pady relief state takefocus textvariable underline width wraplength )
+  activebackground activeforeground anchor background bitmap borderwidth compound cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image justify padx pady relief state takefocus textvariable underline width wraplength )
 
 (defargs labelframe ()
   borderwidth class font foreground labelanchor labelwidget relief text background colormap container cursor height highlightbackground highlightcolor highlightthickness padx pady takefocus visual width)
 
 (defargs listbox ()
-  activestyle background borderwidth cursor disabledForeground exportselection font foreground height highlightbackground highlightcolor highlightthickness relief selectbackground selectborderwidth selectforeground selectmode setgrid state takefocus width xscrollcommand yscrollcommand listvariable)
+  activestyle background borderwidth cursor disabledforeground exportselection font foreground height highlightbackground highlightcolor highlightthickness relief selectbackground selectborderwidth selectforeground selectmode setgrid state takefocus width xscrollcommand yscrollcommand listvariable)
 
 (defargs menu ()
-  activebackground activeborderwidth activeforeground background borderwidth cursor disabledForeground font foreground postcommand relief selectcolor takefocus tearoff tearoffcommand title type)
+  activebackground activeborderwidth activeforeground background borderwidth cursor disabledforeground font foreground postcommand relief selectcolor takefocus tearoff tearoffcommand title type)
 
 (defargs menubutton ()
-  activebackground activeforeground anchor background bitmap borderwidth cursor direction disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify menu padx pady relief compound state takefocus textvariable underline width wraplength)
+  activebackground activeforeground anchor background bitmap borderwidth cursor direction disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify menu padx pady relief compound state takefocus textvariable underline width wraplength)
 
 (defargs message ()
   anchor aspect background borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness justify padx pady relief takefocus textvariable width)
@@ -897,7 +934,7 @@ toplevel             x
   background borderwidth cursor handlepad handlesize height opaqueresize orient relief sashcursor sashpad sashrelief sashwidth showhandle width)
 
 (defargs radio-button ()
-  activebackground activeforeground anchor background bitmap borderwidth command-radiobuton compound cursor disabledForeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify offrelief overrelief padx pady relief selectcolor selectimage state takefocus textvariable underline value-radio-button variable-radio-button width wraplength)
+  activebackground activeforeground anchor background bitmap borderwidth command-radiobuton compound cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify offrelief overrelief padx pady relief selectcolor selectimage state takefocus textvariable underline value-radio-button variable-radio-button width wraplength)
 
 (defargs scale ()
   activebackground background bigincrement borderwidth command cursor digits font foreground from highlightbackground highlightcolor highlightthickness label length orient relief repeatdelay repeatinterval resolution showvalue sliderlength sliderrelief state takefocus tickinterval to troughcolor variable width)
@@ -906,7 +943,7 @@ toplevel             x
   activebackground activerelief background borderwidth command-scrollbar cursor elementborderwidth highlightbackground highlightcolor highlightthickness jump orient relief repeatdelay repeatinterval takefocus troughcolor width)
 
 (defargs spinbox ()
-  activebackground background borderwidth Button.background Button.cursor Button.relief command cursor disabledbackground disabledForeground exportselection font foreground format from highlightbackground highlightcolor highlightthickness increment insertbackground insertborderwidth insertofftime insertontime insertwidth invalidcommand justify relief readonlybackground repeatdelay repeatinterval selectbackground selectborderwidth selectforeground state takefocus textvariable to validate validatecommand values width wrap xscrollcommand)
+  activebackground background borderwidth Button.background Button.cursor Button.relief command cursor disabledbackground disabledforeground exportselection font foreground format from highlightbackground highlightcolor highlightthickness increment insertbackground insertborderwidth insertofftime insertontime insertwidth invalidcommand justify relief readonlybackground repeatdelay repeatinterval selectbackground selectborderwidth selectforeground state takefocus textvariable to validate validatecommand values width wrap xscrollcommand)
 
 (defargs text ()
   autoseparators  background borderwidth cursor exportselection font foreground height highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth maxundo padx  pady relief selectbackground selectborderwidth selectforeground setgrid spacing1 spacing2 spacing3 state tabs takefocus undo width wrap xscrollcommand yscrollcommand)
@@ -918,6 +955,7 @@ toplevel             x
   (let ((args (sort (copy-list (rest (assoc class *class-args*)))
 		    (lambda (x y)
 		      (string< (symbol-name x) (symbol-name y))))))
+    ;; FIXME check that this is correct, and it shouldn't be (format nil "~a ~~A " cmd) [tfb]
     (let ((cmdstring (format nil "~~a ~~~~A "))
 	  (codelist nil)
 	  (keylist nil)
@@ -930,7 +968,6 @@ toplevel             x
 	    (when (iarg-key entry)
 	      (setf keylist (append keylist (list (iarg-key entry)))))
 	    (setf codelist (append codelist (list (iarg-code entry))))
-
 	    #+:generate-accessors
 	    (when (and (iarg-key entry)
 		       (not (equal (iarg-key entry) 'variable))
@@ -1011,7 +1048,7 @@ toplevel             x
 ;; basic class for all widgets 
 (defclass widget(tkobject)
   ((master :accessor master :initarg :master :initform nil) ;; parent widget or nil
-   (widget-path  :initarg :path :initform nil)         ;; pathname to refer to the widget
+   (widget-path :initarg :path :initform nil :accessor %widget-path)         ;; pathname to refer to the widget
    (init-command :accessor init-command :initform nil :initarg :init-command)
    )
   (:documentation "Base class for all widget types"))
@@ -1040,7 +1077,7 @@ toplevel             x
 
 (defmethod widget-path ((widget widget))
   "retrieve the slot value widget-path, if not given, create it"
-  (or (slot-value widget 'widget-path)
+  (or (%widget-path widget)
       (prog1
 	  (setf (slot-value widget 'widget-path)
 		(create-path (master widget) (name widget)))
@@ -1275,6 +1312,9 @@ toplevel             x
 (defgeneric menu-delete (menu index))
 (defmethod menu-delete ((menu menu) index)
   (format-wish "~A delete ~A" (widget-path menu) index))
+
+
+
 
 ;;; standard button widget
 
@@ -1701,6 +1741,7 @@ set y [winfo y ~a]
 			 (format-number s input)))
 
 (defgeneric (setf coords) (val item))
+
 (defmethod (setf coords) (val (item canvas-item))
   (let ((coord-list (process-coords val)))
     (format-wish "~a coords ~a ~a" (widget-path (canvas item)) (handle item) coord-list)
@@ -2454,7 +2495,7 @@ set y [winfo y ~a]
 
 (defmacro with-ltk-handlers (() &body body)
   `(funcall (wish-call-with-condition-handlers-function *wish*)
-           (lambda () ,@body)))
+	    (lambda () ,@body)))
 
 (defun compute-error-handlers (handle-errors)
   (let ((nothing (constantly nil)))
@@ -2474,34 +2515,34 @@ set y [winfo y ~a]
 (defun compute-call-with-debugger-hook (debugger)
   "Return a function that will call a thunk with debugger-hook bound appropriately."
   (labels ((use-existing-debugger (thunk)
-            (funcall thunk))
-          (use-trivial-debugger (thunk)
-            (let ((*debugger-hook* #'trivial-debugger))
-              (funcall thunk)))
-          (use-custom-debugger (thunk)
-            (let ((*debugger-hook* debugger))
-              (funcall thunk))))
+	     (funcall thunk))
+	   (use-trivial-debugger (thunk)
+	     (let ((*debugger-hook* #'trivial-debugger))
+	       (funcall thunk)))
+	   (use-custom-debugger (thunk)
+	     (let ((*debugger-hook* debugger))
+	       (funcall thunk))))
     (case debugger
       ((t) #'use-existing-debugger)
       ((nil) #'use-trivial-debugger)
       (t (if (or (functionp debugger)
-                (and (symbolp debugger)
-                     (fboundp debugger)))
-            #'use-custom-debugger
-            (error "Not a function specifier: ~S" debugger))))))
+		 (and (symbolp debugger)
+		      (fboundp debugger)))
+	     #'use-custom-debugger
+	     (error "Not a function specifier: ~S" debugger))))))
 
 (defun make-condition-handler-function (&key . #.*start-wish-key-args*)
   "Return a function that will call a thunk with the appropriate condition handlers in place, and *debugger-hook* bound as needed."
   (multiple-value-bind (simple-error error) (compute-error-handlers handle-errors)
     (let ((warning (compute-warning-handler handle-warnings))
-         (call-with-debugger-hook (compute-call-with-debugger-hook debugger)))
+	  (call-with-debugger-hook (compute-call-with-debugger-hook debugger)))
       (lambda (thunk)
-       (funcall call-with-debugger-hook
-                (lambda ()
-                  (handler-bind ((simple-error simple-error)
-                                 (error error)
-                                 (warning warning))
-                    (funcall thunk))))))))
+	(funcall call-with-debugger-hook
+		 (lambda ()
+		   (handler-bind ((simple-error simple-error)
+				  (error error)
+				  (warning warning))
+		     (funcall thunk))))))))
 
 
 
@@ -2550,30 +2591,29 @@ tk input to terminate"
   "The heart of the main loop.  Returns true as long as the main loop should continue."
   (let ((no-event (cons nil nil)))
     (labels ((proc-event ()
-	(let ((event (read-event :blocking blocking
-				 :no-event-value no-event)))
-	  (cond
-	   ((null event)
-	    (close (wish-stream *wish*))
-	    (setf (wish-stream *wish*) nil)
-	    nil)
-	   ((eql event no-event)
-	    t)
-	   (t (process-one-event event)
-	      (cond
-	       (*break-mainloop* nil)
-	       (*exit-mainloop*
-		(exit-wish)
-		nil)
-	       (t t)))))))
-      (restart-case (proc-event)
-		    (abort ()
-			   :report "Abort handling Tk event"
-			   t)
-		    (exit ()
-			  :report "Exit Ltk main loop"
-			  nil)))))
-
+	       (let ((event (read-event :blocking blocking
+					:no-event-value no-event)))
+		 (cond
+		   ((null event)
+		    (close (wish-stream *wish*))
+		    (setf (wish-stream *wish*) nil)
+		    nil)
+		   ((eql event no-event)
+		    t)
+		   (t (process-one-event event)
+		      (cond
+			(*break-mainloop* nil)
+			(*exit-mainloop*
+			 (exit-wish)
+			 nil)
+			(t t)))))))
+    (restart-case (proc-event)
+      (abort ()
+	:report "Abort handling Tk event"
+	t)
+      (exit ()
+	:report "Exit Ltk main loop"
+	nil)))))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defvar *mainloop-key-args*
@@ -2586,12 +2626,12 @@ tk input to terminate"
 (defun mainloop (&key . #.*mainloop-key-args*)
   (if serve-event
       (install-input-handler)
-    (let ((*exit-mainloop* nil)
-	  (*break-mainloop* nil)
-	  (*read-eval* nil)) ;;safety against malicious clients
-      (remove-input-handler)
-      (loop while (with-ltk-handlers ()
-				     (main))))))
+      (let ((*exit-mainloop* nil)
+	    (*break-mainloop* nil)
+	    (*read-eval* nil)) ;;safety against malicious clients
+	(remove-input-handler)
+	(loop while (with-ltk-handlers ()
+		      (main))))))
 
 ;;; Event server
 
@@ -2602,7 +2642,6 @@ tk input to terminate"
   (defun remove-input-handler ()
     nil))
 
-
 #+(or sbcl cmu)
 (progn
   (defun add-fd-handler (fd direction function)
@@ -2612,37 +2651,44 @@ tk input to terminate"
   (defun remove-fd-handler (handler)
     #+sbcl (sb-sys:remove-fd-handler handler)
     #+cmu (system:remove-fd-handler handler))
-
+  
   (defun fd-stream-fd (stream)
     #+sbcl (sb-sys:fd-stream-fd stream)
     #+cmu (system:fd-stream-fd stream))
 
   (defun make-input-handler (wish)
+    "Return a SERVE-EVENT input handler."
     (let ((fd-stream (two-way-stream-input-stream (wish-stream wish))))
-      (flet ((ltk-input-handler (fd)
-              (declare (ignore fd))
-              (let ((*wish* wish))
-                (handler-bind ((end-of-file
-                                (lambda (e)
-                                  (when (eql (stream-error-stream e)
-                                             fd-stream)
-                                    (close (wish-stream *wish*))
-                                    (exit-wish)
-                                    (return-from ltk-input-handler)))))
-                  (unless (with-ltk-handlers () (main :blocking nil))
-                    (remove-input-handler))))))
-       #'ltk-input-handler)))
+      (labels ((call-main ()
+		 (with-ltk-handlers () 
+		   (handler-bind ((stream-error
+				   ;; If there was a stream error on the fd that
+				   ;; we're listening to, we need to remove the
+				   ;; input handler to avoid getting stuck in an
+				   ;; infinite loop of stream errors making
+				   ;; noise on the fd, causing us to try to read
+				   ;; from it, causing an error, which makes
+				   ;; noise on the fd...
+				   (lambda (e)
+				     (when (eql (stream-error-stream e) fd-stream)
+				       (return-from call-main nil)))))
+		     (main :blocking nil))))
+	       (ltk-input-handler (fd)
+		 (declare (ignore fd))
+		 (let ((*wish* wish)) ; use the wish we were given as an argument
+		   (unless (call-main)
+		     (remove-input-handler)))))
+	#'ltk-input-handler)))
 
   (defun install-input-handler ()
     (unless (wish-input-handler *wish*)
       (let ((fd (fd-stream-fd (two-way-stream-input-stream (wish-stream *wish*)))))
-       (setf (wish-input-handler *wish*)
-             (add-fd-handler fd :input (make-input-handler *wish*))))))
+	(setf (wish-input-handler *wish*)
+	      (add-fd-handler fd :input (make-input-handler *wish*))))))
 
   (defun remove-input-handler ()
     (remove-fd-handler (wish-input-handler *wish*))
     (setf (wish-input-handler *wish*) nil)))
-
 
 #|
 :HANDLE-ERRORS determines what to do if an error is signaled.  It can be set to
@@ -2693,121 +2739,122 @@ When an error is signalled, there are four things LTk can do:
      you will see the SLIME debugger, but see the description of :DEBUGGER
      below.
 
-LTk considers two types of errors: SIMPLE-ERRORs and all others.  SIMPLE-ERROR
-is what is signalled when you type a form like (error "Something is wrong.").
+ LTk considers two types of errors: SIMPLE-ERRORs and all others.  SIMPLE-ERROR
+ is what is signalled when you type a form like (error "Something is wrong.").
 
-If :HANDLE-ERRORS is T, SIMPLE-ERRORs will be shown to the user, and all others
-(such as those generated by the Lisp system itself, eg, if you attempt to divide
-by zero) will be noted.  In this model, you can call ERROR yourself to send an
-error message to the user in a user-friendly manner.  If :HANDLE-ERRORS is NIL,
-LTk will not interfere with the normal error handling mechanism.
+ If :HANDLE-ERRORS is T, SIMPLE-ERRORs will be shown to the user, and all others
+ (such as those generated by the Lisp system itself, eg, if you attempt to divide
+      by zero) will be noted.  In this model, you can call ERROR yourself to send an
+ error message to the user in a user-friendly manner.  If :HANDLE-ERRORS is NIL,
+ LTk will not interfere with the normal error handling mechanism.
 
-For details of all the options, see the tables below.
+ For details of all the options, see the tables below.
 
-:HANDLE-WARNINGS can be T, NIL, or :DEBUG.
+ :HANDLE-WARNINGS can be T, NIL, or :DEBUG.
 
-:DEBUGGER can be T or NIL.  If it is NIL, LTk will prevent the user from ever
-seeing the Lisp debugger.  In the event that the debugger would be invoked, LTk
-will use its "trivial debugger" which dumps a stack trace and quits (note that
-this is only implemented on SBCL and CMUCL).  This is useful in conjunction with
-:HANDLE-ERRORS T, which should never call the debugger; if :HANDLE-ERRORS is T
-and the debugger is called, this means that the system is confused beyond all
-hope, and dumping a stack trace is probably the right thing to do.
+ :DEBUGGER can be T or NIL.  If it is NIL, LTk will prevent the user from ever
+ seeing the Lisp debugger.  In the event that the debugger would be invoked, LTk
+ will use its "trivial debugger" which dumps a stack trace and quits (note that
+ this is only implemented on SBCL and CMUCL).  This is useful in conjunction with
+ :HANDLE-ERRORS T, which should never call the debugger ; if :HANDLE-ERRORS is T
+ and the debugger is called, this means that the system is confused beyond all
+ hope, and dumping a stack trace is probably the right thing to do.
 
 
-                                   :HANDLE-ERRORS T
-             +--------------+--------------+--------------+--------------+
-             |  (default)   |     note     | show, offer  | show, offer  |
-             |              |              | to continue  | to start the |
-             |              |              |              | debugger     |
-             +--------------+--------------+--------------+--------------+
-             |              |              |    XX  XX    |              |
-SIMPLE-ERROR |              |              |      XX      |              |
-             |              |              |    XX  XX    |              |
-             +--------------+--------------+--------------+--------------+
-             |              |    XX  XX    |              |              |
-       ERROR |              |      XX      |              |              |
-             |              |    XX  XX    |              |              |
-             +--------------+--------------+--------------+--------------+
+                                  :HANDLE-ERRORS T
+                +--------------+--------------+--------------+--------------+
+                |  (default)   |     note     | show, offer  | show, offer  |
+                |              |              | to continue  | to start the |
+                |              |              |              | debugger     |
+                +--------------+--------------+--------------+--------------+
+                |              |              |    XX  XX    |              |
+   SIMPLE-ERROR |              |              |      XX      |              |
+                |              |              |    XX  XX    |              |
+                +--------------+--------------+--------------+--------------+
+                |              |    XX  XX    |              |              |
+          ERROR |              |      XX      |              |              |
+                |              |    XX  XX    |              |              |
+                +--------------+--------------+--------------+--------------+
 
                                :HANDLE-ERRORS :SIMPLE
-             +--------------+--------------+--------------+--------------+
-             |  (default)   |     note     | show, offer  | show, offer  |
-             |              |              | to continue  | to start the |
-             |              |              |              | debugger     |
-             +--------------+--------------+--------------+--------------+
-             |              |              |    XX  XX    |              |
-SIMPLE-ERROR |              |              |      XX      |              |
-             |              |              |    XX  XX    |              |
-             +--------------+--------------+--------------+--------------+
-             |    XX  XX    |              |              |              |
-       ERROR |      XX      |              |              |              |
-             |    XX  XX    |              |              |              |
-             +--------------+--------------+--------------+--------------+
+                +--------------+--------------+--------------+--------------+
+                |  (default)   |     note     | show, offer  | show, offer  |
+                |              |              | to continue  | to start the |
+                |              |              |              | debugger     |
+                +--------------+--------------+--------------+--------------+
+                |              |              |    XX  XX    |              |
+   SIMPLE-ERROR |              |              |      XX      |              |
+                |              |              |    XX  XX    |              |
+                +--------------+--------------+--------------+--------------+
+                |    XX  XX    |              |              |              |
+          ERROR |      XX      |              |              |              |
+                |    XX  XX    |              |              |              |
+                +--------------+--------------+--------------+--------------+
 
                                :HANDLE-ERRORS :DEBUG
-             +--------------+--------------+--------------+--------------+
-             |  (default)   |     note     | show, offer  | show, offer  |
-             |              |              | to continue  | to start the |
-             |              |              |              | debugger     |
-             +--------------+--------------+--------------+--------------+
-             |              |              |              |    XX  XX    |
-SIMPLE-ERROR |              |              |              |      XX      |
-             |              |              |              |    XX  XX    |
-             +--------------+--------------+--------------+--------------+
-             |              |              |              |    XX  XX    |
-       ERROR |              |              |              |      XX      |
-             |              |              |              |    XX  XX    |
-             +--------------+--------------+--------------+--------------+
+                +--------------+--------------+--------------+--------------+
+                |  (default)   |     note     | show, offer  | show, offer  |
+		|              |              | to continue  | to start the |
+		|              |              |              | debugger     |
+		+--------------+--------------+--------------+--------------+
+		|              |              |              |    XX  XX    |
+   SIMPLE-ERROR |              |              |              |      XX      |
+                |              |              |              |    XX  XX    |
+		+--------------+--------------+--------------+--------------+
+		|              |              |              |    XX  XX    |
+          ERROR |              |              |              |      XX      |
+	        |              |              |              |    XX  XX    |
+                +--------------+--------------+--------------+--------------+
 
                                  :HANDLE-ERRORS NIL
-             +--------------+--------------+--------------+--------------+
-             |  (default)   |     note     | show, offer  | show, offer  |
-             |              |              | to continue  | to start the |
-             |              |              |              | debugger     |
-             +--------------+--------------+--------------+--------------+
-             |    XX  XX    |              |              |              |
-SIMPLE-ERROR |      XX      |              |              |              |
-             |    XX  XX    |              |              |              |
-             +--------------+--------------+--------------+--------------+
-             |    XX  XX    |              |              |              |
-       ERROR |      XX      |              |              |              |
-             |    XX  XX    |              |              |              |
-             +--------------+--------------+--------------+--------------+
+                +--------------+--------------+--------------+--------------+
+		|  (default)   |     note     | show, offer  | show, offer  |
+		|              |              | to continue  | to start the |
+		|              |              |              | debugger     |
+		+--------------+--------------+--------------+--------------+
+		|    XX  XX    |              |              |              |
+   SIMPLE-ERROR |      XX      |              |              |              |
+                |    XX  XX    |              |              |              |
+                +--------------+--------------+--------------+--------------+
+                |    XX  XX    |              |              |              |
+          ERROR |      XX      |              |              |              |
+                |    XX  XX    |              |              |              |
+		+--------------+--------------+--------------+--------------+
 
-                         :HANDLE-WARNINGS T
-             +--------------+--------------+--------------+
-             |  (default)   |     show     | show, offer  |
-             |              |              | to start the |
-             |              |              | debugger     |
-             +--------------+--------------+--------------+
-             |              |    XX  XX    |              |
-    WARNING  |              |      XX      |              |
-             |              |    XX  XX    |              |
-             +--------------+--------------+--------------+
+                                 :HANDLE-WARNINGS T
+                +--------------+--------------+--------------+
+		|  (default)   |     show     | show, offer  |
+		|              |              | to start the |
+		|              |              | debugger     |
+		+--------------+--------------+--------------+
+		|              |    XX  XX    |              |
+       WARNING  |              |      XX      |              |
+                |              |    XX  XX    |              |
+		+--------------+--------------+--------------+
 
-                       :HANDLE-WARNINGS :DEBUG
-             +--------------+--------------+--------------+
-             |  (default)   |     show     | show, offer  |
-             |              |              | to start the |
-             |              |              | debugger     |
-             +--------------+--------------+--------------+
-             |              |              |    XX  XX    |
-     WARNING |              |              |      XX      |
-             |              |              |    XX  XX    |
-             +--------------+--------------+--------------+
+                            :HANDLE-WARNINGS :DEBUG
+                +--------------+--------------+--------------+
+		|  (default)   |     show     | show, offer  |
+		|              |              | to start the |
+		|              |              | debugger     |
+		+--------------+--------------+--------------+
+		|              |              |    XX  XX    |
+        WARNING |              |              |      XX      |
+                |              |              |    XX  XX    |
+		+--------------+--------------+--------------+
  
-                        :HANDLE-WARNINGS NIL
-             +--------------+--------------+--------------+
-             |  (default)   |     show     | show, offer  |
-             |              |              | to start the |
-             |              |              | debugger     |
-             +--------------+--------------+--------------+
-             |    XX  XX    |              |              |
-     WARNING |      XX      |              |              |
-             |    XX  XX    |              |              |
-             +--------------+--------------+--------------+
-|#
+                              :HANDLE-WARNINGS NIL
+                +--------------+--------------+--------------+
+		|  (default)   |     show     | show, offer  |
+		|              |              | to start the |
+		|              |              | debugger     |
+		+--------------+--------------+--------------+
+		|    XX  XX    |              |              |
+        WARNING |      XX      |              |              |
+	        |    XX  XX    |              |              |
+		+--------------+--------------+--------------+
+
+ |#
 
 ;;
 
@@ -2815,27 +2862,36 @@ SIMPLE-ERROR |      XX      |              |              |              |
   (loop for (key val) on keyword-arguments by #'cddr
 	when (find key desired-keys) nconc (list key val)))
 
-			     
 ;;; wrapper macro - initializes everything, calls body and then mainloop
 
-
 (defmacro with-ltk ((&rest keys &key . #.(append *start-wish-key-args*
-                                                *mainloop-key-args*))
+						 *mainloop-key-args*))
 		    &body body)
   (declare (ignore handle-errors handle-warnings debugger serve-event))
   `(call-with-ltk (lambda () ,@body) ,@keys))
 
 (defun call-with-ltk (thunk &rest keys &key . #.(append *start-wish-key-args*
 							*mainloop-key-args*))
-  
-  (unwind-protect
-      (progn (apply #'start-wish (filter-keys *start-wish-keywords* keys))
-	     (funcall thunk)
-             (apply #'mainloop (filter-keys *mainloop-keywords* keys)))
-    (unless serve-event
-      (exit-wish))))
-
+  (declare (ignore handle-errors handle-warnings debugger))
+  (flet ((start-wish ()
+	   (handler-bind ((ltk-error
+			   ;; If the error was that there is already a wish
+			   ;; running, we want to go ahead and create another
+			   ;; connection.
+			   (lambda (e &aux (r (find-restart 'new-wish)))
+			     (declare (ignore e))
+			     (when r (invoke-restart r)))))
+	     (apply #'start-wish (filter-keys *start-wish-keywords* keys))))
+	 (mainloop () (apply #'mainloop (filter-keys *mainloop-keywords* keys))))
+    (unwind-protect
+	 (progn (start-wish)
+		(funcall thunk)
+		(mainloop))
+      (unless serve-event
+	(exit-wish)))))
+       
 ;;; with-widget stuff
+
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defun process-layout (line parent)
     (let ((class-name (first line))
@@ -2879,8 +2935,8 @@ SIMPLE-ERROR |      XX      |              |              |              |
 				 :command (lambda () (format t "Pressed OK~%")))
 			 (button bt2 :text "CANCEL" :pack '(:side :left)
 				 :command (lambda () (withdraw top-frame)))))
-	(setf (text lb1) "Test, Test, Test!")
-	)))
+      (setf (text lb1) "Test, Test, Test!")
+      )))
 
 ;;;; testing functions
 
@@ -3075,7 +3131,7 @@ SIMPLE-ERROR |      XX      |              |              |              |
 			    (setf old-x x
 				  old-y y))
 			  ))
-			(after 100 #'update)))
+	 	        (after 100 #'update)))
      (pack c :expand 1 :fill :both)
      (itemconfigure c e1 "width" 10)
      (itemconfigure c e2 "width" 10)
