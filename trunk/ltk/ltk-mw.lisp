@@ -43,23 +43,25 @@ o tooltip
   (:use "COMMON-LISP"
 	"LTK"
 	)
-  (:export "PROGRESS"
-	   "PERCENT"
-	   "BAR-COLOR"
-	   "REDRAW-ON-RESIZE"
-	   "HISTORY-ENTRY"
-	   "HISTORY"
-	   "CLEAR-HISTORY"
-	   "MENU-ENTRY"
-	   "APPEND-ITEM"
-	   "DELETE-ITEM"
-	   "TREELIST"
-	   "TREELIST-HAS-CHILDREN"
-	   "TREELIST-CHILDREN"
-	   "TREELIST-NAME"
-	   "TREELIST-SELECT"
-	   #:gtree
-	   ))
+  (:export
+   #:progress
+   #:percent
+   #:bar-color
+   #:redraw-on-resize
+   #:history-entry
+   #:history
+   #:clear-history
+   #:menu-entry
+   #:append-item
+   #:delete-item
+   #:treelist
+   #:treelist-has-children
+   #:treelist-children
+   #:treelist-name
+   #:treelist-select
+   
+   #:gtree
+   ))
 
 (in-package :ltk-mw)
  
@@ -393,7 +395,7 @@ o tooltip
     h))
   
 
-(defmethod initialize-instance :after ((g gtree) &key)q
+(defmethod initialize-instance :after ((g gtree) &key)
   (render-tree g (data g) 0 0)
   )
 

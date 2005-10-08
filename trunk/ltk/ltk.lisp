@@ -554,6 +554,7 @@ toplevel             x
     (read (wish-stream *wish*) nil nil)))
 
 (defun can-read (stream)
+  "return t, if there is something to READ on the stream"
   (let ((c (read-char-no-hang stream)))
     (loop 
        while (and c
@@ -565,12 +566,15 @@ toplevel             x
       t)))
 
 (defun read-event (&key (blocking t) (no-event-value nil))
+  "read the next event from wish, return the event or nil, if there is no
+event to read and blocking is set to nil"
   (or (pop (wish-event-queue *wish*))
       (if (or blocking (can-read (wish-stream *wish*)))
           (read-preserving-whitespace (wish-stream *wish*) nil nil)
           no-event-value)))
 
 (defun read-data ()
+  "read data from wish"
   (let ((d (read-wish)))
     (if (listp d) ; paranoia check when we do not read a list eg. error messages from wish
         (progn
@@ -637,10 +641,8 @@ toplevel             x
     (when fun
       (apply fun arg))))
 
-;;; after <time> msec call function <fun> <label> is used to have
-;;; several events scheduled at the same time
-
 (defun after (time fun)
+  "after <time> msec call function <fun>, returns the after event id, which can be passed to AFTER-CANCEL"
   (let ((name (format nil "after~a" (incf (wish-after-counter *wish*)))))
     (add-callback name
                   (lambda ()
@@ -650,6 +652,7 @@ toplevel             x
     (read-data)))
 
 (defun after-idle (fun)
+  "call fun when tk becomes idle, returns the after event id, which can be passed to AFTER-CANCEL"
   (let ((name (format nil "afteridle~a" (incf (wish-after-counter *wish*)))))
     (add-callback name
                   (lambda ()
@@ -659,21 +662,24 @@ toplevel             x
     (read-data)))
 
 (defun after-cancel (id)
+  "cancels a call scheduled with AFTER or AFTER-IDLE by its id"
   (format-wish "after cancel ~a" id))
+
 
 ;; tool functions used by the objects
 
-;; incremental counter to create unique numbers
-
 (defun get-counter()
+  "incremental counter to create unique numbers"
   (incf (wish-counter *wish*)))
 
-;; create unique widget name, append unique number to "w"
+
 (defun create-name ()
+  "create unique widget name, append unique number to 'w'"
   (format nil "w~A" (get-counter)))
 
-;; create pathname from master widget <master> and widget name <name>
+
 (defun create-path (master name)
+  "create pathname from master widget <master> and widget name <name>"
   (let ((master-path (if master
                          (widget-path master)
                          "")))
@@ -696,26 +702,53 @@ toplevel             x
       (Button.cursor Button.cursor "~@[ -Button.cursor ~(~a~)~]" Button.cursor "")
       (Button.relief Button.relief "~@[ -Button.relief ~(~a~)~]" Button.relief "")
       
-      (activebackground activebackground "~@[ -activebackground ~(~a~)~]" activebackground "background of the active area")
-      (activeborderwidth activeborderwidth "~@[ -activeborderwidth ~(~a~)~]" activeborderwidth "")
-      (activeforeground activeforeground "~@[ -activeforeground ~(~a~)~]" activeforeground "foreground of the active area")
-      (activerelief activerelief "~@[ -activerelief ~(~a~)~]" activerelief "")
-      (activestyle activestyle "~@[ -activestyle ~(~a~)~]" activestyle "")
-      (anchor anchor "~@[ -anchor ~(~a~)~]" anchor "")
-      (aspect aspect "~@[ -aspect ~(~a~)~]" aspect "")
-      (autoseparators autoseparators "~@[ -autoseparators ~(~a~)~]" autoseparators "")
-      (background background "~@[ -background ~(~a~)~]" background "background color of the widget")
-      (bigincrement bigincrement "~@[ -bigincrement ~(~a~)~]" bigincrement "size of the big step increment")
-      (bitmap bitmap "~@[ -bitmap ~(~a~)~]" bitmap "")
-      (borderwidth borderwidth "~@[ -borderwidth ~(~a~)~]" borderwidth "width of the border around the widget in pixels")
-      (class class "~@[ -class ~(~a~)~]" class "")
-      (closeenough closeenough "~@[ -closeenough ~(~a~)~]" closeenough "")
-      (colormap colormap "~@[ -colormap ~(~a~)~]" colormap "")
+      (activebackground activebackground "~@[ -activebackground ~(~a~)~]" activebackground
+       "background of the active area")
+
+      (activeborderwidth activeborderwidth "~@[ -activeborderwidth ~(~a~)~]" activeborderwidth
+       "the border width for active widgets (when the mouse cursor is over the widget)")
+
+      (activeforeground activeforeground "~@[ -activeforeground ~(~a~)~]" activeforeground
+       "foreground color for active widgets (when the mouse cursor is over the widget)")
+
+      (activerelief activerelief "~@[ -activerelief ~(~a~)~]" activerelief
+       "the border relief for active widgets (when the mouse cursor is over the widget)")
+      
+      (activestyle activestyle "~@[ -activestyle ~(~a~)~]" activestyle
+       "the style for drawing the active part (dotbox, none, underline (default))")
+      
+      (anchor anchor "~@[ -anchor ~(~a~)~]" anchor
+       "specify the alignment of text/image drawn on the widget, one of (:n :w :s :e :nw :sw :se :ne) with :nw designating the top left corner")
+      
+      (aspect aspect "~@[ -aspect ~(~a~)~]" aspect
+       "Aspect ratio for the wrapping of the text. 100 means that the text is redered as wide as, tall, 200 twice as wide.")
+      (autoseparators autoseparators "~:[~; -autoseparators 1~]" autoseparators
+       "when t, separators are added automatically to the undo stack")
+      (background background "~@[ -background ~(~a~)~]" background
+       "background color of the widget")
+      (bigincrement bigincrement "~@[ -bigincrement ~(~a~)~]" bigincrement
+       "size of the big step increment")
+      (bitmap bitmap "~@[ -bitmap ~(~a~)~]" bitmap
+       "the bitmap to display on the widget, the display is affected by the options 'anchor' and 'justify'")
+
+      (borderwidth borderwidth "~@[ -borderwidth ~(~a~)~]" borderwidth
+       "width of the border around the widget in pixels")
+
+      (class class "~@[ -class ~(~a~)~]" class
+       "the class of the widget, used for lookup in the option database. This option cannot be changed after the widget creation.")
+
+      (closeenough closeenough "~@[ -closeenough ~(~a~)~]" closeenough
+       "dermines when the mouse coursor is considered to be inside a shape, the default is 1.0")
+
+      (colormap colormap "~@[ -colormap ~(~a~)~]" colormap
+       "The colormap to use for the widget.")
+
       (command command "~@[ -command {callback ~a}~]" (and command 
                                                        (progn
                                                          (add-callback (name widget) command)
                                                          (name widget)))
        "function to call when the action of the widget is executed")
+      
       (cbcommand command "~@[ -command {callbackval ~{~a $~a~}}~]" (and command 
                                                                     (progn
                                                                       (add-callback (name widget) command)
@@ -726,13 +759,18 @@ toplevel             x
 										 (add-callback (name widget) command)
 										 (list (name widget) (radio-button-variable widget))))
        "function to call when the action of the widget is executed")
+      
       (command-scrollbar command "~@[ -command {callback ~a}~]" (and command 
 								 (progn
 								   (add-callback (name widget) command)
 								   (name widget)))"")
       
-      (compound compound "~@[ -compound ~(~a~)~]" compound "")
-      (confine confine "~@[ -confine ~(~a~)~]" confine "")
+      (compound compound "~@[ -compound ~(~a~)~]" compound
+       "")
+      
+      (confine confine "~:[~; -confine 1~]" confine
+       "if t (default) allowed values for view are confined to the scrollregion")
+      
       (container container "~@[ -container ~(~a~)~]" container "")
       (cursor cursor "~@[ -cursor ~(~a~)~]" cursor "mouse pointer to display on the widget (valid values are listed in *cursors*)")
       (default default "~@[ -default ~(~a~)~]" default "")
@@ -752,7 +790,8 @@ toplevel             x
       (highlightbackground highlightbackground "~@[ -highlightbackground ~(~a~)~]" highlightbackground "")
       (highlightcolor highlightcolor "~@[ -highlightcolor ~(~a~)~]" highlightcolor "")
       (highlightthickness highlightthickness "~@[ -highlightthickness ~(~a~)~]" highlightthickness "")
-      (image image "~@[ -image ~(~a~)~]" (and image (name image)) "image to display on the widget")
+      (image image "~@[ -image ~(~a~)~]" (and image (name image))
+       "the image to display on the widget, the display is affected by the options 'anchor' and 'justify'")
       (increment increment "~@[ -increment ~(~a~)~]" increment "size of the increment of the widget")
       (indicatorOn indicatorOn "~@[ -indicatorOn ~(~a~)~]" indicatorOn "")
       (insertbackground insertbackground "~@[ -insertbackground ~(~a~)~]" insertbackground "")
@@ -3159,3 +3198,4 @@ When an error is signalled, there are four things LTk can do:
 				       (force-output))))))
      (pack b))))
 
+ 
