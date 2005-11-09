@@ -771,10 +771,18 @@ event to read and blocking is set to nil"
       (confine confine "~:[~; -confine 1~]" confine
        "if t (default) allowed values for view are confined to the scrollregion")
       
-      (container container "~@[ -container ~(~a~)~]" container "")
-      (cursor cursor "~@[ -cursor ~(~a~)~]" cursor "mouse pointer to display on the widget (valid values are listed in *cursors*)")
-      (default default "~@[ -default ~(~a~)~]" default "")
-      (digits digits "~@[ -digits ~(~a~)~]" digits "")
+      (container container "~:[~; -container 1~]" container
+       "if t, then the widget will be used as a container for other widgets.")
+      
+      (cursor cursor "~@[ -cursor ~(~a~)~]" cursor
+       "mouse pointer to display on the widget (valid values are listed in *cursors*)")
+      
+      (default default "~@[ -default ~(~a~)~]" default
+       "")
+
+      (digits digits "~@[ -digits ~(~a~)~]" digits
+       "number of digits to use when converting the value to a string.")
+      
       (direction direction "~@[ -direction ~(~a~)~]" direction "")
       (disabledbackground disabledbackground "~@[ -disabledbackground ~(~a~)~]" disabledbackground "")
       (disabledforeground disabledforeground "~@[ -disabledforeground ~(~a~)~]" disabledforeground "")
@@ -2631,7 +2639,7 @@ tk input to terminate"
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defvar *mainloop-key-args*
-    '((serve-event #+(and sbcl (not sb-threads)) t
+    '((serve-event #+(and sbcl (not sb-threads)) nil
                    #+(and sbcl sb-threads) nil
                    #+cmu t
                    #-(or sbcl cmu) nil)))
