@@ -194,7 +194,31 @@
                                                                )))))
                                :service ,port)))
 
+;; allegro version
 
+#+:allegro
+(progn
+  (require :sock)
+  (use-package :socket))
+#+:allegro
+(defmacro with-remote-ltk (port &rest body)
+  `(setf ltk-remote::*server*
+    (mp:process-run-function "ltk remote server"
+     (lambda ()
+       (let ((server (make-socket :type :stream :address-family :internet :connect :passive
+				  :local-host "0.0.0.0" :local-port ,port
+				  :reuse-address t :keepalive t)))
+	 (loop
+	  (let ((connection (accept-connection server)))
+	    (mp:process-run-function
+	     (format nil "ltk remote connection <~s>"  (ipaddr-to-hostname
+							(remote-host connection)))
+	     (lambda ()
+	       (ltk::call-with-ltk (lambda ()
+				     ,@body)
+				   :stream connection)
+		 
+	       )))))))))
 
 ;;; simple test function
 
