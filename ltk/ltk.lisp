@@ -2609,7 +2609,7 @@ tk input to terminate"
      do
      (process-one-event event))))
 
-(defun main (&key (blocking t))
+(defun main-iteration (&key (blocking t))
   "The heart of the main loop.  Returns true as long as the main loop should continue."
   (let ((no-event (cons nil nil)))
     (labels ((proc-event ()
@@ -2617,8 +2617,7 @@ tk input to terminate"
 					:no-event-value no-event)))
 		 (cond
 		   ((null event)
-		    (close (wish-stream *wish*))
-		    (setf (wish-stream *wish*) nil)
+                    (exit-wish)
 		    nil)
 		   ((eql event no-event)
 		    t)
@@ -2641,7 +2640,7 @@ tk input to terminate"
   (defvar *mainloop-key-args*
     '((serve-event #+(and sbcl (not sb-threads)) nil
                    #+(and sbcl sb-threads) nil
-                   #+cmu t
+                   #+cmu nil
                    #-(or sbcl cmu) nil)))
   (defvar *mainloop-keywords* '(:serve-event)))
 
@@ -2653,7 +2652,7 @@ tk input to terminate"
 	    (*read-eval* nil)) ;;safety against malicious clients
 	(remove-input-handler)
 	(loop while (with-ltk-handlers ()
-		      (main))))))
+		      (main-iteration))))))
 
 ;;; Event server
 
@@ -2694,11 +2693,12 @@ tk input to terminate"
 				   (lambda (e)
 				     (when (eql (stream-error-stream e) fd-stream)
 				       (return-from call-main nil)))))
-		     (main :blocking nil))))
+		     (main-iteration :blocking nil))))
 	       (ltk-input-handler (fd)
 		 (declare (ignore fd))
 		 (let ((*wish* wish)) ; use the wish we were given as an argument
-		   (unless (call-main)
+                   ;; FIXME: close over all ltk dynamic variables
+                   (unless (call-main)
 		     (remove-input-handler)))))
 	#'ltk-input-handler)))
 
@@ -2896,19 +2896,13 @@ When an error is signalled, there are four things LTk can do:
 							*mainloop-key-args*))
   (declare (ignore handle-errors handle-warnings debugger))
   (flet ((start-wish ()
-	   (handler-bind ((ltk-error
-			   ;; If the error was that there is already a wish
-			   ;; running, we want to go ahead and create another
-			   ;; connection.
-			   (lambda (e &aux (r (find-restart 'new-wish)))
-			     (declare (ignore e))
-			     (when r (invoke-restart r)))))
-	     (apply #'start-wish (filter-keys *start-wish-keywords* keys))))
-	 (mainloop () (apply #'mainloop (filter-keys *mainloop-keywords* keys))))
+           (apply #'start-wish (filter-keys *start-wish-keywords* keys))
+           (mainloop () (apply #'mainloop (filter-keys *mainloop-keywords* keys)))))
     (unwind-protect
-	 (progn (start-wish)
-		(funcall thunk)
-		(mainloop))
+	 (let ((*wish* (make-ltk-connection)))
+           (start-wish)
+           (funcall thunk)
+           (mainloop))
       (unless serve-event
 	(exit-wish)))))
        
