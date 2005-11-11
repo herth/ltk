@@ -127,6 +127,7 @@ toplevel             x
 	   "*LTK-VERSION*"
 	   "*CURSORS*"
 	   "*DEBUG-TK*"
+           "*BREAK-MAINLOOP*"
 	   "*EXIT-MAINLOOP*"
 	   "*INIT-WISH-HOOK*"
 	   "*MB-ICONS*"
@@ -474,10 +475,15 @@ toplevel             x
   (dolist (fun *init-wish-hook*)	; run init hook funktions 
     (funcall fun)))
 
+
+;; Rather than reproduce this list in several places in the source
+;; code, it's here in one place so it will be consistent between all
+;; functions that accept START-WISH's keyword arguments.
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defvar *start-wish-key-args*
-    '((handle-errors :debug) handle-warnings (debugger t)))
-  (defvar *start-wish-keywords* '(:handle-errors :handle-warnings :debugger)))
+    '((handle-errors :debug) handle-warnings (debugger t) stream) "A lambda-list fragment")
+  (defvar *start-wish-keywords* '(:handle-errors :handle-warnings :debugger :stream)
+    "The keywords corresponding to the lambda-list fragment (used for filtering arguments that were passed in to, eg, call-with-ltk.  FIXME: make this variable go away."))
 
 ;;; start wish and set (wish-stream *wish*)
 (defun start-wish (&rest keys &key . #.*start-wish-key-args*)
@@ -485,7 +491,7 @@ toplevel             x
   ;; open subprocess
   (if (null (wish-stream *wish*))
       (progn
-	(setf (wish-stream *wish*) (do-execute *wish-pathname* *wish-args*)
+	(setf (wish-stream *wish*) (or stream (do-execute *wish-pathname* *wish-args*))
 	      (wish-call-with-condition-handlers-function *wish*)
 	      (apply #'make-condition-handler-function keys))
 	;; perform tcl initialisations
@@ -2896,8 +2902,8 @@ When an error is signalled, there are four things LTk can do:
 							*mainloop-key-args*))
   (declare (ignore handle-errors handle-warnings debugger))
   (flet ((start-wish ()
-           (apply #'start-wish (filter-keys *start-wish-keywords* keys))
-           (mainloop () (apply #'mainloop (filter-keys *mainloop-keywords* keys)))))
+           (apply #'start-wish (filter-keys *start-wish-keywords* keys)))
+         (mainloop () (apply #'mainloop (filter-keys *mainloop-keywords* keys))))
     (unwind-protect
 	 (let ((*wish* (make-ltk-connection)))
            (start-wish)
