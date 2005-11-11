@@ -201,37 +201,47 @@
   (require :sock)
   (use-package :socket))
 #+:allegro
-(defmacro with-remote-ltk (port &rest body)
+(defmacro with-remote-ltk (port bindings form &rest cleanup)
   `(setf ltk-remote::*server*
-    (mp:process-run-function "ltk remote server"
-     (lambda ()
-       (let ((server (make-socket :type :stream :address-family :internet :connect :passive
-				  :local-host "0.0.0.0" :local-port ,port
-				  :reuse-address t :keepalive t)))
-	 (loop
-	  (let ((connection (accept-connection server)))
-	    (mp:process-run-function
-	     (format nil "ltk remote connection <~s>"  (ipaddr-to-hostname
-							(remote-host connection)))
-	     (lambda ()
-	       (ltk::call-with-ltk (lambda ()
-				     ,@body)
-				   :stream connection)
-		 
-	       )))))))))
+         (mp:process-run-function
+          (format nil "ltk remote server [~a]" ,port)
+          (lambda ()
+            (let ((server (make-socket :type :stream :address-family :internet :connect :passive
+                                       :local-host "0.0.0.0" :local-port ,port
+                                       :reuse-address t :keepalive t)))
+              (restart-case 
+                  (unwind-protect
+                       (loop
+                          (let ((connection (accept-connection server)))
+                            (mp:process-run-function
+                             (format nil "ltk remote connection <~s>"  (ipaddr-to-hostname
+                                                                        (remote-host connection)))
+                             (lambda ()
+                               (let ,bindings
+                                 (ltk::call-with-ltk (lambda ()
+                                                       ,form)
+                                                     :stream connection)
+                                 ,@cleanup)))))
+                    (close server))
+                (quit ()
+                  :report "Shutdown ltk remote server"
+                  nil)))))))
 
 ;;; simple test function
 
 (defun lrtest (port)
   (with-remote-ltk
-   port
+   port ()
    (let* ((txt (make-text nil :width 40 :height 10))
-	  (f (make-frame nil))
-	  (b (make-button f "Hallo" (lambda ()
+ 	  (f (make-instance 'frame ))
+ 	  (b (make-instance 'button :master f :text  "Hallo"
+ 			    :command (lambda ()
 					(append-text txt (format nil "Hallo pressed~&")))))
-	  (b2 (make-button f "Quit" (lambda ()
+ 	  (b2 (make-instance 'button :master f :text "Quit"
+ 			     :command (lambda ()
 					(setf *exit-mainloop* t))))
-	  (b3 (make-button f "Clear" (lambda ()
+ 	  (b3 (make-instance 'button :master f :text "Clear"
+ 			     :command (lambda ()
 				       (clear-text txt ))))
 	  )
      (pack b :side "left")
@@ -243,7 +253,7 @@
 
 
 (defun rlb-test2 ()
-  (with-remote-ltk 8080
+  (with-remote-ltk 8080 ()
    (let* ((last nil)
 	  (l (make-instance 'listbox))
 	  (wf (make-instance 'frame))
