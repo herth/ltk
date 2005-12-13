@@ -169,6 +169,7 @@ toplevel             x
 	   "CLIPBOARD-CLEAR"
 	   "CLIPBOARD-GET"
 	   "COMMAND"
+           "COORDS"
 	   "CONFIGURE"
 	   "CREATE-ARC"
 	   "CREATE-BITMAP"
@@ -979,7 +980,7 @@ event to read and blocking is set to nil"
   background borderwidth cursor handlepad handlesize height opaqueresize orient relief sashcursor sashpad sashrelief sashwidth showhandle width)
 
 (defargs radio-button ()
-  activebackground activeforeground anchor background bitmap borderwidth command-radiobuton compound cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify offrelief overrelief padx pady relief selectcolor selectimage state takefocus textvariable underline value-radio-button variable-radio-button width wraplength)
+  activebackground activeforeground anchor background bitmap borderwidth command-radio-button compound cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify offrelief overrelief padx pady relief selectcolor selectimage state takefocus textvariable underline value-radio-button variable-radio-button width wraplength)
 
 (defargs scale ()
   activebackground background bigincrement borderwidth command cursor digits font foreground from highlightbackground highlightcolor highlightthickness label length orient relief repeatdelay repeatinterval resolution showvalue sliderlength sliderrelief state takefocus tickinterval to troughcolor variable width)
@@ -1827,6 +1828,7 @@ set y [winfo y ~a]
 
 (defgeneric clear (widget))
 (defmethod clear ((canvas canvas))
+  "delete all items within a canvas"
   (format-wish "~a delete all" (widget-path canvas)))
 ;; canvas item functions
 
@@ -2623,6 +2625,7 @@ tk input to terminate"
 					:no-event-value no-event)))
 		 (cond
 		   ((null event)
+                    (close (wish-stream *wish*))
                     (exit-wish)
 		    nil)
 		   ((eql event no-event)
