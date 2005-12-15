@@ -146,9 +146,11 @@ toplevel             x
 	   "ASK-OKCANCEL"
 	   "ASK-YESNO"
 	   "BACKGROUND"
+           "BBOX"
 	   "BELL"
 	   "BIND"
 	   "BUTTON"
+           "CALC-SCROLL-REGION"
 	   "CANVAS"
 	   "CANVAS-LINE"
 	   "CANVAS-OVAL"
@@ -156,7 +158,8 @@ toplevel             x
 	   "CANVAS-RECTANGLE"
 	   "CANVAS-TEXT"
 	   "CANVAS-IMAGE"
-	   "CANVAS-ARC"	   
+	   "CANVAS-ARC"
+           "CANVAS-BBOX"
 	   "CANVASX"	   
 	   "CANVASY"	   
 	   "CGET"
@@ -268,6 +271,7 @@ toplevel             x
 	   
 	   "MINSIZE"
 	   "MOVE"
+           "MOVE-ALL"
 	   "NORMALIZE"
 	   "ON-CLOSE"
 	   "ON-FOCUS"
@@ -1712,6 +1716,7 @@ set y [winfo y ~a]
   "canvas"
   )
 
+
 ;; wrapper class for canvas items
 (defclass canvas-item ()
   ((canvas :accessor canvas :initarg :canvas)
@@ -1722,6 +1727,26 @@ set y [winfo y ~a]
 
 (defun make-canvas (master &key (width nil) (height nil) (xscroll nil) (yscroll nil))
   (make-instance 'canvas :master master :width width :height height :xscroll xscroll :yscroll yscroll))
+
+
+(defun move-all (canvas dx dy)
+  (format-wish "~a move all ~a ~a" (widget-path canvas) dx dy))
+
+
+(defgeneric bbox (item))
+(defmethod bbox ((item canvas-item))
+  (canvas-bbox (canvas item) (handle item))
+  )
+
+(defun canvas-bbox (canvas handle)
+  (format-wish "senddata \"([~a bbox ~a])\"" (widget-path canvas) handle)
+  (read-data))
+
+(defmethod calc-scroll-region ((canvas canvas))
+  (format-wish "~a configure -scrollregion [~a bbox all]" (widget-path canvas) (widget-path canvas)))
+
+
+
 
 (defgeneric set-coords (canvas item coords))
 
@@ -2519,9 +2544,9 @@ set y [winfo y ~a]
   (format *error-output* "~&An error of type ~A has occured: ~A~%"
 	  (type-of condition) condition)
   #+sbcl (progn (sb-debug:backtrace most-positive-fixnum *error-output*)
-		(quit))
+		(unless (find-package :swank) (quit)))
   #+cmu (progn (debug:backtrace most-positive-fixnum *error-output*)
-	       (quit)))
+	       (unless (find-package :swank) (quit))))
 
 (defmacro with-ltk-handlers (() &body body)
   `(funcall (wish-call-with-condition-handlers-function *wish*)
