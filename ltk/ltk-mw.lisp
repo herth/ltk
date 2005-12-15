@@ -123,11 +123,13 @@ o tooltip
    (keepinput :accessor keepinput :initform nil :initarg :keepinput)
    ))
 
+(defgeneric add-history (entry txt))
 (defmethod add-history ((entry history-entry) txt)
   (if (> (length txt) 0)
       (push txt (history entry)))
   (setf (history-pos entry) -1))
 
+(defgeneric clear-history (entry))
 (defmethod clear-history ((entry history-entry))
   (setf (history entry) nil)
   (setf (history-pos entry) -1))
@@ -214,6 +216,7 @@ o tooltip
 (defun remove-nth (n list)
   (concatenate 'list (subseq list 0 n) (subseq list (1+ n))))
 
+(defgeneric delete-item (entry index))
 (defmethod delete-item ((entry menu-entry) index)
   (when (< index (length (entries entry)))
     (setf (entries entry) (remove-nth index (entries entry)))
@@ -242,6 +245,101 @@ o tooltip
 
 
 ;;; tree list widget
+
+(defclass treelist (frame)
+  ((depth   :reader depth :initarg :depth :initform 3
+	    :documentation "number of listboxes to display")
+   (listbox :accessor listbox :initform nil
+	    :documentation "array with the displayed listboxes")
+   (data    :accessor data :initarg :data :initform nil
+	    :documentation "data to be displayed")
+   (entries :accessor entries
+	    :documentation "array of the lists displayed in the listbox")
+   (offset  :accessor offset :initform 0
+	    :documentation "index difference between data depth position and listbox position")
+   (selection :accessor selection :initform nil
+	      :documentation "list of selected values")
+   ))
+
+(defclass tree-entry ()
+  ((nodes :accessor nodes :initform nil :initarg :nodes)
+   (index :accessor index :initform nil :initarg :index)
+   (node  :accessor node  :initform nil :initarg :node)))
+
+(defmethod initialize-instance :after ((tree treelist) &key listwidth listheight (background :white) )
+  (setf (listbox tree) (make-array (depth tree)))
+
+  (setf (entries tree) (make-array 4 :adjustable t :fill-pointer 0))
+  (let* ((bleft (make-instance 'button :master tree :text "<"))
+         (bright (make-instance 'button :master tree :text ">")))
+
+    (pack bleft :side :left :anchor :s)
+    (dotimes (i (depth tree))
+      (let ((nr i)
+            (sb (make-instance 'scrolled-listbox :master tree :width listwidth :height listheight )))
+        (grid-forget (ltk::hscroll sb))
+        (setf (aref (listbox tree) nr) (listbox sb))
+        (configure (listbox sb) :background background :selectforeground :white :selectbackground :blue)
+        (pack sb :side :left :expand t :fill :both)
+        (bind (aref (listbox tree) nr) "<<ListboxSelect>>"
+              (lambda (event)
+                (declare (ignore event))
+                (treelist-listbox-select tree (aref (listbox tree) nr) nr)))))
+    (pack bright :side :left :anchor :s)
+    )
+  (when (data tree)
+    (treelist-setlist tree (data tree) 0)))
+
+(defmethod open-node ((tree treelist) node nr)
+  "open the node at the depth nr in the tree"
+  (loop
+     while (> (length (entries tree)) nr)
+     do
+       (vector-pop (entries tree)))
+  (vector-push-extend (make-instance 'tree-entry :nodes (treelist-children tree node)) (entries tree)))
+
+(defgeneric treelist-setlist (tree data nr))
+(defmethod treelist-setlist ((tree treelist) data nr)
+  (listbox-append (aref (listbox tree) nr) 
+		  (mapcar #'treelist-name (treelist-children tree data)))
+  (setf (aref (entries tree) nr) (treelist-children tree data)))
+
+(defmethod treelist-listbox-select ((tree treelist) (listbox listbox) nr)
+  (let ((sel (car (listbox-get-selection listbox))))
+    (when sel
+      (loop for i from (1+ nr) below (depth tree)
+	    do 
+	    (listbox-clear (aref (listbox tree) i)))
+      (let ((selected-node (nth sel (aref (entries tree) nr))))
+	(treelist-select tree selected-node)
+        (let ((children (treelist-children tree selected-node)))
+          (when children
+            (listbox-append (aref (listbox tree) (1+ nr))
+                            (mapcar #'treelist-name children))
+            (setf (aref (entries tree) (1+ nr)) (treelist-children tree selected-node))))))))
+
+(defgeneric treelist-select (tree node)
+  (:documentation "callback for selecting a tree node"))
+
+(defmethod treelist-select (tree node))
+
+(defgeneric treelist-children (tree node)
+  (:documentation "list of children for a node in a tree"))
+
+(defmethod treelist-children (tree node)
+  nil)
+
+(defgeneric treelist-name (node)
+  (:documentation "String to display in the tree list for a node"))
+
+(defmethod treelist-name ((node string))
+  node)
+
+(defmethod treelist-name ((node list))
+  (car node))
+
+
+;;; demo tree widget
 
 (defparameter *tree*
   '(nil
@@ -272,87 +370,17 @@ o tooltip
        "1.8"
        "2.0"
        "16 V")
-      "GTI"))))
-       
-      
+      "GTI"))))    
 
-(defclass treelist (frame)
-  ((depth   :reader depth :initarg :depth :initform 3
-	    :documentation "number of listboxes to display")
-   (listbox :accessor listbox :initform nil
-	    :documentation "array with the displayed listboxes")
-   (data    :accessor data :initarg :data :initform nil
-	    :documentation "data to be displayed")
-   (lists   :accessor lists
-	    :documentation "array of the lists displayed in the listbox")
-   (offset  :accessor offset :initform 0
-	    :documentation "index difference between data depth position and listbox position")
-   (selection :accessor selection :initform nil
-	      :documentation "list of selected values")
-   ))
+(defclass demo-tree (treelist)
+  ())
 
-(defmethod initialize-instance :after ((tree treelist) &key listwidth listheight (background :white) )
-  (setf (listbox tree) (make-array (depth tree)))
-  (setf (lists tree) (make-array (depth tree)))
-  (dotimes (i (depth tree))
-    (let ((nr i)
-	  (sb (make-instance 'scrolled-listbox :master tree :width listwidth :height listheight )))
-      (grid-forget (ltk::hscroll sb))
-      (setf (aref (listbox tree) nr) (listbox sb))
-      (configure (listbox sb) :background background :selectforeground :white :selectbackground :blue)
-      (pack sb :side :left :expand t :fill :both)
-      (bind (aref (listbox tree) nr) "<<ListboxSelect>>"
-	    (lambda (event)
-	      (declare (ignore event))
-	      (treelist-listbox-select tree (aref (listbox tree) nr) nr)))
-    ))
-  (when (data tree)
-    (treelist-setlist tree (data tree) 0)))
-
-(defmethod treelist-setlist ((tree treelist) data nr)
-  (listbox-append (aref (listbox tree) nr) 
-		  (mapcar #'treelist-name (treelist-children tree data)))
-  (setf (aref (lists tree) nr) (treelist-children tree data)))
-
-(defmethod treelist-listbox-select ((tree treelist) (listbox listbox) nr)
-  (let ((sel (car (listbox-get-selection listbox))))
-    (when sel
-      (loop for i from (1+ nr) below (depth tree)
-	    do 
-	    (listbox-clear (aref (listbox tree) i)))
-      (let ((selected-node (nth sel (aref (lists tree) nr))))
-	(treelist-select tree selected-node)
-	(when (treelist-has-children tree selected-node)
-	  (listbox-append (aref (listbox tree) (1+ nr))
-			  (mapcar #'treelist-name (treelist-children tree selected-node)))
-	  (setf (aref (lists tree) (1+ nr)) (treelist-children tree selected-node)))))))
-
-(defmethod treelist-select (tree node)
-  )
-
-(defmethod treelist-children (tree node)
+(defmethod treelist-children ((tree demo-tree) (node string))
   nil)
 
-(defmethod treelist-has-children (tree node)
-  (> (length (treelist-children tree node)) 0))
-
-(defmethod treelist-has-children (tree (node string))
-  nil)
-
-(defmethod treelist-has-children (tree (node list))
+(defmethod treelist-children ((tree demo-tree) (node list))
   (rest node))
 
-(defmethod treelist-children (tree (node string))
-  nil)
-
-(defmethod treelist-children (tree (node list))
-  (rest node))
-
-(defmethod treelist-name ((node string))
-  node)
-
-(defmethod treelist-name ((node list))
-  (car node))
 
 
 ;;;; tooltip widget
