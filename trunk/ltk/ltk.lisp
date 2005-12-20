@@ -369,10 +369,20 @@ toplevel             x
     #+:sbcl (let ((proc (sb-ext:run-program program args :input :stream :output :stream :wait wt)))
              (unless proc
                (error "Cannot create process."))
+             #+:ext-8859-1
+             (make-two-way-stream 
+              (sb-sys:make-fd-stream 
+               (sb-sys:fd-stream-fd (process-output proc))
+               :input t :external-format :iso-8859-1)
+              (sb-sys:make-fd-stream 
+               (sb-sys:fd-stream-fd (process-input proc))
+               :output t  :external-format :iso-8859-1))
+             #-:ext-8859-1
 	     (make-two-way-stream 
 	      (process-output proc)              
 	      (process-input proc))	     
              )
+
     #+:lispworks (system:open-pipe fullstring :direction :io)
     #+:allegro (let ((proc (excl:run-shell-command
 			    #+:mswindows fullstring
@@ -393,7 +403,7 @@ toplevel             x
 		  (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* 0.877)
+(defvar *ltk-version* "0.88-pre1")
 
 ;;; global var for holding the communication stream
 (defstruct (ltk-connection (:constructor make-ltk-connection ())
@@ -2932,13 +2942,14 @@ When an error is signalled, there are four things LTk can do:
   (flet ((start-wish ()
            (apply #'start-wish (filter-keys *start-wish-keywords* keys)))
          (mainloop () (apply #'mainloop (filter-keys *mainloop-keywords* keys))))
-    (unwind-protect
-	 (let ((*wish* (make-ltk-connection)))
-           (start-wish)
-           (funcall thunk)
-           (mainloop))
-      (unless serve-event
-	(exit-wish)))))
+    (let ((*wish* (make-ltk-connection)))      
+      (unwind-protect
+           (progn
+             (start-wish)
+             (funcall thunk)
+             (mainloop))
+        (unless serve-event
+          (exit-wish))))))
        
 ;;; with-widget stuff
 
