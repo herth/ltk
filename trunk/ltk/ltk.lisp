@@ -1187,26 +1187,26 @@ event to read and blocking is set to nil"
    :mouse-button (ninth properties)
    ))
 
-(defgeneric bind (w event fun &key append))
-(defmethod bind ((w widget) event fun &key append)
+(defgeneric bind (w event fun &key append exclusive))
+(defmethod bind ((w widget) event fun &key append exclusive)
   "bind fun to event of the widget w"
   (let ((name (create-name)))
     (add-callback name fun)
     ;;(format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K %w %h %X %Y}" (widget-path w) event name)
-    (format-wish "bind  ~a ~a {~:[~;+~]sendevent ~A %x %y %k %K %w %h %X %Y %b}" 
-		 (widget-path w) event append name)
+    (format-wish "bind  ~a ~a {~:[~;+~]sendevent ~A %x %y %k %K %w %h %X %Y %b ~:[~;;break~]}" 
+		 (widget-path w) event append name exclusive)
     ))
 
 
 
 
-(defmethod bind (s event fun &key append)
+(defmethod bind (s event fun &key append exclusive)
   "bind fun to event within context indicated by string ie. 'all' or 'Button'"
   (let ((name (create-name)))
     (add-callback name fun)
     ;;(format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K %w %h %X %Y}" s event name)
-    (format-wish "bind  ~a ~a {~:[~;+~]sendevent ~A %x %y %k %K %w %h %X %Y %b}" 
-		 s event append name)
+    (format-wish "bind  ~a ~a {~:[~;+~]sendevent ~A %x %y %k %K %w %h %X %Y %b ~:[~;;break~]}" 
+		 s event append name exclusive)
     ))
 
 (defvar *tk* (make-instance 'widget :name "." :path ".")
