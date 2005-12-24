@@ -1819,8 +1819,8 @@ set y [winfo y ~a]
     (add-callback name fun)
     (format-wish "~a bind ~a ~a {sendevent ~A %x %y %k %K %w %h %X %Y %b}" (widget-path canvas) item event name)))
 
-(defmethod bind ((w canvas-item) event fun &key append)
-  (declare (ignore append))
+(defmethod bind ((w canvas-item) event fun &key append exclusive)
+  (declare (ignore append exclusive))
   (itembind (canvas w) (handle w) event fun))
 
 (defgeneric scrollregion (canvas x0 y0 x1 y1))
