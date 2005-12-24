@@ -331,6 +331,7 @@ toplevel             x
 	   "MAKE-LTK-CONNECTION"
 	   "WIDGET-CLASS-NAME"
 	   "WITH-LTK"
+	   "CALL-WITH-LTK"
 	   "WITH-REMOTE-LTK"
 	   "WITH-WIDGETS"
 	   "WITHDRAW"
@@ -382,7 +383,6 @@ toplevel             x
 	      (process-output proc)              
 	      (process-input proc))	     
              )
-
     #+:lispworks (system:open-pipe fullstring :direction :io)
     #+:allegro (let ((proc (excl:run-shell-command
 			    #+:mswindows fullstring
@@ -1015,7 +1015,6 @@ event to read and blocking is set to nil"
   (let ((args (sort (copy-list (rest (assoc class *class-args*)))
 		    (lambda (x y)
 		      (string< (symbol-name x) (symbol-name y))))))
-    ;; FIXME check that this is correct, and it shouldn't be (format nil "~a ~~A " cmd) [tfb]
     (let ((cmdstring (format nil "~~a ~~~~A "))
 	  (codelist nil)
 	  (keylist nil)
@@ -1725,7 +1724,6 @@ set y [winfo y ~a]
    ) 
   "canvas"
   )
-
 
 ;; wrapper class for canvas items
 (defclass canvas-item ()
@@ -2529,7 +2527,9 @@ set y [winfo y ~a]
   (ecase (message-box (format nil "~A~%~%Do you wish to invoke the debugger?"
 			      condition)
 		      title "yesno" "question")
-    (:yes (invoke-debugger condition))
+    (:yes (let ((hook *debugger-hook*)
+		(*debugger-hook* nil))
+	    (funcall hook condition hook)))
     (:no (abort))))
 
 (defun show-error (error)
@@ -2554,8 +2554,10 @@ set y [winfo y ~a]
   (format *error-output* "~&An error of type ~A has occured: ~A~%"
 	  (type-of condition) condition)
   #+sbcl (progn (sb-debug:backtrace most-positive-fixnum *error-output*)
+                ;; FIXME - this should be generalized
 		(unless (find-package :swank) (quit)))
   #+cmu (progn (debug:backtrace most-positive-fixnum *error-output*)
+                ;; FIXME - this should be generalized
 	       (unless (find-package :swank) (quit))))
 
 (defmacro with-ltk-handlers (() &body body)
@@ -2598,6 +2600,7 @@ set y [winfo y ~a]
 
 (defun make-condition-handler-function (&key . #.*start-wish-key-args*)
   "Return a function that will call a thunk with the appropriate condition handlers in place, and *debugger-hook* bound as needed."
+  (declare (ignore stream))
   (multiple-value-bind (simple-error error) (compute-error-handlers handle-errors)
     (let ((warning (compute-warning-handler handle-warnings))
 	  (call-with-debugger-hook (compute-call-with-debugger-hook debugger)))
@@ -2933,16 +2936,16 @@ When an error is signalled, there are four things LTk can do:
 (defmacro with-ltk ((&rest keys &key . #.(append *start-wish-key-args*
 						 *mainloop-key-args*))
 		    &body body)
-  (declare (ignore handle-errors handle-warnings debugger serve-event))
+  (declare (ignore handle-errors handle-warnings debugger serve-event stream))
   `(call-with-ltk (lambda () ,@body) ,@keys))
 
 (defun call-with-ltk (thunk &rest keys &key . #.(append *start-wish-key-args*
 							*mainloop-key-args*))
-  (declare (ignore handle-errors handle-warnings debugger))
+  (declare (ignore handle-errors handle-warnings debugger stream))
   (flet ((start-wish ()
            (apply #'start-wish (filter-keys *start-wish-keywords* keys)))
          (mainloop () (apply #'mainloop (filter-keys *mainloop-keywords* keys))))
-    (let ((*wish* (make-ltk-connection)))      
+    (let ((*wish* (make-ltk-connection)))
       (unwind-protect
            (progn
              (start-wish)
