@@ -342,7 +342,7 @@ toplevel             x
 
 (defun dbg (fmt &rest args)
   (apply #'format t fmt args)
-  (force-output))
+  (finish-output))
 
 ;communication with wish
 ;;; this ist the only function to adapted to other lisps
@@ -536,19 +536,19 @@ toplevel             x
 (defun send-wish (text)
   (when *debug-tk*
     (format t "~A~%" text)
-    (force-output))
+    (finish-output))
   (format (wish-stream *wish*) "~A~%" text)
-  (force-output (wish-stream *wish*)))
+  (finish-output (wish-stream *wish*)))
 
 (defun format-wish (control &rest args)
   "format args using control as control string to wish"
   (when *debug-tk*
     (apply #'format t control args)
     (format t "~%")
-    (force-output))
+    (finish-output))
   (apply #'format (wish-stream *wish*) control args)
   (format (wish-stream *wish*) "~%")
-  (force-output (wish-stream *wish*)))
+  (finish-output (wish-stream *wish*)))
 
 ;; differences:
 ;; cmucl/sbcl READ expressions only if there is one more character in the stream, if
@@ -603,9 +603,9 @@ event to read and blocking is set to nil"
              do
                (setf (wish-event-queue *wish*)
                      (append (wish-event-queue *wish*) (list d)))
-             ;;(format t "postponing event: ~a ~%" d) (force-output)
+             ;;(format t "postponing event: ~a ~%" d) (finish-output)
                (setf d (read-wish)))
-                                        ;(format t "readdata: ~s~%" d) (force-output)
+                                        ;(format t "readdata: ~s~%" d) (finish-output)
           (second d))
         (format t "read-data:~a~a~%" d (read-all (wish-stream *wish*))))))
 
@@ -917,11 +917,11 @@ event to read and blocking is set to nil"
   
   (defun build-args (class parents defs)
     (declare (ignore class))
-    ;;(format t  "class ~s parents ~s defs ~s~%" class parents defs) (force-output)
+    ;;(format t  "class ~s parents ~s defs ~s~%" class parents defs) (finish-output)
     (let ((args nil))
       (dolist (p parents)
 	(let ((arglist (rest (assoc p *class-args*))))
-	  ;;(format t "parent: ~s arglist: ~s~%" p arglist) (force-output)
+	  ;;(format t "parent: ~s arglist: ~s~%" p arglist) (finish-output)
 	  (dolist (arg arglist)
 	    (unless (member arg args)
 	      (setf args (append args (list arg)))))))
@@ -941,7 +941,7 @@ event to read and blocking is set to nil"
                 (setf args (delete (pop defs) args)))	    
                (t
                 (setf args (append args (list arg)))))))
-      ;;(format t "class: ~a args: ~a~&" class args) (force-output)
+      ;;(format t "class: ~a args: ~a~&" class args) (finish-output)
       args
       ))
   )
@@ -1056,7 +1056,7 @@ event to read and blocking is set to nil"
 	   ,slots)
 	 (defmethod initialize-instance :after ((widget ,class) &key ,@keylist)
            ;;(format-wish ,cmdstring (widget-class-name widget) (widget-path widget) ,@codelist)
-	   ;;(format t "setting initarg for ~a~%" (quote ,class)) (force-output)
+	   ;;(format t "setting initarg for ~a~%" (quote ,class)) (finish-output)
 	   (setf (init-command widget)
 		 (format nil ,cmdstring (widget-class-name widget) ,@codelist))
 	   ,@code)
@@ -1143,7 +1143,7 @@ event to read and blocking is set to nil"
 
 (defmethod create ((widget widget))
   (when (init-command widget)
-    ;;(format t "creating: ~a~%" (init-command widget)) (force-output)
+    ;;(format t "creating: ~a~%" (init-command widget)) (finish-output)
     (format-wish (init-command widget) (widget-path widget))))
 
 (defgeneric (setf command) (value widget))
@@ -2627,7 +2627,7 @@ set y [winfo y ~a]
   (when event
     (when *debug-tk*
       (format *trace-output* "l:~s<=~%" event)
-      (force-output *trace-output*))
+      (finish-output *trace-output*))
     (cond
      ((and (not (listp event))
            *trace-tk*)
@@ -3019,11 +3019,11 @@ When an error is signalled, there are four things LTk can do:
 	     (b1 (make-instance 'button :master bar :text "Hallo"
 				:command (lambda ()
 					   (format T "Hallo~%")
-					   (force-output))))
+					   (finish-output))))
 	     (b2 (make-instance 'button :master bar :text  "Welt!"
 				:command (lambda ()
 					   (format T "Welt~%")
-					   (force-output))))
+					   (finish-output))))
 	     (f (make-instance 'frame :master bar))
 	     (l (make-instance 'label :master f :text "Test:"))
 	     (b3 (make-instance 'button :master f :text  "Ok." :command 'test-rotation))
@@ -3031,7 +3031,7 @@ When an error is signalled, there are four things LTk can do:
 	     (b4 (make-instance 'button :master bar :text "get!"
 				:command (lambda ()
 					   (format T "content of entry:~A~%" (text e))
-					   (force-output))))
+					   (finish-output))))
 	     (b5 (make-instance 'button :master bar :text "set!"
 				:command (lambda () (setf (text e) "test of set"))))
 	     (sc (make-instance 'scrolled-canvas :borderwidth 2 :relief :raised))
@@ -3041,11 +3041,11 @@ When an error is signalled, there are four things LTk can do:
 	     (mfile (make-menu mb "File" ))
 	     (mf-load (make-menubutton mfile "Load" (lambda () ;(error "asdf")
 						      (format t "Load pressed~&")
-						      (force-output))
+						      (finish-output))
 				       :underline 1))
 	     (mf-save (make-menubutton mfile "Save" (lambda ()
 						      (format t "Save pressed~&")
-						      (force-output))
+						      (finish-output))
 				       :underline 1))
 	     (sep1 (add-separator mfile))
 	     (mf-export (make-menu mfile "Export..."))
@@ -3054,17 +3054,17 @@ When an error is signalled, there are four things LTk can do:
 	     (sep3 (add-separator mfile))
 	     (mfe-jpg (make-menubutton mf-export "jpeg" (lambda ()
 							  (format t "Jpeg pressed~&")
-							  (force-output))))
+							  (finish-output))))
 	     (mfe-gif (make-menubutton mf-export "png" (lambda ()
 							 (format t "Png pressed~&")
-							 (force-output))))
+							 (finish-output))))
 	     (mf-exit (make-menubutton mfile "Exit" (lambda () (setf *exit-mainloop* t))
 				       :underline 1
 				       :accelerator "Alt Q"))
 	     (mp (make-menu nil "Popup"))
-	     (mp-1 (make-menubutton mp "Option 1" (lambda () (format t "Popup 1~&") (force-output))))
-	     (mp-2 (make-menubutton mp "Option 2" (lambda () (format t "Popup 2~&") (force-output))))
-	     (mp-3 (make-menubutton mp "Option 3" (lambda () (format t "Popup 3~&") (force-output))))
+	     (mp-1 (make-menubutton mp "Option 1" (lambda () (format t "Popup 1~&") (finish-output))))
+	     (mp-2 (make-menubutton mp "Option 2" (lambda () (format t "Popup 2~&") (finish-output))))
+	     (mp-3 (make-menubutton mp "Option 3" (lambda () (format t "Popup 3~&") (finish-output))))
 	     )
 	(declare (ignore mf-print mf-exit mfe-gif mfe-jpg mf-save mf-load sep1 sep2 sep3 mp-1 mp-2 mp-3)) 
 
@@ -3136,7 +3136,7 @@ When an error is signalled, there are four things LTk can do:
   (setf *debug-tk* nil)
   (time (dotimes (i 100)
 	  (rotate)))
-  (force-output)
+  (finish-output)
   )
 (defun start-rotation()
   (setf *debug-tk* nil)
@@ -3245,7 +3245,7 @@ When an error is signalled, there are four things LTk can do:
 					 (if erg 
 					     (format t "input was: ~a~%" erg)
 					   (format t "input was cancelled~%"))
-				       (force-output))))))
+				       (finish-output))))))
      (pack b))))
 
  
