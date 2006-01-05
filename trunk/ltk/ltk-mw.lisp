@@ -59,8 +59,13 @@ o tooltip
    #:treelist-children
    #:treelist-name
    #:treelist-select
-   
    #:gtree
+   #:tooltip
+   #:show
+   #:clear
+   #:cancel-tooltip
+   #:schedule-tooltip
+
    ))
 
 (in-package :ltk-mw)
@@ -104,10 +109,12 @@ o tooltip
   (itemconfigure progress (rect progress) :outline (bar-color progress)))
 
 (defmethod (setf bar-color) :after (val (progress progress))
+  (declare (ignore val))
   (itemconfigure progress (rect progress) :fill (bar-color progress))
   (itemconfigure progress (rect progress) :outline (bar-color progress)))
 
 (defmethod (setf percent) :after (val (progress progress))
+  (declare (ignore val))
   (redraw progress))
 
 
@@ -252,7 +259,7 @@ o tooltip
    (listbox :accessor listbox :initform nil
 	    :documentation "array with the displayed listboxes")
    (data    :accessor data :initarg :data :initform nil
-	    :documentation "data to be displayed")
+	    :documentation "root node to be displayed (its children fill the first box)")
    (entries :accessor entries
 	    :documentation "array of the lists displayed in the listbox")
    (offset  :accessor offset :initform 0
@@ -264,31 +271,39 @@ o tooltip
 (defclass tree-entry ()
   ((nodes :accessor nodes :initform nil :initarg :nodes)
    (index :accessor index :initform nil :initarg :index)
-   (node  :accessor node  :initform nil :initarg :node)))
+   (parent-node :accessor parent-node :initform nil :initarg :parent-node)
+   (selected-node :accessor selected-node :initform nil :initarg :selected-node)))
 
-(defmethod initialize-instance :after ((tree treelist) &key listwidth listheight (background :white) )
+(defmethod initialize-instance :after ((tree treelist) &key listwidth listheight (background :white))
   (setf (listbox tree) (make-array (depth tree)))
 
   (setf (entries tree) (make-array 4 :adjustable t :fill-pointer 0))
-  (let* ((bleft (make-instance 'button :master tree :text "<"))
-         (bright (make-instance 'button :master tree :text ">")))
-
-    (pack bleft :side :left :anchor :s)
-    (dotimes (i (depth tree))
-      (let ((nr i)
-            (sb (make-instance 'scrolled-listbox :master tree :width listwidth :height listheight )))
-        (grid-forget (ltk::hscroll sb))
-        (setf (aref (listbox tree) nr) (listbox sb))
-        (configure (listbox sb) :background background :selectforeground :white :selectbackground :blue)
-        (pack sb :side :left :expand t :fill :both)
-        (bind (aref (listbox tree) nr) "<<ListboxSelect>>"
-              (lambda (event)
-                (declare (ignore event))
-                (treelist-listbox-select tree (aref (listbox tree) nr) nr)))))
-    (pack bright :side :left :anchor :s)
-    )
+  (dotimes (i (depth tree))
+    (let ((nr i)
+	  (sb (make-instance 'scrolled-listbox :master tree :width listwidth :height listheight )))
+      (grid-forget (ltk::hscroll sb))
+      (setf (aref (listbox tree) nr) (listbox sb))
+      (configure (listbox sb) :background background :selectforeground :white :selectbackground :blue)
+      (pack sb :side :left :expand t :fill :both)
+      (bind (aref (listbox tree) nr) "<<ListboxSelect>>"
+	    (lambda (event)
+	      (declare (ignore event))
+	      (treelist-listbox-select tree nr)))))
   (when (data tree)
-    (treelist-setlist tree (data tree) 0)))
+    (treelist-set-root-node tree (data tree)))
+  )
+
+(defgeneric treelist-set-root-node (tree node))
+(defmethod treelist-set-root-node ((tree treelist) node)
+  (setf (data tree) node)
+  (treelist-setlist tree node 0))
+
+(defgeneric treelist-clearlist (tree index))
+(defmethod treelist-clearlist ((tree treelist) index)
+  (when (< index (depth tree))
+    (setf (aref (entries tree) index) nil)
+    (listbox-clear (aref (listbox tree) index))
+    (treelist-clearlist tree (1+ index))))
 
 (defmethod open-node ((tree treelist) node nr)
   "open the node at the depth nr in the tree"
@@ -298,36 +313,52 @@ o tooltip
        (vector-pop (entries tree)))
   (vector-push-extend (make-instance 'tree-entry :nodes (treelist-children tree node)) (entries tree)))
 
-(defgeneric treelist-setlist (tree data nr))
-(defmethod treelist-setlist ((tree treelist) data nr)
-  (listbox-append (aref (listbox tree) nr) 
-		  (mapcar #'treelist-name (treelist-children tree data)))
-  (setf (aref (entries tree) nr) (treelist-children tree data)))
+(defgeneric treelist-setlist (tree parent-node nr))
+(defmethod treelist-setlist ((tree treelist) parent-node nr)
+  (when (< nr (depth tree))
+    (treelist-clearlist tree nr)
+    (let ((entry (make-instance 'tree-entry
+				:nodes (treelist-children tree parent-node)
+				:index nr
+				:parent-node parent-node)))
+      (setf (aref (entries tree) nr) entry)
+      (listbox-append (aref (listbox tree) nr) 
+		      (mapcar #'treelist-name (nodes entry))))))
 
-(defmethod treelist-listbox-select ((tree treelist) (listbox listbox) nr)
-  (let ((sel (car (listbox-get-selection listbox))))
+(defgeneric treelist-listbox-select (tree nr))
+(defmethod treelist-listbox-select ((tree treelist) nr)
+  (let* ((listbox (aref (listbox tree) nr))
+	 (oldsel (selected-node (aref (entries tree) nr)))
+	 (sel (car (listbox-get-selection listbox))))
+    (when oldsel
+      (listbox-configure listbox oldsel :background :white :foreground :black))
+    (setf (selected-node (aref (entries tree) nr)) sel)
     (when sel
-      (loop for i from (1+ nr) below (depth tree)
-	    do 
-	    (listbox-clear (aref (listbox tree) i)))
-      (let ((selected-node (nth sel (aref (entries tree) nr))))
-	(treelist-select tree selected-node)
-        (let ((children (treelist-children tree selected-node)))
-          (when children
-            (listbox-append (aref (listbox tree) (1+ nr))
-                            (mapcar #'treelist-name children))
-            (setf (aref (entries tree) (1+ nr)) (treelist-children tree selected-node))))))))
-
+      (listbox-configure listbox sel :background :blue :foreground :white)
+      (let* ((entry (aref (entries tree) nr))
+	     (selected-node (nth sel (nodes entry))))
+	(listbox-configure listbox sel :background :blue :foreground :white)
+	(treelist-setlist tree selected-node (1+ nr))
+        ))))
+  
 (defgeneric treelist-select (tree node)
   (:documentation "callback for selecting a tree node"))
 
-(defmethod treelist-select (tree node))
+(defmethod treelist-select (tree node)
+    (declare (ignore tree node)))
 
 (defgeneric treelist-children (tree node)
   (:documentation "list of children for a node in a tree"))
 
 (defmethod treelist-children (tree node)
+  (declare (ignore tree node))
   nil)
+
+(defgeneric treelist-has-children (tree node)
+  (:documentation "is non-nil, if the node has children"))
+
+(defmethod treelist-has-children (tree node)
+  (treelist-children tree node))
 
 (defgeneric treelist-name (node)
   (:documentation "String to display in the tree list for a node"))
@@ -381,7 +412,9 @@ o tooltip
 (defmethod treelist-children ((tree demo-tree) (node list))
   (rest node))
 
-
+(defun treelist-test ()
+  (with-ltk ()
+    (pack (make-instance 'demo-tree :data *tree*) :expand t :fill :both)))
 
 ;;;; tooltip widget
 
@@ -389,16 +422,39 @@ o tooltip
   ((label :accessor tooltip-label :initarg :label)
    ))
 
+(defparameter *tooltip-afterid* nil)
+
 (defmethod initialize-instance :after ((tooltip tooltip) &key)
   (withdraw tooltip)
-  (setf (tooltip-label tooltip) (make-instance 'label :text "" :background :yellow3))
+  (setf (tooltip-label tooltip) (make-instance 'label :text "" :background :yellow3 :master tooltip :justify :left))
   (set-wm-overrideredirect tooltip 1)
   (pack (tooltip-label tooltip) :side :left :expand t :fill :both))
 
+(defgeneric show (tooltip text x y))
 (defmethod show ((tooltip tooltip) text x y)
   (setf (text (tooltip-label tooltip)) text)
-  (set-geometry-xy tooltip x y)
-  (normalize tooltip))
+  (set-geometry-xy tooltip (truncate x)  (truncate y))
+  (normalize tooltip)
+  (raise tooltip))
+
+(defgeneric popup-tooltip (tooltip))
+(defmethod popup-tooltip ((tooltip tooltip))
+  (normalize tooltip)
+  (raise tooltip))
+ 
+(defgeneric schedule-tooltip (tooltip text x y time)
+  )
+
+(defmethod schedule-tooltip (tooltip text x y time)
+  (cancel-tooltip tooltip)
+  (setf *tooltip-afterid*
+ 	(after time (lambda ()
+ 		      (show tooltip text x y)))))
+
+(defgeneric cancel-tooltip (tooltip))
+(defmethod cancel-tooltip ((tooltip tooltip))
+  (when *tooltip-afterid*
+    (after-cancel *tooltip-afterid*)))
 
 (defmethod clear ((tooltip tooltip))
   (withdraw tooltip))
@@ -409,6 +465,7 @@ o tooltip
   ((data :accessor data :initform nil :initarg :data)
    ))
 
+(defgeneric render-tree (g d x y))
 (defmethod render-tree ((g gtree) data x y)
   (let ((h 0))
     (when (gtree-content g data)
@@ -418,7 +475,7 @@ o tooltip
 	(incf h 30))
       (let* ((c (gtree-render-node g (gtree-content g data)))
 	     (w (create-window g x (+ y (truncate h 2)) c)))
-	
+        (declare (ignore w))
 	))
     h))
   
