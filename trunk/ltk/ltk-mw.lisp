@@ -64,6 +64,8 @@ o tooltip
    #:show
    #:clear
    #:cancel-tooltip
+   #:popup-time
+   #:register-tooltip
    #:schedule-tooltip
 
    ))
@@ -420,6 +422,7 @@ o tooltip
 
 (defclass tooltip (toplevel)
   ((label :accessor tooltip-label :initarg :label)
+   (popup-time :accessor popup-time :initform 200 :initarg :popup-time)
    ))
 
 (defparameter *tooltip-afterid* nil)
@@ -432,7 +435,14 @@ o tooltip
 
 (defgeneric show (tooltip text x y))
 (defmethod show ((tooltip tooltip) text x y)
-  (setf (text (tooltip-label tooltip)) text)
+  (setf (text (tooltip-label tooltip)) (typecase text
+					 (function
+					  (with-output-to-string (s)
+					    (funcall text s)))
+					 (string
+					  text)
+					 (t
+					  (format nil "~a" text))))
   (set-geometry-xy tooltip (truncate x)  (truncate y))
   (normalize tooltip)
   (raise tooltip))
@@ -454,10 +464,40 @@ o tooltip
 (defgeneric cancel-tooltip (tooltip))
 (defmethod cancel-tooltip ((tooltip tooltip))
   (when *tooltip-afterid*
-    (after-cancel *tooltip-afterid*)))
+    (after-cancel *tooltip-afterid*)
+    (setf *tooltip-afterid* nil)))
 
 (defmethod clear ((tooltip tooltip))
   (withdraw tooltip))
+
+(defgeneric register-tooltip (tooltip widget content))
+(defmethod register-tooltip ((tooltip tooltip) (widget widget) content)
+  (bind widget "<Leave>" (lambda (event)
+			   (declare (ignore event))
+			   (clear tooltip)
+			   (cancel-tooltip tooltip))
+	:append t)
+  (bind widget "<Motion>" (lambda (event)
+			    (clear tooltip)
+			    (cancel-tooltip tooltip)
+			    (schedule-tooltip tooltip
+					      content
+					      (+ 30 (event-root-x event))
+					      (+ 10 (event-root-y event))
+					      (popup-time tooltip)))
+	:append t)
+  widget)
+
+(defmethod configure ((tooltip tooltip) option value &rest others)
+  (apply #'configure (tooltip-label tooltip) option value others))
+
+(defun tooltip-test ()
+  (with-ltk ()
+    (let ((b (make-instance 'button :text "Tooltip"))
+	  (tooltip (make-instance 'tooltip)))
+      (pack b)
+      (configure tooltip :borderwidth 2 :relief :ridge)
+      (register-tooltip tooltip b (lambda (s) (format s "~d" (random 100)))))))
 
 ;;;; graphical tree widget
 
