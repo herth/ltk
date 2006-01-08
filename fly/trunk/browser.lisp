@@ -24,6 +24,10 @@
   ()
   (:default-initargs :depth 5 :data (all-packages)))
 
+(defmethod treelist-children ((tree system-browser) (node list))
+  (declare (ignorable tree))
+  node)
+
 (defclass node ()
   ((name :initarg name :accessor name)
    (children :initarg children :accessor children)

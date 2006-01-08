@@ -20,41 +20,21 @@
 
 (in-package :fly)
 
-(declaim (function *inspector*))
-(defvar *inspector* #'inspect)
-
-(defvar *fly-ltk* (make-ltk-connection))
-
-(defvar *fly-toplevels* ())
-
-(defclass fly-toplevel (toplevel) ())
-
-(defmethod initialize-instance :after ((self fly-toplevel) &rest ignore)
-  (declare (ignore ignore))
-  (push self *fly-toplevels*))
-
-(defmacro with-fly-ltk ((var title) &body body)
-  `(let ((*wish* *fly-ltk*))
-     (unwind-protect
-          (progn
-            (unless (wish-stream *wish*)
-              (start-wish :handle-errors t)
-              (withdraw *tk*))
-            (let ((,var (make-instance 'fly-toplevel)))
-              (withdraw ,var)
-              (wm-title ,var ,title)
-              ,@body)
-            (mainloop))
-       (mapc #'withdraw *fly-toplevels*))))
+(defun system-debugger (condition debugger)
+  (declare (ignore debugger))
+  (let (#+sbcl (sb-ext:*invoke-debugger-hook* nil)
+        (*debugger-hook* nil))
+    (invoke-debugger condition)))
 
 (defun debugger (condition debugger)
   (declare (ignore debugger))
-  (with-fly-ltk (tl "A Fly Debugger")
+  (with-fly-ltk (tl "A Fly Debugger" :debugger #'system-debugger)
     (let ((frame (make-instance 'frame :master tl)))
       (pack (display-condition condition frame))
       (pack (display-stack frame))
       (pack (display-restarts condition frame))
       (pack frame)
+      (on-close tl (lambda () (return-from debugger nil)))
       (normalize tl))))
 
 (defun display-condition (condition master)
@@ -65,9 +45,10 @@
 	  :command (lambda () (funcall *inspector* condition)))))
 
 (defun display-stack (master)
-  (make-instance 'treelist
-    :master master :depth 1
-    :data (sb-debug:backtrace-as-list)))
+  (append-text (make-instance 'text :master master)
+               (with-output-to-string (*debug-io*)
+                 #+sbcl (sb-debug:backtrace)
+                 #+cmu (debug:backtrace))))
 
 (defun display-restarts (condition master)
   (let* ((applicable (compute-restarts condition))
@@ -79,7 +60,9 @@
 		    finally (return (nreverse all)))))
     (loop with frame = (make-instance 'frame :master master)
 	  for r in all
-	  for fun = (lambda () (invoke-restart r))
+	  for fun = (let ((r r))
+                      (lambda ()
+                        (invoke-restart r)))
 	  for (class . args) = (if (member r not-applicable)
 				 '(label)
 				 `(button :command ,fun))
