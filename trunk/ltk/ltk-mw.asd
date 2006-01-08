@@ -1,4 +1,4 @@
-;; -*- Mode: Lisp -*-
+;; -*- lisp -*-
 
 (defsystem ltk-mw
   :name "LTK-MW"
@@ -7,4 +7,5 @@
   :licence "LGPL"
   :description "Ltk Mega-Widgets"
   :long-description "A collection of higher-level widgets built on top of Ltk"
+  :depends-on (:ltk)
   :components ((:file "ltk-mw")))
