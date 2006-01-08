@@ -136,6 +136,7 @@ toplevel             x
 	   "WISH-STREAM"
 	   "*WISH-ARGS*"
 	   "*WISH-PATHNAME*"
+           "*DEFAULT-LTK-DEBUGGER*"
 	   "ADD-PANE"
 	   "ADD-SEPARATOR"
 	   "AFTER"
@@ -185,6 +186,7 @@ toplevel             x
 	   "CREATE-RECTANGLE"
 	   "CREATE-TEXT"
 	   "CREATE-WINDOW"
+           "DEBUG-SETTING-KEYS"
 	   "DEFARGS"
 	   "DEICONIFY"
 	   "DESTROY"
@@ -367,7 +369,7 @@ toplevel             x
                (error "Cannot create process."))
 	     proc
              )
-    #+:sbcl (let ((proc (sb-ext:run-program program args :input :stream :output :stream :wait wt)))
+    #+:sbcl (let ((proc (sb-ext:run-program program args :input :stream :output :stream :wait wt :search t)))
              (unless proc
                (error "Cannot create process."))
              #+:ext-8859-1
@@ -421,6 +423,10 @@ toplevel             x
   ;; This is only used to support SERVE-EVENT.
   (input-handler nil))
 
+(defmacro with-ltk-handlers (() &body body)
+  `(funcall (wish-call-with-condition-handlers-function *wish*)
+	    (lambda () ,@body)))
+
 ;;; global connection information
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -448,9 +454,8 @@ toplevel             x
 (defvar *trace-tk* t)
 
 (defvar *wish-pathname*
-  #+freebsd			"wish8.4"
-  #+(and sbcl (not freebsd))	"/usr/bin/wish"
-  #-(or sbcl freebsd)		"wish")
+  #+freebsd "wish8.4"
+  #-freebsd "wish")
 
 (defvar *wish-args* '("-name" "LTK"))
 
@@ -491,17 +496,9 @@ toplevel             x
     (funcall fun)))
 
 
-;; Rather than reproduce this list in several places in the source
-;; code, it's here in one place so it will be consistent between all
-;; functions that accept START-WISH's keyword arguments.
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (defvar *start-wish-key-args*
-    '((handle-errors :debug) handle-warnings (debugger t) stream) "A lambda-list fragment")
-  (defvar *start-wish-keywords* '(:handle-errors :handle-warnings :debugger :stream)
-    "The keywords corresponding to the lambda-list fragment (used for filtering arguments that were passed in to, eg, call-with-ltk.  FIXME: make this variable go away."))
-
 ;;; start wish and set (wish-stream *wish*)
-(defun start-wish (&rest keys &key . #.*start-wish-key-args*)
+(defun start-wish (&rest keys &key handle-errors handle-warnings (debugger t)
+                   stream)
   (declare (ignore handle-errors handle-warnings debugger))
   ;; open subprocess
   (if (null (wish-stream *wish*))
@@ -510,7 +507,8 @@ toplevel             x
 	      (wish-call-with-condition-handlers-function *wish*)
 	      (apply #'make-condition-handler-function keys))
 	;; perform tcl initialisations
-	(init-wish))
+        (with-ltk-handlers ()
+          (init-wish)))
       ;; By default, we don't automatically create a new connection, because the
       ;; user may have simply been careless and doesn't want to push the old
       ;; connection aside.  The NEW-WISH restart makes it easy to start another.
@@ -522,23 +520,30 @@ toplevel             x
 	  (apply #'start-wish keys)))))
 
 (defun exit-wish ()
-  (when (wish-stream *wish*)
-    (remove-input-handler)
-    (when (open-stream-p (wish-stream *wish*))
-      (send-wish "exit"))
-    (close (wish-stream *wish*))
-    (setf (wish-stream *wish*) nil)
-    #+:allegro (system:reap-os-subprocess)
-    (setf *wish-connections* (remove *wish* *wish-connections*)))
-  nil)
+  (with-ltk-handlers ()
+    (when (wish-stream *wish*)
+      (remove-input-handler)
+      (when (open-stream-p (wish-stream *wish*))
+        (send-wish "exit"))
+      (close (wish-stream *wish*))
+      (setf (wish-stream *wish*) nil)
+      #+:allegro (system:reap-os-subprocess)
+      (setf *wish-connections* (remove *wish* *wish-connections*)))
+    nil))
 
 ;;; send a string to wish
 (defun send-wish (text)
   (when *debug-tk*
     (format t "~A~%" text)
     (finish-output))
-  (format (wish-stream *wish*) "~A~%" text)
-  (finish-output (wish-stream *wish*)))
+  (handler-bind ((stream-error (lambda (e)
+                                 (when *debug-tk*
+                                   (format t "Error sending command to wish: ~A" e)
+                                   (finish-output))
+                                 (close (wish-stream *wish*))
+                                 (exit-wish))))
+    (format (wish-stream *wish*) "~A~%" text)
+    (finish-output (wish-stream *wish*))))
 
 (defun format-wish (control &rest args)
   "format args using control as control string to wish"
@@ -1999,7 +2004,8 @@ set y [winfo y ~a]
   (make-instance 'text :master master :width width :height height))
 
 (defmethod append-text ((txt text) text &rest tags)
-  (format-wish "~a insert end \"~a\" {~{ ~(~a~)~}}" (widget-path txt) (tkescape text) tags))
+  (format-wish "~a insert end \"~a\" {~{ ~(~a~)~}}" (widget-path txt) (tkescape text) tags)
+  txt)
 
 (defmethod insert-object ((txt text) obj)
   (format-wish "~a window create end -window ~a" (widget-path txt) (widget-path obj)))
@@ -2555,14 +2561,40 @@ set y [winfo y ~a]
 	  (type-of condition) condition)
   #+sbcl (progn (sb-debug:backtrace most-positive-fixnum *error-output*)
                 ;; FIXME - this should be generalized
-		(unless (find-package :swank) (quit)))
+		(unless (or (find-package :swank)
+                            (find-package :fly))
+                  (quit)))
   #+cmu (progn (debug:backtrace most-positive-fixnum *error-output*)
                 ;; FIXME - this should be generalized
-	       (unless (find-package :swank) (quit))))
+	       (unless (or (find-package :swank)
+                           (find-package :fly))
+                 (quit))))
 
-(defmacro with-ltk-handlers (() &body body)
-  `(funcall (wish-call-with-condition-handlers-function *wish*)
-	    (lambda () ,@body)))
+;;;; Error handling
+
+(defvar *ltk-default-debugger*
+  '((fdefinition (find-symbol "DEBUGGER" "FLY"))
+    (fdefinition (find-symbol "SWANK-DEBUGGER-HOOK" "SWANK")))
+  "A list of debuggers to try before falling back to the Lisp system's debugger.
+  An item in this list may be a function, a symbol naming a function, or a
+  complex form to evaluate.  If it is a complex form, it will be evaled inside
+  an IGNORE-ERRORS, and should return a function, a symbol naming a function,
+  or NIL.")
+
+(defvar *debug-settings-table*
+  '(((0 :minimum) :handle-errors nil    :handle-warnings nil    :debugger nil)
+    ((1 :deploy)  :handle-errors t      :handle-warnings nil    :debugger t)
+    ((2 :develop) :handle-errors :debug :handle-warnings nil    :debugger t)
+    ((3 :maximum) :handle-errors :debug :handle-warnings t      :debugger t)))
+
+(defun debug-setting-keys (debug-setting)
+  "Given a debug setting (see WITH-LTK for details), return a list of appropriate
+   keyword arguments to pass to START-WISH."
+  (let ((debug (if (numberp debug-setting)
+                   (min 3 (max 0 (ceiling debug-setting)))
+                   debug-setting)))
+    (or (cdr (assoc (list debug) *debug-settings-table* :test #'intersection))
+        (error "Unknown debug setting ~S" debug))))
 
 (defun compute-error-handlers (handle-errors)
   (let ((nothing (constantly nil)))
@@ -2581,28 +2613,38 @@ set y [winfo y ~a]
 
 (defun compute-call-with-debugger-hook (debugger)
   "Return a function that will call a thunk with debugger-hook bound appropriately."
-  (labels ((use-existing-debugger (thunk)
-	     (funcall thunk))
+  (labels ((find-a-debugger ()
+             (loop for attempt in *ltk-default-debugger*
+                   when (typecase attempt
+                                  (symbol (and (fboundp attempt) attempt))
+                                  (function attempt)
+                                  (list (ignore-errors (eval attempt))))
+                     return it))
+           (use-debugger (debugger thunk)
+             (let* ((*debugger-hook* debugger)
+                    #+sbcl (sb-ext:*invoke-debugger-hook* (constantly nil)))
+               (funcall thunk)))
+           (use-default-debugger (thunk)
+             (let ((debugger (find-a-debugger)))
+               (if debugger
+                   (use-debugger debugger thunk)
+                   (funcall thunk))))
 	   (use-trivial-debugger (thunk)
-	     (let* ((*debugger-hook* #'trivial-debugger)
-                    #+sbcl (sb-ext:*invoke-debugger-hook* *debugger-hook*))
-	       (funcall thunk)))
+             (use-debugger #'trivial-debugger thunk))
 	   (use-custom-debugger (thunk)
-	     (let* ((*debugger-hook* debugger)
-                    #+sbcl (sb-ext:*invoke-debugger-hook* *debugger-hook*))
-	       (funcall thunk))))
+             (use-debugger debugger thunk)))
     (case debugger
-      ((t) #'use-existing-debugger)
+      ((t) #'use-default-debugger)
       ((nil) #'use-trivial-debugger)
       (t (if (or (functionp debugger)
 		 (and (symbolp debugger)
 		      (fboundp debugger)))
 	     #'use-custom-debugger
-	     (error "Not a function specifier: ~S" debugger))))))
+	     (error "~S does not designate a function" debugger))))))
 
-(defun make-condition-handler-function (&key . #.*start-wish-key-args*)
+(defun make-condition-handler-function
+    (&key handle-errors handle-warnings (debugger t) &allow-other-keys)
   "Return a function that will call a thunk with the appropriate condition handlers in place, and *debugger-hook* bound as needed."
-  (declare (ignore stream))
   (multiple-value-bind (simple-error error) (compute-error-handlers handle-errors)
     (let ((warning (compute-warning-handler handle-warnings))
 	  (call-with-debugger-hook (compute-call-with-debugger-hook debugger)))
@@ -2677,23 +2719,15 @@ tk input to terminate"
 			 (exit-wish)
 			 nil)
 			(t t)))))))
-    (restart-case (proc-event)
-      (abort ()
-	:report "Abort handling Tk event"
-	t)
-      (exit ()
-	:report "Exit Ltk main loop"
-	nil)))))
+      (restart-case (proc-event)
+        (abort ()
+          :report "Abort handling Tk event"
+          t)
+        (exit ()
+          :report "Exit Ltk main loop"
+          nil)))))
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (defvar *mainloop-key-args*
-    '((serve-event #+(and sbcl (not sb-threads)) nil
-                   #+(and sbcl sb-threads) nil
-                   #+cmu nil
-                   #-(or sbcl cmu) nil)))
-  (defvar *mainloop-keywords* '(:serve-event)))
-
-(defun mainloop (&key . #.*mainloop-key-args*)
+(defun mainloop (&key serve-event)
   (if serve-event
       (install-input-handler)
       (let ((*exit-mainloop* nil)
@@ -2823,109 +2857,18 @@ When an error is signalled, there are four things LTk can do:
 
  :HANDLE-WARNINGS can be T, NIL, or :DEBUG.
 
- :DEBUGGER can be T or NIL.  If it is NIL, LTk will prevent the user from ever
- seeing the Lisp debugger.  In the event that the debugger would be invoked, LTk
- will use its "trivial debugger" which dumps a stack trace and quits (note that
- this is only implemented on SBCL and CMUCL).  This is useful in conjunction with
- :HANDLE-ERRORS T, which should never call the debugger ; if :HANDLE-ERRORS is T
- and the debugger is called, this means that the system is confused beyond all
- hope, and dumping a stack trace is probably the right thing to do.
 
-
-                                  :HANDLE-ERRORS T
-                +--------------+--------------+--------------+--------------+
-                |  (default)   |     note     | show, offer  | show, offer  |
-                |              |              | to continue  | to start the |
-                |              |              |              | debugger     |
-                +--------------+--------------+--------------+--------------+
-                |              |              |    XX  XX    |              |
-   SIMPLE-ERROR |              |              |      XX      |              |
-                |              |              |    XX  XX    |              |
-                +--------------+--------------+--------------+--------------+
-                |              |    XX  XX    |              |              |
-          ERROR |              |      XX      |              |              |
-                |              |    XX  XX    |              |              |
-                +--------------+--------------+--------------+--------------+
-
-                               :HANDLE-ERRORS :SIMPLE
-                +--------------+--------------+--------------+--------------+
-                |  (default)   |     note     | show, offer  | show, offer  |
-                |              |              | to continue  | to start the |
-                |              |              |              | debugger     |
-                +--------------+--------------+--------------+--------------+
-                |              |              |    XX  XX    |              |
-   SIMPLE-ERROR |              |              |      XX      |              |
-                |              |              |    XX  XX    |              |
-                +--------------+--------------+--------------+--------------+
-                |    XX  XX    |              |              |              |
-          ERROR |      XX      |              |              |              |
-                |    XX  XX    |              |              |              |
-                +--------------+--------------+--------------+--------------+
-
-                               :HANDLE-ERRORS :DEBUG
-                +--------------+--------------+--------------+--------------+
-                |  (default)   |     note     | show, offer  | show, offer  |
-		|              |              | to continue  | to start the |
-		|              |              |              | debugger     |
-		+--------------+--------------+--------------+--------------+
-		|              |              |              |    XX  XX    |
-   SIMPLE-ERROR |              |              |              |      XX      |
-                |              |              |              |    XX  XX    |
-		+--------------+--------------+--------------+--------------+
-		|              |              |              |    XX  XX    |
-          ERROR |              |              |              |      XX      |
-	        |              |              |              |    XX  XX    |
-                +--------------+--------------+--------------+--------------+
-
-                                 :HANDLE-ERRORS NIL
-                +--------------+--------------+--------------+--------------+
-		|  (default)   |     note     | show, offer  | show, offer  |
-		|              |              | to continue  | to start the |
-		|              |              |              | debugger     |
-		+--------------+--------------+--------------+--------------+
-		|    XX  XX    |              |              |              |
-   SIMPLE-ERROR |      XX      |              |              |              |
-                |    XX  XX    |              |              |              |
-                +--------------+--------------+--------------+--------------+
-                |    XX  XX    |              |              |              |
-          ERROR |      XX      |              |              |              |
-                |    XX  XX    |              |              |              |
-		+--------------+--------------+--------------+--------------+
-
-                                 :HANDLE-WARNINGS T
-                +--------------+--------------+--------------+
-		|  (default)   |     show     | show, offer  |
-		|              |              | to start the |
-		|              |              | debugger     |
-		+--------------+--------------+--------------+
-		|              |    XX  XX    |              |
-       WARNING  |              |      XX      |              |
-                |              |    XX  XX    |              |
-		+--------------+--------------+--------------+
-
-                            :HANDLE-WARNINGS :DEBUG
-                +--------------+--------------+--------------+
-		|  (default)   |     show     | show, offer  |
-		|              |              | to start the |
-		|              |              | debugger     |
-		+--------------+--------------+--------------+
-		|              |              |    XX  XX    |
-        WARNING |              |              |      XX      |
-                |              |              |    XX  XX    |
-		+--------------+--------------+--------------+
- 
-                              :HANDLE-WARNINGS NIL
-                +--------------+--------------+--------------+
-		|  (default)   |     show     | show, offer  |
-		|              |              | to start the |
-		|              |              | debugger     |
-		+--------------+--------------+--------------+
-		|    XX  XX    |              |              |
-        WARNING |      XX      |              |              |
-	        |    XX  XX    |              |              |
-		+--------------+--------------+--------------+
-
- |#
+ :DEBUGGER can be T, NIL, or a function designator.  If it is a function
+ designator, that function will be used as the debugger.  If it is T, Ltk will
+ use the default debugger (see *ltk-default-debugger* for details).  If it is
+ NIL, LTk will prevent the user from ever seeing the Lisp debugger.  In the
+ event that the debugger would be invoked, LTk will use its "trivial debugger"
+ which dumps a stack trace and quits (note that this is only implemented on SBCL
+ and CMUCL).  This is useful in conjunction with :HANDLE-ERRORS T, which should
+ never call the debugger if :HANDLE-ERRORS is T and the debugger is called, this
+ means that the system is confused beyond all hope, and dumping a stack trace is
+ probably the right thing to do.
+|#
 
 ;;
 
@@ -2935,23 +2878,36 @@ When an error is signalled, there are four things LTk can do:
 
 ;;; wrapper macro - initializes everything, calls body and then mainloop
 
-(defmacro with-ltk ((&rest keys &key . #.(append *start-wish-key-args*
-						 *mainloop-key-args*))
+(defmacro with-ltk ((&rest keys &key (debug 2) stream serve-event)
 		    &body body)
-  (declare (ignore handle-errors handle-warnings debugger serve-event stream))
+  "Create a new Ltk connection, evaluate BODY, and enter the main loop.
+
+  :DEBUG indicates the level of debugging support to provide.  It can be a
+  number from 0 to 3, or one of the corresponding keywords:
+  :minimum, :deploy, :develop, or :maximum.
+
+  If :SERVE-EVENT is non-NIL, Ltk will use SERVE-EVENT handlers instead of a
+  blocking main loop.  This is only supported on SBCL and CMUCL.  Note that
+  using SERVE-EVENT means that WITH-LTK will return immediately after evaluating
+  BODY.
+
+  If :STREAM is non-NIL, it should be a two-way stream connected to a running
+  wish.  This will be used instead of running a new wish."
+  (declare (ignore debug serve-event stream))
   `(call-with-ltk (lambda () ,@body) ,@keys))
 
-(defun call-with-ltk (thunk &rest keys &key . #.(append *start-wish-key-args*
-							*mainloop-key-args*))
-  (declare (ignore handle-errors handle-warnings debugger stream))
+(defun call-with-ltk (thunk &rest keys &key (debug 2) stream serve-event)
+  "Functional interface to with-ltk, provided to allow the user the build similar macros."
+  (declare (ignore stream))
   (flet ((start-wish ()
-           (apply #'start-wish (filter-keys *start-wish-keywords* keys)))
-         (mainloop () (apply #'mainloop (filter-keys *mainloop-keywords* keys))))
+           (apply #'start-wish (append (debug-setting-keys debug)
+                                       (filter-keys '(:stream) keys))))
+         (mainloop () (apply #'mainloop (filter-keys '(:serve-event) keys))))
     (let ((*wish* (make-ltk-connection)))
       (unwind-protect
            (progn
              (start-wish)
-             (funcall thunk)
+             (with-ltk-handlers () (funcall thunk))
              (mainloop))
         (unless serve-event
           (exit-wish))))))
