@@ -278,8 +278,7 @@ o tooltip
 
 (defmethod initialize-instance :after ((tree treelist) &key listwidth listheight (background :white))
   (setf (listbox tree) (make-array (depth tree)))
-
-  (setf (entries tree) (make-array 4 :adjustable t :fill-pointer 0))
+  (setf (entries tree) (make-array (depth tree) :adjustable t :fill-pointer 0))
   (dotimes (i (depth tree))
     (let ((nr i)
 	  (sb (make-instance 'scrolled-listbox :master tree :width listwidth :height listheight )))
@@ -307,14 +306,6 @@ o tooltip
     (listbox-clear (aref (listbox tree) index))
     (treelist-clearlist tree (1+ index))))
 
-(defmethod open-node ((tree treelist) node nr)
-  "open the node at the depth nr in the tree"
-  (loop
-     while (> (length (entries tree)) nr)
-     do
-       (vector-pop (entries tree)))
-  (vector-push-extend (make-instance 'tree-entry :nodes (treelist-children tree node)) (entries tree)))
-
 (defgeneric treelist-setlist (tree parent-node nr))
 (defmethod treelist-setlist ((tree treelist) parent-node nr)
   (when (< nr (depth tree))
@@ -325,7 +316,8 @@ o tooltip
 				:parent-node parent-node)))
       (setf (aref (entries tree) nr) entry)
       (listbox-append (aref (listbox tree) nr) 
-		      (mapcar #'treelist-name (nodes entry))))))
+                      (mapcar (lambda (node)
+                                (treelist-name tree node)) (nodes entry))))))
 
 (defgeneric treelist-listbox-select (tree nr))
 (defmethod treelist-listbox-select ((tree treelist) nr)
@@ -339,8 +331,9 @@ o tooltip
       (listbox-configure listbox sel :background :blue :foreground :white)
       (let* ((entry (aref (entries tree) nr))
 	     (selected-node (nth sel (nodes entry))))
-	(listbox-configure listbox sel :background :blue :foreground :white)
-	(treelist-setlist tree selected-node (1+ nr))
+        (listbox-configure listbox sel :background :blue :foreground :white)
+        (treelist-select tree selected-node)
+        (treelist-setlist tree selected-node (1+ nr))
         ))))
   
 (defgeneric treelist-select (tree node)
@@ -362,15 +355,11 @@ o tooltip
 (defmethod treelist-has-children (tree node)
   (treelist-children tree node))
 
-(defgeneric treelist-name (node)
+(defgeneric treelist-name (tree node)
   (:documentation "String to display in the tree list for a node"))
 
-(defmethod treelist-name ((node string))
-  node)
-
-(defmethod treelist-name ((node list))
-  (car node))
-
+(defmethod treelist-name (tree (node string))
+  (declare (ignore tree)))
 
 ;;; demo tree widget
 
@@ -407,6 +396,9 @@ o tooltip
 
 (defclass demo-tree (treelist)
   ())
+
+(defmethod treelist-name ((tree demo-tree) (node list))
+  (car node))
 
 (defmethod treelist-children ((tree demo-tree) (node string))
   nil)

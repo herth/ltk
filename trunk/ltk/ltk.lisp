@@ -222,6 +222,7 @@ toplevel             x
 	   "ICONWINDOW"
 	   "IMAGE-LOAD"
 	   "IMAGE-SETPIXEL"
+           "CURSOR-INDEX"
 	   "INPUT-BOX"
 	   "INSERT-OBJECT"
 	   "INTERIOR"
@@ -1416,6 +1417,19 @@ event to read and blocking is set to nil"
 (defun entry-select (e from to)
   (format-wish "~a selection range ~a ~a" (widget-path e) from to))
 
+(defgeneric cursor-index (widget)
+  (:documentation "returns the cursor index in the widget"))
+
+(defmethod cursor-index ((e entry))
+  (format-wish "senddata [~a index insert]" (widget-path e))
+  (read-data))
+
+(defmethod cursor-index ((text text))
+  (format-wish "senddatastring [~a index insert]" (widget-path text))
+  (let ((index (read-data)))
+    ))
+
+
 ;;; frame widget 
 
 (defwidget frame (widget) () "frame")
@@ -1570,6 +1584,9 @@ a list of numbers may be given"
 (defgeneric see (txt pos))
 (defmethod see ((txt scrolled-text) pos)
   (format-wish "~a see ~a" (widget-path (textbox txt)) pos))
+
+(defmethod see ((lb listbox) pos)
+  (format-wish "~a see ~a" (widget-path lb) pos))
 
 ;;; scale widget
 
@@ -1748,8 +1765,12 @@ set y [winfo y ~a]
 
 (defgeneric bbox (item))
 (defmethod bbox ((item canvas-item))
-  (canvas-bbox (canvas item) (handle item))
-  )
+  (canvas-bbox (canvas item) (handle item)))
+
+(defmethod bbox ((canvas canvas))
+  (format-wish "senddata \"([~a bbox all])\"" (widget-path canvas))
+  (read-data))
+
 
 (defun canvas-bbox (canvas handle)
   (format-wish "senddata \"([~a bbox ~a])\"" (widget-path canvas) handle)
@@ -1979,7 +2000,7 @@ set y [winfo y ~a]
 
   (read-data))
 
-(defun postscript (canvas filename &key rotate pageheight pagewidth)
+(defun postscript (canvas filename &key rotate pagewidth pageheight)
   (if (and (scrollregion-x0 canvas)
 	   (scrollregion-x1 canvas)
 	   (scrollregion-y0 canvas)
@@ -2439,9 +2460,9 @@ set y [winfo y ~a]
   "icon names valid for message-box function")
 
 ;;; see make-string-output-string/get-output-stream-string
-(defun message-box (message title type icon)
+(defun message-box (message title type icon &key parent)
   ;;; tk_messageBox function
-  (format-wish "senddatastring [tk_messageBox -message {~a} -title {~a} -type ~(~a~) -icon ~(~a~)]" message title type icon)
+  (format-wish "senddatastring [tk_messageBox -message {~a} -title {~a} -type ~(~a~) -icon ~(~a~)~@[ -parent ~a~]]" message title type icon (and parent (widget-path parent)))
   (read-keyword))
 
 
@@ -2451,8 +2472,8 @@ set y [winfo y ~a]
 (defun ask-okcancel(message &optional (title ""))
   (equal (message-box message title "okcancel" "question") :ok))
 
-(defun do-msg(message  &optional (title ""))
-  (message-box message title "ok" "info"))
+(defun do-msg(message  &optional (title "") parent)
+  (message-box message title "ok" "info" :parent parent))
 
 #|
 -type predefinedType
