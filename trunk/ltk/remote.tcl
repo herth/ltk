@@ -21,7 +21,7 @@ if {[llength $argv] == 2} {
     set host [lindex $argv 0]
     set port [lindex $argv 1]} else {
 	set port [lindex $argv 0]}
-puts "connecting to $host $port"
+#puts "connecting to $host $port"
 
 set server [socket $host $port]
 set wi [open "|wish" RDWR]
@@ -34,5 +34,5 @@ fileevent $wi readable {
     if {[eof $wi]} {
 	close $wi
 	exit} else {	    
-	    set txt [read $wi]; puts "sending:$txt"; puts -nonewline $server $txt;flush $server}}
+	    set txt [read $wi]; puts -nonewline $server $txt;flush $server}}
 
