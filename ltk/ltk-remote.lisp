@@ -16,7 +16,7 @@
  
 |#
 
-#+:sbcl (require :sb-bsd-sockets)
+#+:sbcl (require 'sb-bsd-sockets)
 
 (defpackage "LTK-REMOTE"
   (:use "COMMON-LISP" "LTK"
@@ -78,18 +78,12 @@
 					;(force-output stream)
 					;(close stream)
 		(multiprocessing::make-process
-		 (lambda ()
-		   (let ((ltk::*wish* stream)
-			 (ltk::**callbacks* (make-hash-table :test #'equal))
-			 (ltk::**counter* 1)
-			 (ltk::**event-queue* nil))
-		     (ltk::init-wish)
-		     ,@body
-		     (mainloop)
-		     (format t "closing connection~&")
-		     (force-output)
-		     (close stream)
-		     ))
+                 (lambda ()
+                   (let ,bindings
+                     (ltk::call-with-ltk (lambda ()
+                                           ,form)
+                                         :stream stream)
+                     ,@cleanup))
 		 :name (format nil "LTK connection from ~A"
 			       (if host-entry
 				   (ext:host-entry-name host-entry)
@@ -131,7 +125,7 @@
     stream)) ;; do we need to return s as well ?
 
 #+:sbcl
-(defmacro with-remote-ltk (port &rest body)
+(defmacro with-remote-ltk (port bindings form &rest cleanup)
   `(make-thread
     (lambda () 
       (setf *stop-remote* nil)      
@@ -142,34 +136,23 @@
 	    (return))
 	  (let* ((s (socket-accept socket))
 		 (stream (socket-make-stream s :input t :output t)))
-	    (make-thread (lambda ()
-			   (let ((ltk::*wish* stream)
-				 (ltk::**callbacks* (make-hash-table :test #'equal))
-				 (ltk::**counter* 1)
-				 (ltk::**event-queue* nil))
-			     (ltk::init-wish)
-			     ,@body
-			     (mainloop)
-			     
-			     (force-output)
-			     (close stream)
-			     (socket-close s)
-			     )))))			  
-	  (socket-close socket)))))
-
-
+	    (make-thread
+             (lambda ()
+               (let ,bindings
+                 (ltk::call-with-ltk (lambda ()
+                                       ,form)
+                                     :stream stream)
+                 ,@cleanup)))))
+        (socket-close socket)))))
 ;; lispworks version
-
 (defvar *server* nil)
 #+:lispworks
 (defun stop-server ()
  (mp:process-kill ltk-remote::*server*))
-
 #+:lispworks
 (require "comm")
-
 #+:lispworks
-(defmacro with-remote-ltk (port &rest body)
+(defmacro with-remote-ltk (port bindings form &rest cleanup)
   `(setf ltk-remote::*server*
          (comm:start-up-server :function 
                                (lambda (handle)
@@ -178,20 +161,15 @@
                                                               :direction :io
                                                               :element-type
                                                               'base-char)))
-                                   (mp:process-run-function (format nil "ltk-remove ~D"
-                                                                    handle)
-                                                            '()
-                                                            (lambda ()
-                                                             (let ((ltk::*wish* stream)
-								   (ltk::**callbacks* (make-hash-table :test #'equal))
-								   (ltk::**counter* 1)
-								   (ltk::**event-queue* nil))
-							       (ltk::init-wish)
-                                                               ,@body
-                                                               (mainloop)
-                                                               (close stream)
-                                                               
-                                                               )))))
+                                   (mp:process-run-function
+                                    (format nil "ltk-remote ~D" handle)
+                                    '()
+                                    (lambda ()
+                                      (let ,bindings
+                                        (ltk::call-with-ltk (lambda ()
+                                                              ,form)
+                                                            :stream stream)
+                                        ,@cleanup)))))
                                :service ,port)))
 
 ;; allegro version
