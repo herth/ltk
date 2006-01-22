@@ -118,10 +118,10 @@ toplevel             x
 |#
 
 
-(defpackage "LTK"
-  (:use "COMMON-LISP"
-	#+:cmu "EXT"
-	#+:sbcl "SB-EXT"
+(defpackage :ltk
+  (:use :common-lisp
+	#+:cmu :ext
+	#+:sbcl :sb-ext
 	)
   (:export "LTKTEST"
 	   "*LTK-VERSION*"
@@ -340,6 +340,9 @@ toplevel             x
 	   "WITHDRAW"
 	   "WM-TITLE"
 	   ))
+
+(defpackage :ltk-user
+  (:use :common-lisp :ltk))
 
 (in-package :ltk)
 
@@ -1424,10 +1427,26 @@ event to read and blocking is set to nil"
   (format-wish "senddata [~a index insert]" (widget-path e))
   (read-data))
 
+(defun split (string at)
+  (let ((pos (search at string))
+        erg)
+    (loop
+       while pos
+       do
+         (when (> pos 0)
+           (push (subseq string 0 pos) erg))
+         (setf string (subseq string (+ pos (length at))))
+         (setf pos (search at string)))
+    (when (> (length string) 0)
+      (push string erg))
+    (nreverse erg)))
+        
 (defmethod cursor-index ((text text))
   (format-wish "senddatastring [~a index insert]" (widget-path text))
-  (let ((index (read-data)))
-    ))
+  (let* ((index (split (read-data) ".")))
+        (values (parse-integer (first index))
+                (parse-integer (second index)))))
+
 
 
 ;;; frame widget 
