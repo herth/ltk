@@ -1203,10 +1203,7 @@ event to read and blocking is set to nil"
     ;;(format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K %w %h %X %Y}" (widget-path w) event name)
     (format-wish "bind  ~a ~a {~:[~;+~]sendevent ~A %x %y %k %K %w %h %X %Y %b ~:[~;;break~]}" 
 		 (widget-path w) event append name exclusive)
-    ))
-
-
-
+    w))
 
 (defmethod bind (s event fun &key append exclusive)
   "bind fun to event within context indicated by string ie. 'all' or 'Button'"
@@ -1214,8 +1211,7 @@ event to read and blocking is set to nil"
     (add-callback name fun)
     ;;(format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K %w %h %X %Y}" s event name)
     (format-wish "bind  ~a ~a {~:[~;+~]sendevent ~A %x %y %k %K %w %h %X %Y %b ~:[~;;break~]}" 
-		 s event append name exclusive)
-    ))
+		 s event append name exclusive)))
 
 (defvar *tk* (make-instance 'widget :name "." :path ".")
   "dummy widget to access the tk root object")
@@ -1240,7 +1236,8 @@ event to read and blocking is set to nil"
 
 (defgeneric (setf value) (widget val))
 (defmethod (setf value) (val (v tkvariable))
-  (format-wish "set ~a {~a}" (name v) val))
+  (format-wish "set ~a {~a}" (name v) val)
+  val)
 
 (defclass tktextvariable ()
   ())
@@ -1261,7 +1258,8 @@ event to read and blocking is set to nil"
 (defgeneric (setf text) (val variable))
 
 (defmethod (setf text) (val (v tktextvariable))
-  (format-wish "set text_~a \"~a\"" (name v) (tkescape val)))
+  (format-wish "set text_~a \"~a\"" (name v) (tkescape val))
+  val)
 
 ;;; window menu bar
 
@@ -1303,7 +1301,8 @@ event to read and blocking is set to nil"
       (make-instance 'menu :master menu :text text :underline underline)))
 
 (defun add-separator (menu)
-   (format-wish "~A add separator" (widget-path menu)))
+   (format-wish "~A add separator" (widget-path menu))
+   menu)
 
 ;;; menu button
 
@@ -1337,7 +1336,8 @@ event to read and blocking is set to nil"
   (read-data))
 
 (defmethod (setf value) (val (cb menucheckbutton))
-  (format-wish "set ~a ~a" (name cb) val))
+  (format-wish "set ~a ~a" (name cb) val)
+  val)
 
 (defclass menuradiobutton(widget) 
   ((text :accessor text :initarg :text)
@@ -1359,18 +1359,21 @@ event to read and blocking is set to nil"
   (read-data))
 
 (defmethod (setf value) (val (cb menuradiobutton))
-  (format-wish "set ~a ~a" (group cb) val))
+  (format-wish "set ~a ~a" (group cb) val)
+  val)
 
 
 ;;; method to pop up a menue at the root window coordinates x and y
 
 (defgeneric popup (menu x y))
 (defmethod popup ((menu menu) x y)
-  (format-wish "tk_popup ~A ~A ~A" (widget-path menu) x y))
+  (format-wish "tk_popup ~A ~A ~A" (widget-path menu) x y)
+  menu)
 
 (defgeneric menu-delete (menu index))
 (defmethod menu-delete ((menu menu) index)
-  (format-wish "~A delete ~A" (widget-path menu) index))
+  (format-wish "~A delete ~A" (widget-path menu) index)
+  menu)
 
 ;;; standard button widget
 
@@ -1378,7 +1381,8 @@ event to read and blocking is set to nil"
 
 (defmethod (setf command) (val (button button))
   (add-callback (name button) val)
-  (format-wish "~a configure -command {callback ~a}" (widget-path button) (name button)))
+  (format-wish "~a configure -command {callback ~a}" (widget-path button) (name button))
+  val)
 
 ;;; check button widget
 
@@ -1387,7 +1391,8 @@ event to read and blocking is set to nil"
 (defmethod (setf command) (val (check-button check-button))
   (add-callback (name check-button) val)
   (format-wish "~a configure -command {callbackval ~a $~a}" (widget-path check-button)
-	       (name check-button) (name check-button)))
+	       (name check-button) (name check-button))
+  val)
 
 ;;; radio button widget
 
@@ -1407,18 +1412,21 @@ event to read and blocking is set to nil"
 (defmethod (setf value) (val (rb radio-button))
   "sets the content of the shared variable of the radio button set"
   (when (radio-button-variable rb)
-    (format-wish "set ~a ~a" (radio-button-variable rb) val)))
+    (format-wish "set ~a ~a" (radio-button-variable rb) val))
+  val)
 
 (defmethod (setf command) (val (rb radio-button))
   (add-callback (name rb) val)
-  (format-wish "~a configure -command {callbackval ~a $~a}" (widget-path rb) (name rb) (radio-button-variable rb)))
+  (format-wish "~a configure -command {callbackval ~a $~a}" (widget-path rb) (name rb) (radio-button-variable rb))
+  val)
 
 ;; text entry widget
 
 (defwidget entry (tktextvariable widget) () "entry")
 
 (defun entry-select (e from to)
-  (format-wish "~a selection range ~a ~a" (widget-path e) from to))
+  (format-wish "~a selection range ~a ~a" (widget-path e) from to)
+  e)
 
 (defgeneric cursor-index (widget)
   (:documentation "returns the cursor index in the widget"))
@@ -1441,12 +1449,6 @@ event to read and blocking is set to nil"
       (push string erg))
     (nreverse erg)))
         
-(defmethod cursor-index ((text text))
-  (format-wish "senddatastring [~a index insert]" (widget-path text))
-  (let* ((index (split (read-data) ".")))
-        (values (parse-integer (first index))
-                (parse-integer (second index)))))
-
 
 
 ;;; frame widget 
@@ -1461,7 +1463,8 @@ event to read and blocking is set to nil"
 (defwidget labelframe (widget) () "labelframe")
 
 (defmethod (setf text) :after (val (l labelframe))
-  (format-wish "~a configure -text {~a}" (widget-path l) val))
+  (format-wish "~a configure -text {~a}" (widget-path l) val)
+  val)
 
 ;;; panedwindow widget
 
@@ -1470,15 +1473,18 @@ event to read and blocking is set to nil"
 
 (defgeneric pane-configure (window option value))
 (defmethod pane-configure ((pw paned-window) option value)
-  (format-wish "~a paneconfigure ~a {~a}" (widget-path pw) option value))
+  (format-wish "~a paneconfigure ~a {~a}" (widget-path pw) option value)
+  pw)
 
 (defgeneric add-pane (window widget))
 (defmethod add-pane ((pw paned-window) (w widget))
-  (format-wish "~a add ~a" (widget-path pw) (widget-path w)))
+  (format-wish "~a add ~a" (widget-path pw) (widget-path w))
+  pw)
 
 (defgeneric forget-pane (window widget))
 (defmethod forget-pane ((pw paned-window) (w widget))
-  (format-wish "~a forget ~a" (widget-path pw) (widget-path w)))
+  (format-wish "~a forget ~a" (widget-path pw) (widget-path w))
+  pw)
 
 ;;; listbox widget
 
@@ -1490,14 +1496,16 @@ event to read and blocking is set to nil"
 (defmethod (setf command) (val (listbox listbox))
   (add-callback (name listbox) val)
   (format-wish "bind ~a <<ListboxSelect>> {callbackval ~a ([~a curselection])}" (widget-path listbox) (name listbox)
-	       (widget-path listbox)))
+	       (widget-path listbox))
+  val)
 
 (defgeneric listbox-append (l vals))
 (defmethod listbox-append ((l listbox) values)
   "append values (which may be a list) to the list box"
   (if (listp values)
       (format-wish "~a insert end ~{ \{~a\}~}" (widget-path l) values)
-      (format-wish "~a insert end \{~a\}" (widget-path l) values)))
+      (format-wish "~a insert end \{~a\}" (widget-path l) values))
+  l)
 
 (defgeneric listbox-get-selection (l))
 (defmethod listbox-get-selection ((l listbox))
@@ -1513,17 +1521,20 @@ a list of numbers may be given"
       (format-wish "~a selection clear 0 end" (widget-path l))
       (if (listp val)
           (format-wish "~a selection set ~{ ~a~}" (widget-path l) val)
-          (format-wish "~a selection set ~a" (widget-path l) val))))
+          (format-wish "~a selection set ~a" (widget-path l) val)))
+  l)
 
 (defgeneric listbox-clear (l))
 
 (defmethod listbox-clear ((l listbox))
-  (format-wish "~a delete 0 end" (widget-path l)))
+  (format-wish "~a delete 0 end" (widget-path l))
+  l)
 
 
 (defgeneric listbox-configure (l i &rest options))
 (defmethod listbox-configure ((l listbox) index &rest options)
-  (format-wish "~a itemconfigure ~a ~{ -~(~a~) {~(~a~)}~}" (widget-path l) index options))
+  (format-wish "~a itemconfigure ~a ~{ -~(~a~) {~(~a~)}~}" (widget-path l) index options)
+  l)
 
 (defgeneric listbox-nearest (listbox y))
 (defmethod listbox-nearest ((l listbox) y)
@@ -1555,13 +1566,15 @@ a list of numbers may be given"
   (configure (listbox sl) "yscrollcommand" (concatenate 'string (widget-path (vscroll sl)) " set")))
 
 (defmethod listbox-append ((l scrolled-listbox) values)
-  (listbox-append (listbox l) values))
+  (listbox-append (listbox l) values)
+  l)
 
 (defmethod listbox-get-selection ((l scrolled-listbox))
   (listbox-get-selection (listbox l)))
 
 (defmethod listbox-select ((l scrolled-listbox) val)
-  (listbox-select (listbox l) val))
+  (listbox-select (listbox l) val)
+  l)
 
 ;;; scrolled-text
 
@@ -1591,21 +1604,25 @@ a list of numbers may be given"
 
 (defgeneric append-text (txt text &rest tags))
 (defmethod append-text ((txt scrolled-text) text &rest tags )
-  (format-wish "~a insert end \"~a\" {~{ ~(~a~)~}}" (widget-path (textbox txt)) (tkescape text) tags))
+  (format-wish "~a insert end \"~a\" {~{ ~(~a~)~}}" (widget-path (textbox txt)) (tkescape text) tags)
+  txt)
 
 (defmethod (setf text) (new-text (self scrolled-text))
   (setf (text (textbox self)) new-text))
 
 (defgeneric insert-object (txt object))
 (defmethod insert-object ((txt scrolled-text) obj)
-  (format-wish "~a window create end -window ~a" (widget-path (textbox txt)) (widget-path obj)))
+  (format-wish "~a window create end -window ~a" (widget-path (textbox txt)) (widget-path obj))
+  txt)
 
 (defgeneric see (txt pos))
 (defmethod see ((txt scrolled-text) pos)
-  (format-wish "~a see ~a" (widget-path (textbox txt)) pos))
+  (format-wish "~a see ~a" (widget-path (textbox txt)) pos)
+  txt)
 
 (defmethod see ((lb listbox) pos)
-  (format-wish "~a see ~a" (widget-path lb) pos))
+  (format-wish "~a see ~a" (widget-path lb) pos)
+  lb)
 
 ;;; scale widget
 
@@ -1614,7 +1631,8 @@ a list of numbers may be given"
 (defmethod (setf command) (val (scale scale))
   (add-callback (name scale) val)					
   (format-wish "proc ~a-command {val} {callbackval ~a $val}" (name scale) (name scale))
-  (format-wish "~a configure -command ~a-command" (widget-path scale) (name scale)))
+  (format-wish "~a configure -command ~a-command" (widget-path scale) (name scale))
+  val)
 
 ;;; spinbox widget
 
@@ -1622,7 +1640,8 @@ a list of numbers may be given"
 
 (defmethod (setf command) (val (sp spinbox))
   (add-callback (name sp) val)					
-  (format-wish "~a configure -command {callbackstring ~a %s}" (widget-path sp) (name sp)))
+  (format-wish "~a configure -command {callbackstring ~a %s}" (widget-path sp) (name sp))
+  val)
 
 ;;; toplevel (window) widget 
 
@@ -1779,7 +1798,8 @@ set y [winfo y ~a]
 
 
 (defun move-all (canvas dx dy)
-  (format-wish "~a move all ~a ~a" (widget-path canvas) dx dy))
+  (format-wish "~a move all ~a ~a" (widget-path canvas) dx dy)
+  canvas)
 
 
 (defgeneric bbox (item))
@@ -1796,15 +1816,14 @@ set y [winfo y ~a]
   (read-data))
 
 (defmethod calc-scroll-region ((canvas canvas))
-  (format-wish "~a configure -scrollregion [~a bbox all]" (widget-path canvas) (widget-path canvas)))
-
-
-
+  (format-wish "~a configure -scrollregion [~a bbox all]" (widget-path canvas) (widget-path canvas))
+  canvas)
 
 (defgeneric set-coords (canvas item coords))
 
 (defmethod set-coords (canvas item coords)
-  (format-wish "~a coords ~a~{ ~a~}" (widget-path canvas) item coords))
+  (format-wish "~a coords ~a~{ ~a~}" (widget-path canvas) item coords)
+  canvas)
 
 (defmethod set-coords ((canvas canvas) (item canvas-item) (coords list))
   (set-coords canvas (handle item) coords))
@@ -1852,7 +1871,7 @@ set y [winfo y ~a]
 (defmethod (setf coords) (val (item canvas-item))
   (let ((coord-list (process-coords val)))
     (format-wish "~a coords ~a ~a" (widget-path (canvas item)) (handle item) coord-list)
-    ))
+    coord-list))
 
 (defgeneric itembind (canvas w event fun))
 (defmethod itembind ((canvas canvas) (item canvas-item) event fun)
@@ -1862,7 +1881,8 @@ set y [winfo y ~a]
   "bind fun to event of the widget w"
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "~a bind ~a ~a {sendevent ~A %x %y %k %K %w %h %X %Y %b}" (widget-path canvas) item event name)))
+    (format-wish "~a bind ~a ~a {sendevent ~A %x %y %k %K %w %h %X %Y %b}" (widget-path canvas) item event name))
+  canvas)
 
 (defmethod bind ((w canvas-item) event fun &key append exclusive)
   (declare (ignore append exclusive))
@@ -1874,8 +1894,8 @@ set y [winfo y ~a]
   (setf (scrollregion-y0 c) y0)
   (setf (scrollregion-x1 c) x1)
   (setf (scrollregion-y1 c) y1)
-  (configure c :scrollregion (format nil "~a ~a ~a ~a" x0 y0 x1 y1)))
-
+  (configure c :scrollregion (format nil "~a ~a ~a ~a" x0 y0 x1 y1))
+  c)
 
 (defgeneric canvasx (canvas screenx))
 (defmethod canvasx ((canvas canvas) screenx)
@@ -1889,16 +1909,20 @@ set y [winfo y ~a]
 
 (defgeneric itemmove (canvas item dx dy))
 (defmethod itemmove ((canvas canvas) (item integer) dx dy)
-  (format-wish "~a move ~a ~a ~a" (widget-path canvas) item dx dy))
+  (format-wish "~a move ~a ~a ~a" (widget-path canvas) item dx dy)
+  canvas)
 
 (defmethod itemmove ((canvas canvas) (item canvas-item) dx dy)
   (itemmove (canvas item) (handle item) dx dy))
 
 (defgeneric itemdelete (canvas item))
 (defmethod itemdelete ((canvas canvas) (item integer))
-  (format-wish "~a delete ~a" (widget-path canvas) item))
+  (format-wish "~a delete ~a" (widget-path canvas) item)
+  canvas)
+
 (defmethod itemdelete ((canvas canvas) (item canvas-item))
-  (format-wish "~a delete ~a" (widget-path canvas) (handle item)))
+  (format-wish "~a delete ~a" (widget-path canvas) (handle item))
+  canvas)
 
 (defgeneric move (item dx dy))
 (defmethod move ((item canvas-item) dx dy)
@@ -1907,7 +1931,9 @@ set y [winfo y ~a]
 (defgeneric clear (widget))
 (defmethod clear ((canvas canvas))
   "delete all items within a canvas"
-  (format-wish "~a delete all" (widget-path canvas)))
+  (format-wish "~a delete all" (widget-path canvas))
+  canvas)
+
 ;; canvas item functions
 
 (defun create-line (canvas coords)
@@ -1993,7 +2019,8 @@ set y [winfo y ~a]
   (setf (handle c) (create-image canvas x y :image image)))
 
 (defun image-setpixel (image data x y &optional x2 y2 )
-  (format-wish "~A put {~{{~:{#~2,'0X~2,'0X~2,'0X ~} } ~} } -to ~a ~a~@[ ~a~]~@[ ~a~]" (name image) data x y x2 y2))
+  (format-wish "~A put {~{{~:{#~2,'0X~2,'0X~2,'0X ~} } ~} } -to ~a ~a~@[ ~a~]~@[ ~a~]" (name image) data x y x2 y2)
+  image)
 
 (defun create-bitmap (canvas x y &key (bitmap nil))
   (format-wish "senddata [~a create image ~a ~a -anchor nw~@[ -bitmap ~a~]]" (widget-path canvas) x y
@@ -2016,7 +2043,6 @@ set y [winfo y ~a]
 (defun create-window (canvas x y widget &key (anchor :nw))
   (format-wish "senddata [~a create window ~a ~a -anchor ~(~a~) -window ~a]"
  	       (widget-path canvas) x y anchor (widget-path widget))
-
   (read-data))
 
 (defun postscript (canvas filename &key rotate pagewidth pageheight)
@@ -2031,7 +2057,8 @@ set y [winfo y ~a]
 		(- (scrollregion-y1 canvas) (scrollregion-y0 canvas))
 		rotate pageheight pagewidth
 		)
-    (format-wish "~a postscript -file ~a" (widget-path canvas) filename)))
+    (format-wish "~a postscript -file ~a" (widget-path canvas) filename))
+  canvas)
 
 ;;; text widget
 
@@ -2039,6 +2066,12 @@ set y [winfo y ~a]
   ((xscroll :accessor xscroll :initarg :xscroll :initform nil)
    (yscroll :accessor yscroll :initarg :yscroll :initform nil)
   )  "text")
+
+(defmethod cursor-index ((text text))
+  (format-wish "senddatastring [~a index insert]" (widget-path text))
+  (let* ((index (split (read-data) ".")))
+        (values (parse-integer (first index))
+                (parse-integer (second index)))))
 
 (defun make-text (master &key (width nil) (height nil))
   (make-instance 'text :master master :width width :height height))
@@ -2048,18 +2081,20 @@ set y [winfo y ~a]
   txt)
 
 (defmethod insert-object ((txt text) obj)
-  (format-wish "~a window create end -window ~a" (widget-path txt) (widget-path obj)))
+  (format-wish "~a window create end -window ~a" (widget-path txt) (widget-path obj))
+  txt)
 
 (defun append-newline (text)
   (append-text text (coerce '(#\Linefeed) 'string)))
 
-
 (defgeneric clear-text (txt))
 (defmethod clear-text ((txt text))
-  (format-wish "~A delete 0.0 end" (widget-path txt)))
+  (format-wish "~A delete 0.0 end" (widget-path txt))
+  txt)
 
 (defmethod see((txt text) pos)
-  (format-wish "~a see ~a" (widget-path txt) pos))
+  (format-wish "~a see ~a" (widget-path txt) pos)
+  txt)
 
 (defgeneric tag-configure (txt tag option value))
 (defmethod tag-configure ((txt text) tag option value)
@@ -2067,7 +2102,8 @@ set y [winfo y ~a]
 	       (if (stringp tag)
 		   tag
 		 (format nil "~(~a~)" tag))
-	       option value))
+	       option value)
+  txt)
 
 (defgeneric tag-bind (txt tag event fun))
 (defmethod tag-bind ((txt text) tag event fun)
@@ -2075,21 +2111,23 @@ set y [winfo y ~a]
   (let ((name (create-name)))
     (add-callback name fun)
     (format-wish "~a tag bind ~a ~a {callback ~A}" (widget-path txt) tag event name)
-    ))
+    )
+  txt)
 
 (defmethod text ((text text))
   (format-wish "senddatastring [~a get 1.0 end]" (widget-path text))
   (read-data))
 
 (defmethod (setf text) (val (text text))
-  (format-wish "~A delete 0.0 end;~A insert end {~A}" (widget-path text) (widget-path text) val))
+  (format-wish "~A delete 0.0 end;~A insert end {~A}" (widget-path text) (widget-path text) val)
+  val)
 
 (defgeneric save-text (txt filename))
 (defmethod save-text ((txt text) filename)
   "save the content of the text widget into the file <filename>"
   (format-wish "set file [open {~a} \"w\"];puts $file [~a get 1.0 end];close $file;puts \"asdf\"" filename (widget-path txt))
   (read-line (wish-stream *wish*))
-  )
+  txt)
 
 (defgeneric load-text (txt filename))
 (defmethod load-text((txt text) filename)
@@ -2143,32 +2181,38 @@ set y [winfo y ~a]
   (format-wish "pack ~A -side ~(~A~) -fill ~(~A~)~@[~* -expand 1~]~
              ~@[ -after ~A~]~@[ -before ~A~]~@[ -padx ~A~]~
              ~@[ -pady ~A~]~@[ -ipadx ~A~]~@[ -ipady ~A~]~@[ -anchor ~(~A~)~]"
-          (widget-path w) side fill expand (and after (widget-path after)) (and before (widget-path before)) padx pady ipadx ipady anchor))
+          (widget-path w) side fill expand (and after (widget-path after)) (and before (widget-path before)) padx pady ipadx ipady anchor)
+  w)
 
 (defmethod pack ((list list) &rest rest)
-  (mapcar #'(lambda (w) (apply #'pack w rest))
+  (mapcar #'(lambda (w)
+              (apply #'pack w rest))
 	  list))
 
 (defgeneric pack-propagate (widget flag))
 (defmethod pack-propagate ((w widget) flag)
   (format-wish "pack propagate ~A ~A"
 	       (widget-path w)
-	       (if flag "true" "false")))
+	       (if flag "true" "false"))
+  w)
 
 (defgeneric pack-forget (widget))
 (defmethod pack-forget ((w widget))
-  (format-wish "pack forget ~A" (widget-path w)))
+  (format-wish "pack forget ~A" (widget-path w))
+  w)
 
 
 ;;; place manager
 
 (defgeneric place (widget x y &key width height))
 (defmethod place (widget x y &key width height)
-  (format-wish "place ~A -x ~A -y ~A~@[ -width ~a~]~@[ -height ~a~]" (widget-path widget) x y width height))
+  (format-wish "place ~A -x ~A -y ~A~@[ -width ~a~]~@[ -height ~a~]" (widget-path widget) x y width height)
+  widget)
 
 (defgeneric place-forget (widget))
 (defmethod place-forget ((w widget))
-  (format-wish "place forget ~A" (widget-path w)))
+  (format-wish "place forget ~A" (widget-path w))
+  w)
 
 ;;; grid manager
 
@@ -2176,23 +2220,28 @@ set y [winfo y ~a]
 (defmethod grid ((w widget) row column &key columnspan ipadx ipady padx pady rowspan sticky)
   (format-wish "grid ~a -row ~a -column ~a~@[ -columnspan ~a~]~@[ -ipadx ~a~]~
              ~@[ -ipady ~a~]~@[ -padx ~a~]~@[ -pady ~a~]~@[ -rowspan ~a~]~
-             ~@[ -sticky ~(~a~)~]" (widget-path w) row column columnspan ipadx ipady padx pady rowspan  sticky))
+             ~@[ -sticky ~(~a~)~]" (widget-path w) row column columnspan ipadx ipady padx pady rowspan  sticky)
+  w)
 
 (defgeneric grid-columnconfigure (widget c o v))
 (defmethod grid-columnconfigure (widget column option value)
-  (format-wish "grid columnconfigure ~a ~a -~(~a~) {~a}" (widget-path widget) column option value))
+  (format-wish "grid columnconfigure ~a ~a -~(~a~) {~a}" (widget-path widget) column option value)
+  widget)
 
 (defgeneric grid-rowconfigure (widget r o v))
 (defmethod grid-rowconfigure (widget row option value)
-  (format-wish "grid rowconfigure ~a ~a -~(~a~) {~a}" (widget-path widget) row option value))
+  (format-wish "grid rowconfigure ~a ~a -~(~a~) {~a}" (widget-path widget) row option value)
+  widget)
 
 (defgeneric grid-configure (widget o v))
 (defmethod grid-configure (widget option value)
-  (format-wish "grid configure ~a -~(~a~) {~a}" (widget-path widget) option value))
+  (format-wish "grid configure ~a -~(~a~) {~a}" (widget-path widget) option value)
+  widget)
 
 (defgeneric grid-forget (widget))
 (defmethod grid-forget ((w widget))
-  (format-wish "grid forget ~A" (widget-path w)))
+  (format-wish "grid forget ~A" (widget-path w))
+  w)
 
 ;;; configure a widget parameter
 
@@ -2213,11 +2262,6 @@ set y [winfo y ~a]
 		 (format nil "~(~a~)" value))
 	       others)
   item)
-
-  
-
-
-                                             ;; 
 
 ;;; for tkobjects, the name of the widget is taken
 (defmethod configure (widget option (value tkobject) &rest others)
@@ -2252,74 +2296,86 @@ set y [winfo y ~a]
   (format-wish "~A itemconfigure ~A -~(~A~) {~A}" (widget-path widget) item option
 	    (if (stringp value) ;; There may be values that need to be passed as
 		value           ;; unmodified strings, so do not downcase strings
-	      (format nil "~(~a~)" value)))) ;; if its not a string, print it downcased
+	      (format nil "~(~a~)" value))) ;; if its not a string, print it downcased
+  widget)
 
 
 ;;; for tkobjects, the name of the widget is taken
 (defmethod itemconfigure ((widget canvas) item option (value tkobject))
-  (format-wish "~A itemconfigure ~A -~(~A~) {~A}" (widget-path widget) item option (widget-path value)))
+  (format-wish "~A itemconfigure ~A -~(~A~) {~A}" (widget-path widget) item option (widget-path value))
+  widget)
 
 (defgeneric itemlower (w i &optional below))
 (defmethod itemlower ((widget canvas) item &optional below)
   (format-wish "~A lower ~A ~@[~A~]" (widget-path widget)
-	       item below))
+	       item below)
+  widget)
 
 (defmethod lower ((item canvas-item) &optional below)
   (itemlower (canvas item) (handle item) (and below (handle below))))
 
-
 (defgeneric itemraise (w i &optional above))
 (defmethod itemraise ((widget canvas) item &optional above)
   (format-wish "~A raise ~A ~@[~A~]" (widget-path widget)
-	       item above))
+	       item above)
+  widget)
 
 (defmethod raise ((item canvas-item) &optional above)
   (itemraise (canvas item) (handle item) (and above (handle above))))
-
 
 ;;; grab functions
 
 (defgeneric grab (toplevel))
 (defmethod grab ((toplevel toplevel))
-  (format-wish "grab set ~a" (widget-path toplevel)))
+  (format-wish "grab set ~a" (widget-path toplevel))
+  toplevel)
 
 (defgeneric grab-release (toplevel))
 (defmethod grab-release ((toplevel toplevel))
-  (format-wish "grab release ~a" (widget-path toplevel)))
+  (format-wish "grab release ~a" (widget-path toplevel))
+  toplevel)
 
 ;;; wm functions
 
 (defgeneric set-wm-overrideredirect (widget value))
 (defmethod set-wm-overrideredirect ((w widget) val)
-  (format-wish "wm overrideredirect ~a ~a" (widget-path w) val))
+  (format-wish "wm overrideredirect ~a ~a" (widget-path w) val)
+  w)
 
 (defgeneric wm-title (widget title))
 (defmethod wm-title ((w widget) title)
-  (format-wish "wm title ~a {~a}" (widget-path w) title))
+  (format-wish "wm title ~a {~a}" (widget-path w) title)
+  w)
 
 (defgeneric minsize (widget x y))
 (defmethod minsize ((w widget) x y)
-  (format-wish "wm minsize ~a ~a ~a" (widget-path w) x y))
+  (format-wish "wm minsize ~a ~a ~a" (widget-path w) x y)
+  w)
 
 (defgeneric maxsize (widget x y))
 (defmethod maxsize ((w widget) x y)
-  (format-wish "wm maxsize ~a ~a ~a" (widget-path w) x y))
+  (format-wish "wm maxsize ~a ~a ~a" (widget-path w) x y)
+  w)
 
 (defgeneric withdraw (toplevel))
 (defmethod withdraw ((tl widget))
-  (format-wish "wm withdraw ~a" (widget-path tl)))
+  (format-wish "wm withdraw ~a" (widget-path tl))
+  tl)
 
 (defgeneric normalize (toplevel))
 (defmethod normalize ((tl widget))
-  (format-wish "wm state ~a normal" (widget-path tl)))
+  (format-wish "wm state ~a normal" (widget-path tl))
+  tl)
 
 (defgeneric iconify (toplevel))
 (defmethod iconify ((tl toplevel))
-  (format-wish "wm iconify ~a" (widget-path tl)))
+  (format-wish "wm iconify ~a" (widget-path tl))
+  tl)
 
 (defgeneric deiconify (toplevel))
 (defmethod deiconify ((tl toplevel))
-  (format-wish "wm deiconify ~a" (widget-path tl)))
+  (format-wish "wm deiconify ~a" (widget-path tl))
+  tl)
 
 (defgeneric geometry (toplevel))
 (defmethod geometry ((tl widget))
@@ -2330,32 +2386,36 @@ set y [winfo y ~a]
 (defmethod set-geometry ((tl widget) width height x y)
   ;;(format-wish "wm geometry ~a ~ax~a+~a+~a" (widget-path tl) width height x y)
   (format-wish "wm geometry ~a ~ax~a~@D~@D" (widget-path tl) width height x y)
-  )
+  tl)
 
 (defgeneric set-geometry-wh (toplevel width height))
 (defmethod set-geometry-wh ((tl widget) width height)
-  (format-wish "wm geometry ~a ~ax~a" (widget-path tl) width height))
+  (format-wish "wm geometry ~a ~ax~a" (widget-path tl) width height)
+  tl)
 
 (defgeneric set-geometry-xy (toplevel x y))
 (defmethod set-geometry-xy ((tl widget) x y)
-  (format-wish "wm geometry ~a ~@D~@D" (widget-path tl) x y))
+  (format-wish "wm geometry ~a ~@D~@D" (widget-path tl) x y)
+  tl)
  
-
 (defgeneric on-close (toplevel fun))
 (defmethod on-close ((tl toplevel) fun)
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "wm protocol ~a WM_DELETE_WINDOW {callback ~A}" (widget-path tl) name)))
+    (format-wish "wm protocol ~a WM_DELETE_WINDOW {callback ~A}" (widget-path tl) name))
+  tl)
 
 (defgeneric on-focus (toplevel fun))
 (defmethod on-focus ((tl toplevel) fun)
   (let ((name (create-name)))
     (add-callback name fun)
     (format-wish "wm protocol WM_TAKE_FOCUS {callback ~A}"
-	      name)))
+	      name))
+  tl)
 
 (defun iconwindow (tl wid)
-  (format-wish "wm iconwindow ~a ~a" (widget-path tl) (widget-path wid)))  
+  (format-wish "wm iconwindow ~a ~a" (widget-path tl) (widget-path wid))
+  tl)  
 
 ;;; winfo functions
 
@@ -2423,10 +2483,12 @@ set y [winfo y ~a]
 ;;; misc functions
 
 (defun focus (widget)
-  (format-wish "focus ~a" (widget-path widget)))
+  (format-wish "focus ~a" (widget-path widget))
+  widget)
 
 (defun force-focus (widget)
-  (format-wish "focus -force ~a" (widget-path widget)))
+  (format-wish "focus -force ~a" (widget-path widget))
+  widget)
 
 ;;; Dialog functions
 
