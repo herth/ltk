@@ -783,6 +783,10 @@ event to read and blocking is set to nil"
                                                                     (progn
                                                                       (add-callback (name widget) command)
                                                                       (list (name widget) (name widget))))
+      (spinbox-command command "~@[ -command {callbackstring ~a %s~]" (and command 
+                                                                           (progn
+                                                                             (add-callback (name widget) command)
+                                                                             (name widget))))
        "function to call when the action of the widget is executed")
       (command-radio-button command "~@[ -command {callbackval ~{~a $~a~}}~]" (and command 
                         						       (progn
@@ -1012,7 +1016,7 @@ event to read and blocking is set to nil"
   activebackground activerelief background borderwidth command-scrollbar cursor elementborderwidth highlightbackground highlightcolor highlightthickness jump orient relief repeatdelay repeatinterval takefocus troughcolor width)
 
 (defargs spinbox ()
-  activebackground background borderwidth Button.background Button.cursor Button.relief command cursor disabledbackground disabledforeground exportselection font foreground format from highlightbackground highlightcolor highlightthickness increment insertbackground insertborderwidth insertofftime insertontime insertwidth invalidcommand justify relief readonlybackground repeatdelay repeatinterval selectbackground selectborderwidth selectforeground state takefocus textvariable to validate validatecommand values width wrap xscrollcommand)
+  activebackground background borderwidth Button.background Button.cursor Button.relief spinbox-command cursor disabledbackground disabledforeground exportselection font foreground format from highlightbackground highlightcolor highlightthickness increment insertbackground insertborderwidth insertofftime insertontime insertwidth invalidcommand justify relief readonlybackground repeatdelay repeatinterval selectbackground selectborderwidth selectforeground state takefocus textvariable to validate validatecommand values width wrap xscrollcommand)
 
 (defargs text ()
   autoseparators  background borderwidth cursor exportselection font foreground height highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth maxundo padx  pady relief selectbackground selectborderwidth selectforeground setgrid spacing1 spacing2 spacing3 state tabs takefocus undo width wrap xscrollcommand yscrollcommand)
