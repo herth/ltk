@@ -416,6 +416,7 @@ toplevel             x
 			   (:conc-name #:wish-))
   (stream nil)
   (callbacks (make-hash-table :test #'equal))
+  (after-ids (make-hash-table :test #'equal))
   (counter 1)
   (after-counter 1)
   (event-queue nil)
@@ -672,28 +673,42 @@ event to read and blocking is set to nil"
       (apply fun arg))))
 
 (defun after (time fun)
-  "after <time> msec call function <fun>, returns the after event id, which can be passed to AFTER-CANCEL"
-  (let ((name (format nil "after~a" (incf (wish-after-counter *wish*)))))
-    (add-callback name
-                  (lambda ()
-                    (funcall fun)
-                    (remove-callback name)))
-    (format-wish "senddatastring [after ~a {callback ~A}]" time name)
-    (read-data)))
+ "after <time> msec call function <fun>, returns the after event id,
+which can be passed to AFTER-CANCEL"
+ (let ((name (format nil "after~a" (incf (wish-after-counter *wish*)))))
+   (format-wish "senddatastring [after ~a {callback ~A}]" time name)
+   (let ((id (read-data))
+         (blah (wish-after-ids *wish*)))
+     (setf (gethash id blah) name)
+     (add-callback name
+                   (lambda ()
+                     (funcall fun)
+                     (remhash id blah)
+                     (remove-callback name)))
+     id)))
 
 (defun after-idle (fun)
-  "call fun when tk becomes idle, returns the after event id, which can be passed to AFTER-CANCEL"
-  (let ((name (format nil "afteridle~a" (incf (wish-after-counter *wish*)))))
-    (add-callback name
-                  (lambda ()
-                    (funcall fun)
-                    (remove-callback name)))
-    (format-wish "senddatastring [after idle {callback ~A}]" name)
-    (read-data)))
+ "call fun when tk becomes idle, returns the after event id, which
+can be passed to AFTER-CANCEL"
+ (let ((name (format nil "afteridle~a" (incf (wish-after-counter *wish*)))))
+   (format-wish "senddatastring [after idle {callback ~A}]" name)
+   (let ((id (read-data))
+         (blah (wish-after-ids *wish*)))         
+     (add-callback name
+                   (lambda ()
+                     (funcall fun)
+                     (remhash id blah)
+                     (remove-callback name)))
+     id)))
 
 (defun after-cancel (id)
-  "cancels a call scheduled with AFTER or AFTER-IDLE by its id"
-  (format-wish "after cancel ~a" id))
+ "cancels a call scheduled with AFTER or AFTER-IDLE by its id"
+ (format-wish "after cancel ~a" id)
+ (let ((blah (wish-after-ids *wish*)))
+   (remove-callback (gethash id blah))
+   (remhash id blah)))
+
+
 
 
 ;; tool functions used by the objects
@@ -783,7 +798,7 @@ event to read and blocking is set to nil"
                                                                     (progn
                                                                       (add-callback (name widget) command)
                                                                       (list (name widget) (name widget))))
-      (spinbox-command command "~@[ -command {callbackstring ~a %s~]" (and command 
+      (spinbox-command command "~@[ -command {callbackstring ~a %s}~]" (and command 
                                                                            (progn
                                                                              (add-callback (name widget) command)
                                                                              (name widget))))
