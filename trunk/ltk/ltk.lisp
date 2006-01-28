@@ -1,7 +1,8 @@
 #|
 
- This software is Copyright (c) 2003, 2004, 2005  Peter Herth <herth@peter-herth.de>
+ This software is Copyright (c) 2003, 2004, 2005, 2006  Peter Herth <herth@peter-herth.de>
  Parts Copyright (c) 2005 Thomas F. Burdick
+ Parts Copyright (c) Cadence Design Systems, GmbH
 
  Peter Herth grants you the rights to distribute
  and use this software as governed by the terms
@@ -707,9 +708,6 @@ can be passed to AFTER-CANCEL"
  (let ((blah (wish-after-ids *wish*)))
    (remove-callback (gethash id blah))
    (remhash id blah)))
-
-
-
 
 ;; tool functions used by the objects
 
