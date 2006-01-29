@@ -410,7 +410,7 @@ toplevel             x
 		  (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* "0.88-pre2")
+(defvar *ltk-version* "0.88")
 
 ;;; global var for holding the communication stream
 (defstruct (ltk-connection (:constructor make-ltk-connection ())
