@@ -410,7 +410,7 @@ toplevel             x
 		  (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* "0.88")
+(defvar *ltk-version* "0.881")
 
 ;;; global var for holding the communication stream
 (defstruct (ltk-connection (:constructor make-ltk-connection ())
@@ -796,11 +796,11 @@ can be passed to AFTER-CANCEL"
                                                                     (progn
                                                                       (add-callback (name widget) command)
                                                                       (list (name widget) (name widget))))
+       "function to call when the action of the widget is executed")
       (spinbox-command command "~@[ -command {callbackstring ~a %s}~]" (and command 
                                                                            (progn
                                                                              (add-callback (name widget) command)
                                                                              (name widget))))
-       "function to call when the action of the widget is executed")
       (command-radio-button command "~@[ -command {callbackval ~{~a $~a~}}~]" (and command 
                         						       (progn
 										 (add-callback (name widget) command)
