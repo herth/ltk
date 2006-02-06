@@ -340,6 +340,7 @@ toplevel             x
 	   "WITH-WIDGETS"
 	   "WITHDRAW"
 	   "WM-TITLE"
+           "WM-STATE"
 	   ))
 
 (defpackage :ltk-user
@@ -923,10 +924,12 @@ can be passed to AFTER-CANCEL"
       (validate validate "~@[ -validate ~(~a~)~]" validate "")
       (validatecommand validatecommand "~@[ -validatecommand ~(~a~)~]" validatecommand "")
       (value value "~@[ -value ~(~a~)~]" value "")
-      (value-radio-button nil "~@[ -value ~(~a~)~]" (radio-button-value widget) "")
+      (value-radio-button nil "~@[ -value ~(~a~)~]" (radio-button-value widget)
+       "value for the radio button group to take, when the button is selected")
       (values values "~@[ -values ~(~a~)~]" values "")
       (variable variable "~@[ -variable ~(~a~)~]" variable "name of the variable associated with the widget")
-      (variable-radio-button nil "~@[ -variable ~(~a~)~]" (radio-button-variable widget) "")
+      (variable-radio-button nil "~@[ -variable ~(~a~)~]" (radio-button-variable widget)
+       "name of the radio button group the button shall belong to as a string")
       (visual visual "~@[ -visual ~(~a~)~]" visual "")
       (width width "~@[ -width ~(~a~)~]" width "width of the widget")
       (wrap wrap "~@[ -wrap ~(~a~)~]" wrap "")
@@ -2364,6 +2367,16 @@ set y [winfo y ~a]
   (format-wish "wm title ~a {~a}" (widget-path w) title)
   w)
 
+(defgeneric wm-state (widget))
+(defmethod wm-state ((w widget))
+  (format-wish "senddatastring [wm state ~a]" (widget-path w))
+  (read-wish))
+
+(defgeneric (setf wm-state) (new-state widget))
+(defmethod (setf wm-state) (new-state (w widget))
+  (format-wish "wm state ~a ~a" (widget-path w) new-state)
+  new-state)
+
 (defgeneric minsize (widget x y))
 (defmethod minsize ((w widget) x y)
   (format-wish "wm minsize ~a ~a ~a" (widget-path w) x y)
@@ -3085,10 +3098,23 @@ When an error is signalled, there are four things LTk can do:
 (defvar *demo-line* nil)
 (defvar *demo-canvas* nil)
 
+(defun eggs (radio)
+  (format t "Prepare ~a eggs.~%"
+          (case (value radio)
+            (1 "fried")
+            (2 "stirred")
+            (3 "cooked")))
+  (finish-output))
+
 ;;;; default ltk test
 (defun ltktest()
   (with-ltk ()
       (let* ((bar (make-instance 'frame))
+             (fradio (make-instance 'frame :master bar))
+             (leggs (make-instance 'label :master fradio :text "Eggs:"))
+             (r1 (make-instance 'radio-button :master fradio :text "fried" :value 1 :variable "eggs"))
+             (r2 (make-instance 'radio-button :master fradio :text "stirred" :value 2 :variable "eggs"))
+             (r3 (make-instance 'radio-button :master fradio :text "cooked" :value 3 :variable "eggs"))
 	     (fr (make-instance 'frame :master bar))
 	     (lr (make-instance 'label :master fr :text "Rotation:"))
 	     (bstart (make-instance 'button :master fr :text "Start" :command 'start-rotation))
@@ -3154,6 +3180,12 @@ When an error is signalled, there are four things LTk can do:
 	(configure c :borderwidth 2 :relief :sunken)
 	(pack sc :side :top :fill :both :expand t)
 	(pack bar :side :bottom)
+        (pack (list fradio leggs r1 r2 r3) :side :left)
+        (dolist (r (list r1 r2 r3))
+          (let ((button r))
+            (setf (command r) (lambda (val)
+                                (declare (ignore val))
+                                (eggs button)))))
 	(scrollregion c 0 0 500 400)
 	(pack fr :side :left)
 	(pack lr :side :left)
@@ -3325,3 +3357,5 @@ When an error is signalled, there are four things LTk can do:
 				       (finish-output))))))
      (pack b))))
 
+
+(pushnew :ltk *features*)
