@@ -1816,6 +1816,9 @@ set y [winfo y ~a]
 (defun make-canvas (master &key (width nil) (height nil) (xscroll nil) (yscroll nil))
   (make-instance 'canvas :master master :width width :height height :xscroll xscroll :yscroll yscroll))
 
+(defmethod scale ((canvas canvas) factor &optional factory)
+  (format-wish "~a scale all 0 0 ~a ~a" (widget-path canvas) factor (or factory factor))
+  canvas)
 
 (defun move-all (canvas dx dy)
   (format-wish "~a move all ~a ~a" (widget-path canvas) dx dy)
@@ -2799,6 +2802,8 @@ set y [winfo y ~a]
 (defun break-mainloop ()
   (setf *break-mainloop* t))
 
+(defmethod handle-output (key params))
+
 (defun process-one-event (event)
   (when event
     (when *debug-tk*
@@ -2819,7 +2824,9 @@ set y [winfo y ~a]
              (evp (rest params))
              (event (construct-tk-event evp)))
         (callback callback (list event))))
-     (t (callback (first event) (rest event))))))
+     (t
+      (handle-output
+       (first event) (rest event))))))
 
 (defun process-events ()
   "A function to temporarliy yield control to wish so that pending
@@ -3161,6 +3168,17 @@ When an error is signalled, there are four things LTk can do:
 	     (mfe-gif (make-menubutton mf-export "png" (lambda ()
 							 (format t "Png pressed~&")
 							 (finish-output))))
+
+             (mf-scale (make-menu mfile "Scale..."))
+             (mfs-1 (make-menubutton mf-scale "0.5" (lambda ()
+                                                      (scale c 0.5))))
+             (mfs-2 (make-menubutton mf-scale "2" (lambda ()
+                                                    (scale c 2))))
+             (mfs-3 (make-menubutton mf-scale "2/0.5" (lambda ()
+                                                        (scale c 2 0.5))))
+             (mfs-4 (make-menubutton mf-scale "0.5/2" (lambda ()
+                                                        (scale c 0.5 2))))
+             (sep4 (add-separator mfile))
 	     (mf-exit (make-menubutton mfile "Exit" (lambda () (setf *exit-mainloop* t))
 				       :underline 1
 				       :accelerator "Alt Q"))
@@ -3169,7 +3187,7 @@ When an error is signalled, there are four things LTk can do:
 	     (mp-2 (make-menubutton mp "Option 2" (lambda () (format t "Popup 2~&") (finish-output))))
 	     (mp-3 (make-menubutton mp "Option 3" (lambda () (format t "Popup 3~&") (finish-output))))
 	     )
-	(declare (ignore mf-print mf-exit mfe-gif mfe-jpg mf-save mf-load sep1 sep2 sep3 mp-1 mp-2 mp-3)) 
+	(declare (ignore mf-print mf-exit mfe-gif mfe-jpg mf-save mf-load sep1 sep2 sep3 sep4 mp-1 mp-2 mp-3 mfs-1 mfs-2 mfs-3 mfs-4)) 
 
 
 	
