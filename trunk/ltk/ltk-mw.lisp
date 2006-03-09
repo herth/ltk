@@ -39,10 +39,8 @@ o tooltip
    
 |#
 
-(defpackage "LTK-MW"
-  (:use "COMMON-LISP"
-	"LTK"
-	)
+(defpackage :ltk-mw
+  (:use :common-lisp :ltk)
   (:export
    #:progress
    #:percent

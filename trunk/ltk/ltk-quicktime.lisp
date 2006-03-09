@@ -2,17 +2,14 @@
 ;;; requires the QuickTimeTcl tk extension installed (the full distribution
 ;;; of TkAqua includes it)
 
-(defpackage "LTK-QUICKTIME"
-  (:use "COMMON-LISP"
-	"LTK"
-	)
+(defpackage :ltk-quicktime
+  (:use :common-lisp :ltk)
   (:export
-   "QUICKTIME"
-   "PLAY-MOVIE"
-   "STOP-MOVIE"
-   ))
+   :quicktime
+   ;play-movie
+   :stop-movie))
 
-(in-package ltk-quicktime)
+(in-package :ltk-quicktime)
 
 (eval-when (:load-toplevel)
   (setf *init-wish-hook* (append *init-wish-hook*

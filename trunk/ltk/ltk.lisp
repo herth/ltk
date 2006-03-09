@@ -121,226 +121,223 @@ toplevel             x
 
 (defpackage :ltk
   (:use :common-lisp
-	#+:cmu :ext
+        #+(or :cmu :scl) :ext
 	#+:sbcl :sb-ext
 	)
-  (:export "LTKTEST"
-	   "*LTK-VERSION*"
-	   "*CURSORS*"
-	   "*DEBUG-TK*"
-           "*BREAK-MAINLOOP*"
-	   "*EXIT-MAINLOOP*"
-	   "*INIT-WISH-HOOK*"
-	   "*MB-ICONS*"
-	   "*TK*"
-	   "*WISH*"
-	   "WISH-STREAM"
-	   "*WISH-ARGS*"
-	   "*WISH-PATHNAME*"
-           "*DEFAULT-LTK-DEBUGGER*"
-	   "ADD-PANE"
-	   "ADD-SEPARATOR"
-	   "AFTER"
-	   "AFTER-CANCEL"
-	   "AFTER-IDLE"	   
-	   "APPEND-TEXT"
-	   "APPEND-NEWLINE"
-	   "ASK-OKCANCEL"
-	   "ASK-YESNO"
-	   "BACKGROUND"
-           "BBOX"
-	   "BELL"
-	   "BIND"
-	   "BUTTON"
-           "CALC-SCROLL-REGION"
-	   "CANVAS"
-	   "CANVAS-LINE"
-	   "CANVAS-OVAL"
-	   "CANVAS-POLYGON"
-	   "CANVAS-RECTANGLE"
-	   "CANVAS-TEXT"
-	   "CANVAS-IMAGE"
-	   "CANVAS-ARC"
-           "CANVAS-BBOX"
-	   "CANVASX"	   
-	   "CANVASY"	   
-	   "CGET"
-	   "CHECK-BUTTON"
-	   "CHOOSE-COLOR"
-	   "CHOOSE-DIRECTORY"
-	   "CLEAR-TEXT"
-	   "CLEAR"
-	   "CLIPBOARD-APPEND"
-	   "CLIPBOARD-CLEAR"
-	   "CLIPBOARD-GET"
-	   "COMMAND"
-           "COORDS"
-	   "CONFIGURE"
-	   "CREATE-ARC"
-	   "CREATE-BITMAP"
-	   "CREATE-IMAGE"
-	   "CREATE-LINE"
-	   "CREATE-LINE*"
-	   "CREATE-MENU2"
-	   "CREATE-OVAL"
-	   "CREATE-POLYGON"
-	   "CREATE-RECTANGLE"
-	   "CREATE-TEXT"
-	   "CREATE-WINDOW"
-           "DEBUG-SETTING-KEYS"
-	   "DEFARGS"
-	   "DEICONIFY"
-	   "DESTROY"
-	   "DO-EXECUTE"
-	   "DO-MSG"
-	   "ENTRY"
-	   "ENTRY-SELECT"
-	   "EXIT-WISH"
-	   "EVENT"
-	   "EVENT-X"
-	   "EVENT-Y"
-	   "EVENT-KEYCODE"
-	   "EVENT-CHAR"
-	   "EVENT-MOUSE-BUTTON"
-	   "EVENT-ROOT-X"
-	   "EVENT-ROOT-Y"
-	   "FOCUS"
-	   "FORCE-FOCUS"
-	   "FORGET-PANE"
-	   "FORMAT-WISH"
-	   "FRAME"
-	   "GEOMETRY"
-	   "GET-OPEN-FILE"
-	   "GET-SAVE-FILE"
-	   "GRAB"
-	   "GRAB-RELEASE"
-	   "GRID"
-	   "GRID-COLUMNCONFIGURE"
-	   "GRID-CONFIGURE"
-	   "GRID-FORGET"
-	   "GRID-ROWCONFIGURE"
-	   "ICONIFY"
-	   "ICONWINDOW"
-	   "IMAGE-LOAD"
-	   "IMAGE-SETPIXEL"
-           "CURSOR-INDEX"
-	   "INPUT-BOX"
-	   "INSERT-OBJECT"
-	   "INTERIOR"
-	   "ITEMBIND"
-	   "ITEMCONFIGURE"
-	   "ITEMDELETE"
-	   "ITEMMOVE"
-	   "ITEMLOWER"
-	   "ITEMRAISE"
-	   "LABEL"
-	   "LABELFRAME"
-	   "LISTBOX"
-	   "LISTBOX-APPEND"
-	   "LISTBOX-CLEAR"
-	   "LISTBOX-CONFIGURE"
-	   "LISTBOX-GET-SELECTION"
-	   "LISTBOX-NEAREST"
-	   "LISTBOX-SELECT"
-	   "LOAD-TEXT"
-	   "LOWER"
-	   "MAINLOOP"
-	   "MAKE-CANVAS"
-	   "MAKE-FRAME"
-	   "MAKE-IMAGE"
-	   "MAKE-LABEL"
-	   "MAKE-MENU"
-	   "MAKE-MENUBAR"
-	   "MAKE-MENUBUTTON"
-	   "MAKE-SCROLLBAR"
-	   "MAKE-SCROLLED-CANVAS"
-	   "MAKE-TEXT"
-	   "MAKE-TOPLEVEL"
-
-	   "MAKE-LINE"
-	   "MAKE-OVAL"
-	   "MAKE-POLYGON"
-	   "MAKE-RECTANGLE"
-
-	   "MASTER"
-	   "MAXSIZE"
-	   "MENU"
-	   "MENUBAR"
-	   "MENUBUTTON"
-	   "MENUCHECKBUTTON"
-	   "MENU-DELETE"
-	   "MENURADIOBUTTON"
-	   "MESSAGE"
-	   "MESSAGE-BOX"
-	   
-	   "MINSIZE"
-	   "MOVE"
-           "MOVE-ALL"
-	   "NORMALIZE"
-	   "ON-CLOSE"
-	   "ON-FOCUS"
-	   "PACK"
-	   "PACK-FORGET"
-	   "PACK-PROPAGATE"
-	   "PANE-CONFIGURE"
-	   "PANED-WINDOW"
-	   "PHOTO-IMAGE"
-	   "PLACE"
-	   "PLACE-FORGET"
-	   "POPUP"
-	   "POSTSCRIPT"
-	   "PROCESS-EVENTS"
-	   "RADIO-BUTTON"
-	   "RAISE"
-	   "READ-EVENT"
-	   "SAVE-TEXT"
-	   "SCALE"
-	   "SCREEN-HEIGHT"
-	   "SCREEN-HEIGHT-MM"
-	   "SCREEN-MOUSE"
-	   "SCREEN-MOUSE-X"
-	   "SCREEN-MOUSE-Y"
-	   "SCREEN-WIDTH"
-	   "SCREEN-WIDTH-MM"
-	   "SCROLLBAR"
-	   "SCROLLED-CANVAS"
-	   "SCROLLED-FRAME"
-	   "SCROLLED-LISTBOX"
-	   "SCROLLED-TEXT"
-	   "SCROLLREGION"
-	   "SEE"
-	   "SEND-WISH"
-	   "SET-COORDS"
-	   "SET-COORDS*"
-	   "SET-GEOMETRY"
-	   "SET-GEOMETRY-WH"
-	   "SET-GEOMETRY-XY"
-	   "SET-WM-OVERRIDEREDIRECT"
-	   "SPINBOX"
-	   "START-WISH"
-	   "TAG-BIND"
-	   "TAG-CONFIGURE"
-	   "TEXT"
-	   "TEXTBOX"
-	   "TKOBJECT"
-	   "TOPLEVEL"
-	   "VALUE"
-	   "WIDGET"
-	   "WIDGET-PATH"
-	   "WINDOW-HEIGHT"
-	   "WINDOW-ID"
-	   "WINDOW-WIDTH"
-	   "WINDOW-X"
-	   "WINDOW-Y"
-	   "MAKE-LTK-CONNECTION"
-	   "WIDGET-CLASS-NAME"
-	   "WITH-LTK"
-	   "CALL-WITH-LTK"
-	   "WITH-REMOTE-LTK"
-	   "WITH-WIDGETS"
-	   "WITHDRAW"
-	   "WM-TITLE"
-           "WM-STATE"
+  (:export #:ltktest                           
+           #:*ltk-version*
+           #:*cursors*
+           #:*debug-tk*
+           #:*break-mainloop*
+           #:*exit-mainloop*
+           #:*init-wish-hook*
+           #:*mb-icons*
+           #:*tk*
+           #:*wish*
+           #:wish-stream
+           #:*wish-args*
+           #:*wish-pathname*
+           #:*default-ltk-debugger*
+           #:add-pane
+           #:add-separator
+           #:after
+           #:after-cancel
+           #:after-idle
+           #:append-text
+           #:append-newline
+           #:ask-okcancel
+           #:ask-yesno
+           #:background
+           #:bbox
+           #:bell
+           #:bind
+           #:button
+           #:calc-scroll-region
+           #:canvas
+           #:canvas-line
+           #:canvas-oval
+           #:canvas-polygon
+           #:canvas-rectangle
+           #:canvas-text
+           #:canvas-image
+           #:canvas-arc
+           #:canvas-bbox
+           #:canvasx
+           #:canvasy
+           #:cget
+           #:check-button
+           #:choose-color
+           #:choose-directory
+           #:clear-text
+           #:clear
+           #:clipboard-append
+           #:clipboard-clear
+           #:clipboard-get
+           #:command
+           #:coords
+           #:configure
+           #:create-arc
+           #:create-bitmap
+           #:create-image
+           #:create-line
+           #:create-line*
+           #:create-menu2
+           #:create-oval
+           #:create-polygon
+           #:create-rectangle
+           #:create-text
+           #:create-window
+           #:debug-setting-keys
+           #:defargs
+           #:deiconify
+           #:destroy
+           #:do-execute
+           #:do-msg
+           #:entry
+           #:entry-select
+           #:exit-wish
+           #:event
+           #:event-x
+           #:event-y
+           #:event-keycode
+           #:event-char
+           #:event-mouse-button
+           #:event-root-x
+           #:event-root-y
+           #:focus
+           #:force-focus
+           #:forget-pane
+           #:format-wish
+           #:frame
+           #:geometry
+           #:get-open-file
+           #:get-save-file
+           #:grab
+           #:grab-release
+           #:grid
+           #:grid-columnconfigure
+           #:grid-configure
+           #:grid-forget
+           #:grid-rowconfigure
+           #:iconify
+           #:iconwindow
+           #:image-load
+           #:image-setpixel
+           #:cursor-index
+           #:input-box
+           #:insert-object
+           #:interior
+           #:itembind
+           #:itemconfigure
+           #:itemdelete
+           #:itemmove
+           #:itemlower
+           #:itemraise
+           #:label
+           #:labelframe
+           #:listbox
+           #:listbox-append
+           #:listbox-clear
+           #:listbox-configure
+           #:listbox-get-selection
+           #:listbox-nearest
+           #:listbox-select
+           #:load-text
+           #:lower
+           #:mainloop
+           #:make-canvas
+           #:make-frame
+           #:make-image
+           #:make-label
+           #:make-menu
+           #:make-menubar
+           #:make-menubutton
+           #:make-scrollbar
+           #:make-scrolled-canvas
+           #:make-text
+           #:make-toplevel
+           #:make-line
+           #:make-oval
+           #:make-polygon
+           #:make-rectangle
+           #:master
+           #:maxsize
+           #:menu
+           #:menubar
+           #:menubutton
+           #:menucheckbutton
+           #:menu-delete
+           #:menuradiobutton
+           #:message
+           #:message-box
+           #:minsize
+           #:move
+           #:move-all
+           #:normalize
+           #:on-close
+           #:on-focus
+           #:pack
+           #:pack-forget
+           #:pack-propagate
+           #:pane-configure
+           #:paned-window
+           #:photo-image
+           #:place
+           #:place-forget
+           #:popup
+           #:postscript
+           #:process-events
+           #:radio-button
+           #:raise
+           #:read-event
+           #:save-text
+           #:scale
+           #:screen-height
+           #:screen-height-mm
+           #:screen-mouse
+           #:screen-mouse-x
+           #:screen-mouse-y
+           #:screen-width
+           #:screen-width-mm
+           #:scrollbar
+           #:scrolled-canvas
+           #:scrolled-frame
+           #:scrolled-listbox
+           #:scrolled-text
+           #:scrollregion
+           #:see
+           #:send-wish
+           #:set-coords
+           #:set-coords*
+           #:set-geometry
+           #:set-geometry-wh
+           #:set-geometry-xy
+           #:set-wm-overrideredirect
+           #:spinbox
+           #:start-wish
+           #:tag-bind
+           #:tag-configure
+           #:text
+           #:textbox
+           #:tkobject
+           #:toplevel
+           #:value
+           #:widget
+           #:widget-path
+           #:window-height
+           #:window-id
+           #:window-width
+           #:window-x
+           #:window-y
+           #:make-ltk-connection
+           #:widget-class-name
+           #:with-ltk
+           #:call-with-ltk
+           #:with-remote-ltk
+           #:with-widgets
+           #:withdraw
+           #:wm-title
+           #:wm-state
 	   ))
 
 (defpackage :ltk-user
@@ -363,13 +360,15 @@ toplevel             x
   (let ((fullstring program))
     (dolist (a args)
       (setf fullstring (concatenate 'string fullstring " " a)))
-    #+:cmu (let ((proc (run-program program args :input :stream :output :stream :wait wt)))
-             (unless proc
-               (error "Cannot create process."))
-             (make-two-way-stream
-              (ext:process-output proc)
-              (ext:process-input proc))
-             )
+    #+(or :cmu :scl)
+    (let ((proc (run-program program args :input :stream :output :stream :wait wt
+                             #+scl :external-format #+scl :utf-8)))
+      (unless proc
+        (error "Cannot create process."))
+      (make-two-way-stream
+       (ext:process-output proc)
+       (ext:process-input proc))
+      )
     #+:clisp (let ((proc (ext:run-program program :arguments args :input :stream :output :stream :wait t)))
              (unless proc
                (error "Cannot create process."))
@@ -411,7 +410,7 @@ toplevel             x
 		  (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* "0.881")
+(defvar *ltk-version* "0.8819")
 
 ;;; global var for holding the communication stream
 (defstruct (ltk-connection (:constructor make-ltk-connection ())
@@ -526,13 +525,27 @@ toplevel             x
 	  (setf *wish* (make-ltk-connection))
 	  (apply #'start-wish keys)))))
 
+;;; CMUCL, SCL, and SBCL, use a two-way-stream and the constituent
+;;; streams need to be closed.
+(defun close-process-stream (stream)
+  "Close a 'stream open by 'do-execute."
+  (when *debug-tk*
+    (format t "Closing wish stream: ~S~%" stream))
+  (ignore-errors (close stream))
+  #+(or :cmu :scl :sbcl)
+  (when (typep stream 'two-way-stream)
+    (close (two-way-stream-input-stream stream) :abort t)
+    (close (two-way-stream-output-stream stream) :abort t))
+  nil)
+
 (defun exit-wish ()
   (with-ltk-handlers ()
-    (when (wish-stream *wish*)
-      (remove-input-handler)
-      (when (open-stream-p (wish-stream *wish*))
-        (send-wish "exit"))
-      (close (wish-stream *wish*))
+    (let ((stream (wish-stream *wish*)))
+      (when stream
+        (remove-input-handler)
+        (when (open-stream-p stream)
+          (ignore-errors (send-wish "exit")))
+        (close-process-stream stream))
       (setf (wish-stream *wish*) nil)
       #+:allegro (system:reap-os-subprocess)
       (setf *wish-connections* (remove *wish* *wish-connections*)))
@@ -540,27 +553,40 @@ toplevel             x
 
 ;;; send a string to wish
 (defun send-wish (text)
+  (declare (string text)
+           (optimize (speed 3)))
   (when *debug-tk*
     (format t "~A~%" text)
     (finish-output))
-  (handler-bind ((stream-error (lambda (e)
-                                 (when *debug-tk*
-                                   (format t "Error sending command to wish: ~A" e)
-                                   (finish-output))
-                                 (close (wish-stream *wish*))
-                                 (exit-wish))))
-    (format (wish-stream *wish*) "~A~%" text)
-    (finish-output (wish-stream *wish*))))
+  (let ((*print-pretty* nil)
+        (stream (wish-stream *wish*)))
+    (declare (stream stream))
+    (handler-bind ((stream-error (lambda (e)
+                                   (when *debug-tk*
+                                     (format t "Error sending command to wish: ~A" e)
+                                     (finish-output))
+                                   (ignore-errors (close stream))
+                                   (exit-wish))))
+    (format stream "~A~%" text)
+    (finish-output stream))))
 
-(defun format-wish (control &rest args)
-  "format args using control as control string to wish"
-  (when *debug-tk*
-    (apply #'format t control args)
-    (format t "~%")
-    (finish-output))
-  (apply #'format (wish-stream *wish*) control args)
-  (format (wish-stream *wish*) "~%")
-  (finish-output (wish-stream *wish*)))
+(defmacro format-wish (control &rest args)
+  "format 'args using 'control as control string to wish"
+  (let ((stream (gensym)))
+    `(progn
+       (when *debug-tk*
+         (format t ,control ,@args)
+         (format t "~%")
+         (finish-output))
+       (let ((*print-pretty* nil)
+             (,stream (wish-stream *wish*)))
+         (declare (type stream ,stream)
+                  (optimize (speed 3)))
+         (format ,stream ,control ,@args)
+         (format ,stream "~%")
+         (finish-output ,stream))
+       nil)))
+
 
 ;; differences:
 ;; cmucl/sbcl READ expressions only if there is one more character in the stream, if
@@ -571,6 +597,8 @@ toplevel             x
 ;; ending character, cmucl/sbcl don't)
 
 (defun read-all(stream)
+  (declare (stream stream)
+           (inline read-char-no-hang))
   (let ((c (read-char-no-hang stream nil nil))
         (s (make-array 256 :adjustable t :element-type 'character :fill-pointer 0)))
     (loop
@@ -588,6 +616,8 @@ toplevel             x
 
 (defun can-read (stream)
   "return t, if there is something to READ on the stream"
+  (declare (stream stream)
+           (inline read-char-no-hang unread-char))
   (let ((c (read-char-no-hang stream)))
     (loop 
        while (and c
@@ -624,7 +654,11 @@ event to read and blocking is set to nil"
 (defun read-keyword ()
   (let ((string (read-data)))
     (when (> (length string) 0)
-      (values (intern (string-upcase string) :keyword)))))
+      (values (intern #-scl (string-upcase string)
+                      #+scl (if (eq ext:*case-mode* :upper)
+                                (string-upcase string)
+                                (string-downcase string))
+                      :keyword)))))
 
 ;;; sanitizing strings: lisp -> tcl (format (wish-stream *wish*) "{~a}" string)
 ;;; in string escaped : {} mit \{ bzw \}  und \ mit \\
@@ -652,7 +686,7 @@ event to read and blocking is set to nil"
 
 ;;; call to convert untility
 (defun convert(from to)
-  (close (do-execute "convert" (list from to) t)))
+  (close-process-stream (do-execute "convert" (list from to) t)))
 
 ;;; table used for callback every callback consists of a name of a widget and
 ;;; a function to call
@@ -1816,6 +1850,7 @@ set y [winfo y ~a]
 (defun make-canvas (master &key (width nil) (height nil) (xscroll nil) (yscroll nil))
   (make-instance 'canvas :master master :width width :height height :xscroll xscroll :yscroll yscroll))
 
+(defgeneric scale (canvas factor &optional factory))
 (defmethod scale ((canvas canvas) factor &optional factory)
   (format-wish "~a scale all 0 0 ~a ~a" (widget-path canvas) factor (or factory factor))
   canvas)
@@ -2493,7 +2528,7 @@ set y [winfo y ~a]
   (format-wish "senddatastring [winfo id ~a]" (widget-path tl))
   (read-data))
 
-(Defun window-width (tl)
+(defun window-width (tl)
   "give the width of the toplevel in pixels"
   (format-wish "senddata [winfo width ~a]" (widget-path tl))
   (read-data))
@@ -2668,9 +2703,12 @@ set y [winfo y ~a]
   (ecase (message-box (format nil "~A~%~%Do you wish to invoke the debugger?"
 			      condition)
 		      title "yesno" "question")
-    (:yes (let ((hook *debugger-hook*)
-		(*debugger-hook* nil))
-	    (funcall hook condition hook)))
+    (:yes (cond (*debugger-hook*
+                 (let ((hook *debugger-hook*)
+                       (*debugger-hook* nil))
+                   (funcall hook condition hook)))
+                (t
+                 (invoke-debugger condition))))
     (:no (abort))))
 
 (defun show-error (error)
@@ -2699,17 +2737,18 @@ set y [winfo y ~a]
 		(unless (or (find-package :swank)
                             (find-package :fly))
                   (quit)))
-  #+cmu (progn (debug:backtrace most-positive-fixnum *error-output*)
-                ;; FIXME - this should be generalized
-	       (unless (or (find-package :swank)
-                           (find-package :fly))
-                 (quit))))
+  #+(or cmu scl)
+  (progn (debug:backtrace most-positive-fixnum *error-output*)
+         ;; FIXME - this should be generalized
+         (unless (or (find-package :swank)
+                     (find-package :fly))
+           (ext:quit))))
 
 ;;;; Error handling
 
 (defvar *ltk-default-debugger*
-  '((fdefinition (find-symbol "DEBUGGER" "FLY"))
-    (fdefinition (find-symbol "SWANK-DEBUGGER-HOOK" "SWANK")))
+  '((fdefinition (find-symbol '#:debugger :fly))
+    (fdefinition (find-symbol #:swank-debugger-hook  :swank)))
   "A list of debuggers to try before falling back to the Lisp system's debugger.
   An item in this list may be a function, a symbol naming a function, or a
   complex form to evaluate.  If it is a complex form, it will be evaled inside
@@ -2846,7 +2885,7 @@ tk input to terminate"
 					:no-event-value no-event)))
 		 (cond
 		   ((null event)
-                    (close (wish-stream *wish*))
+                    (ignore-errors (close (wish-stream *wish*)))
                     (exit-wish)
 		    nil)
 		   ((eql event no-event)
@@ -3070,7 +3109,7 @@ When an error is signalled, there are four things LTk can do:
 	(cons
 	 (list instance-name
 	       (append
-		(list 'MAKE-INSTANCE (list 'QUOTE class-name))
+		(list 'make-instance (list 'quote class-name))
 		(if parent (list :master parent) nil)
 		keyargs))
 	 subwidgets))))
@@ -3128,11 +3167,11 @@ When an error is signalled, there are four things LTk can do:
 	     (bstop  (make-instance 'button :master fr :text "Stop"  :command 'stop-rotation))
 	     (b1 (make-instance 'button :master bar :text "Hallo"
 				:command (lambda ()
-					   (format T "Hallo~%")
+					   (format t "Hallo~%")
 					   (finish-output))))
 	     (b2 (make-instance 'button :master bar :text  "Welt!"
 				:command (lambda ()
-					   (format T "Welt~%")
+					   (format t "Welt~%")
 					   (finish-output))))
 	     (f (make-instance 'frame :master bar))
 	     (l (make-instance 'label :master f :text "Test:"))
@@ -3140,10 +3179,11 @@ When an error is signalled, there are four things LTk can do:
 	     (e (make-instance 'entry :master bar))
 	     (b4 (make-instance 'button :master bar :text "get!"
 				:command (lambda ()
-					   (format T "content of entry:~A~%" (text e))
+					   (format t "content of entry:~A~%" (text e))
 					   (finish-output))))
 	     (b5 (make-instance 'button :master bar :text "set!"
-				:command (lambda () (setf (text e) "test of set"))))
+				:command (lambda ()
+                                           (setf (text e) "test of set"))))
 	     (sc (make-instance 'scrolled-canvas :borderwidth 2 :relief :raised))
 	     (c (canvas sc))
 	     (lines nil)
@@ -3220,9 +3260,9 @@ When an error is signalled, there are four things LTk can do:
 	(pack b4 :side :left)
 	(pack b5 :side :left)
 	(dotimes (i 100)
-	  (let ((w (* i 2.8001)))
-	    (let ((x (+ 250 (* 150.0 (sin w))))
-		  (y (+ 200 (* 150.0 (cos w)))))
+	  (let ((w (* i 2.8001f0)))
+	    (let ((x (+ 250 (* 150.0f0 (sin w))))
+		  (y (+ 200 (* 150.0f0 (cos w)))))
 	      (push y lines)
 	      (push x lines)
 	      )))
@@ -3231,12 +3271,13 @@ When an error is signalled, there are four things LTk can do:
 	(create-text c 10 10 "Ltk Demonstration")
 	)))
 
-(defvar *angle* 0)
-(defvar *angle2* 0)
-(defvar *angle3* 0)
-
+(defvar *angle* 0.0f0)
+(defvar *angle2* 0.0f0)
+(defvar *angle3* 0.0f0)
+(declaim (single-float *angle* *angle2* *angle3*))
 
 (defun rotate()
+  (declare (optimize speed))
   (let ((*debug-tk* nil))
     (let ((lines nil)
 	  (dx (* 50 (sin *angle2*)))
@@ -3244,12 +3285,13 @@ When an error is signalled, there are four things LTk can do:
 	  (wx (sin *angle3*))
 ;	  (wy (cos *angle3*))
 	  )
-      (incf *angle* 0.1)
-      (incf *angle2* 0.03)
-      (incf *angle3* 0.01)
+      (incf *angle* 0.1f0)
+      (incf *angle2* 0.03f0)
+      (incf *angle3* 0.01f0)
       
       (dotimes (i 100)
-	(let ((w (+ *angle* (* i 2.8001))))
+        (declare (fixnum i))
+	(let ((w (+ *angle* (* i 2.8001f0))))
 	  (let ((x (+ dx 250 (* 150 (sin w) wx)))
 		(y (+ dy 200 (* 150 (cos w)))))
 	    (push y lines)
@@ -3261,7 +3303,7 @@ When an error is signalled, there are four things LTk can do:
 
 (defun test-rotation()
   (setf *debug-tk* nil)
-  (time (dotimes (i 100)
+  (time (dotimes (i 1000)
 	  (rotate)))
   (finish-output)
   )

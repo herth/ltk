@@ -18,20 +18,16 @@
 
 #+:sbcl (require 'sb-bsd-sockets)
 
-(defpackage "LTK-REMOTE"
-  (:use "COMMON-LISP" "LTK"
-	#+:cmu "EXT"
-	#+:sbcl "SB-EXT"
-	#+:sbcl "SB-THREAD"
-	#+:sbcl  "SB-BSD-SOCKETS")
-	
+(defpackage :ltk-remote
+  (:use :common-lisp :ltk
+        #+(or :cmu :scl) :ext
+       #+:sbcl :sb-ext
+       #+:sbcl :sb-thread
+       #+:sbcl :sb-bsd-sockets)
   (:export
-   "WITH-REMOTE-LTK"
-   ))
-
+   #:with-remote-ltk))
 
 (in-package ltk-remote)
-
 
 ;;; cmu version
 
@@ -43,53 +39,54 @@
           (ldb (byte 8 8)  address)
           (ldb (byte 8 0)  address)))
 
-
 (defvar *stop-remote* nil)
 
-
 #+:cmu
-(defmacro with-remote-ltk (port &rest body)
-  `(multiprocessing::make-process
-    (lambda () 
-      (format t "mark 1~&")(force-output)
+(defmacro with-remote-ltk (port bindings form &rest cleanup)
+  `(mp:make-process
+    (lambda ()
       (setf *stop-remote* nil)
-	(let ((fd (ext:create-inet-listener ,port)))
-	  (format t "mark 2~&")(force-output)
-	  (format t "fd: ~a ~&" fd) (force-output)
-	  (unless (> fd 0) (error "Cannot bind port ~D." ,port))
-	  (force-output)
-	  (loop
-	    (when *stop-remote*
-	      (close fd)
-	      (return))
-	    ;; Wait for new connection
-	    (multiprocessing::process-wait-until-fd-usable fd :input)
-	    (format t "~&; At ~D Got Connection...~%" (get-internal-real-time))
-	    (force-output)
-	    (multiple-value-bind (new-fd remote-host) (ext:accept-tcp-connection fd)
-	      (format t "~&; At ~D Have Connection...~%" (get-internal-real-time))
-	      (let* ((host-entry (ext:lookup-host-entry remote-host))
-		     (stream (sys:make-fd-stream new-fd :input t :output t)))
-		(format t "Connection from ~A" (if host-entry
-						   (ext:host-entry-name host-entry)
-						 (ip-address-string remote-host)))
-		(format t "~&; At ~D Established Connection.~%" (get-internal-real-time))
-					;(format stream "Hallo Du!~&")
-					;(force-output stream)
-					;(close stream)
-		(multiprocessing::make-process
-                 (lambda ()
-                   (let ,bindings
-                     (ltk::call-with-ltk (lambda ()
-                                           ,form)
-                                         :stream stream)
-                     ,@cleanup))
-		 :name (format nil "LTK connection from ~A"
-			       (if host-entry
-				   (ext:host-entry-name host-entry)
-				 (ip-address-string remote-host))))
-		)))
-	  (close fd)))))
+      (let ((fd (ext:create-inet-listener ,port :stream :reuse-address t)))
+        (unwind-protect
+             (loop
+                (when (or *stop-remote* mp::*quitting-lisp*)
+                  (return))
+                (let ((winp (mp:process-wait-until-fd-usable fd :input 2)))
+                  (when (or *stop-remote* mp::*quitting-lisp*)
+                    (return))
+                  (when winp
+                    (let ((new-fd (ignore-errors (ext:accept-tcp-connection fd))))
+                      (when new-fd
+                        (mp:make-process
+                         (lambda ()
+                           (multiple-value-bind (server-address server-port)
+                               (ext:get-socket-host-and-port new-fd)
+                             (multiple-value-bind (remote-address remote-port)
+                                 (ext:get-peer-host-and-port new-fd)
+                               (flet ((host-name (address)
+                                        (let ((host-entry (ext:lookup-host-entry address)))
+                                          (if host-entry
+                                              (ext:host-entry-name host-entry)
+                                              (ip-address-string address)))))
+                                 (let ((stream (sys:make-fd-stream new-fd :input t :output t))
+                                       (server-name (host-name server-address))
+                                       (remote-name (host-name remote-address)))
+                                   (format t "Connection to ~A:~D from ~A:~D at "
+                                           server-name server-port
+                                           remote-name remote-port)
+                                   (ext:format-universal-time t (get-universal-time)
+                                                              :style :rfc1123)
+                                   (setf (mp:process-name mp:*current-process*)
+                                         (format nil "LTK connection to ~A:~D from ~A:~D"
+                                                 server-name server-port
+                                                 remote-name remote-port))
+                                   (let ,bindings
+                                     (ltk::call-with-ltk (lambda ()
+                                                           ,form)
+                                                         :stream stream)
+                                     ,@cleanup))))))))))))
+          (unix:unix-close fd))))
+    :name (format nil "LTK connection listener on port ~D" ,port)))
 
 #+:cmu
 (defun stop-server ()
@@ -97,11 +94,66 @@
 
 #+:cmu
 (defun start-mp ()
-  (setf mp::*idle-process* mp::*initial-process*))
+   #+nil (setf mp::*idle-process* mp::*initial-process*)
+   (mp::startup-idle-and-top-level-loops))
+
 
 #+:cmu
 (defun start-remote (port)
   (multiprocessing::make-process #'(lambda () (ltk-remote-server port))))
+
+;;; SCL version
+
+#+:scl
+(defmacro with-remote-ltk (port bindings form &rest cleanup)
+  `(thread:thread-create
+    (lambda ()
+      (setf *stop-remote* nil)
+      (let ((fd (ext:create-inet-listener ,port :stream :reuse-address t)))
+        (unwind-protect
+             (loop
+                (when (or *stop-remote* thread:*quitting-lisp*)
+                  (return))
+                (let ((winp (sys:wait-until-fd-usable fd :input 2)))
+                  (when (or *stop-remote* thread:*quitting-lisp*)
+                    (return))
+                  (when winp
+                    (let ((new-fd (ignore-errors (ext:accept-tcp-connection fd))))
+                      (when new-fd
+                        (thread:thread-create
+                         (lambda ()
+                           (multiple-value-bind (server-address server-port)
+                               (ext:get-socket-host-and-port new-fd)
+                             (multiple-value-bind (remote-address remote-port)
+                                 (ext:get-peer-host-and-port new-fd)
+                               (flet ((host-name (address)
+                                        (let ((host-entry (ext:lookup-host-entry address)))
+                                          (if host-entry
+                                              (ext:host-entry-name host-entry)
+                                              (ext:ip-address-string address)))))
+                                 (let ((stream (sys:make-fd-stream new-fd :input t :output t))
+                                       (server-name (host-name server-address))
+                                       (remote-name (host-name remote-address)))
+                                   (format t "Connection to ~A:~D from ~A:~D at "
+                                           server-name server-port
+                                           remote-name remote-port)
+                                   (ext:format-universal-time t (get-universal-time)
+                                                              :style :rfc1123)
+                                   (setf (thread:thread-name thread:*thread*)
+                                         (format nil "LTK connection to ~A:~D from ~A:~D"
+                                                 server-name server-port
+                                                 remote-name remote-port))
+                                   (let ,bindings
+                                     (ltk::call-with-ltk (lambda ()
+                                                           ,form)
+                                                         :stream stream)
+                                     ,@cleanup))))))))))))
+          (unix:unix-close fd))))
+    :name (format nil "LTK connection listener on port ~D" ,port)))
+
+#+:scl
+(defun stop-server ()
+  (setf *stop-remote* t))
 
 
 ;;; sbcl version
@@ -247,7 +299,8 @@
 		    ))
 	;  (b (make-instance 'button :text "Show" :command ))
 	  )
-     (bind l "<Button-1>" (lambda ()
+     (bind l "<Button-1>" (lambda (event)
+                            (declare (ignore event))
 			    (let ((sel (listbox-get-selection l)))
 			      (format t "selection: ~a~%" sel)
 			      (force-output)
