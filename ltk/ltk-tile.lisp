@@ -15,9 +15,9 @@
  
 |#
 
-(defpackage "LTK-TILE"
-  (:use "COMMON-LISP"
-	"LTK"
+(defpackage :ltk-tile
+  (:use :common-lisp
+	:ltk
 	)
   (:export
    #:activate-tile
