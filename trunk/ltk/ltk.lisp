@@ -2747,8 +2747,8 @@ set y [winfo y ~a]
 ;;;; Error handling
 
 (defvar *ltk-default-debugger*
-  '((fdefinition (find-symbol '#:debugger :fly))
-    (fdefinition (find-symbol #:swank-debugger-hook  :swank)))
+  '((fdefinition (find-symbol (symbol-name '#:debugger) :fly))
+    (fdefinition (find-symbol (symbol-name '#:swank-debugger-hook)  :swank)))
   "A list of debuggers to try before falling back to the Lisp system's debugger.
   An item in this list may be a function, a symbol naming a function, or a
   complex form to evaluate.  If it is a complex form, it will be evaled inside

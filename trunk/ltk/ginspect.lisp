@@ -1,13 +1,13 @@
 ;;; graphical inspector
 
-(defpackage "GINS"
-  (:use "COMMON-LISP"
-	"LTK"
+(defpackage :gins
+  (:use :common-lisp
+	:ltk
 	;"SB-IMPL"
 	)
-  (:export "GINSPECT"))
+  (:export #:ginspect))
 
-(in-package "GINS")
+(in-package :gins)
 
 
 (defvar *inspect-length* 100)
@@ -194,7 +194,17 @@
                     (funcall (sb-impl::dsd-accessor-name dd-slot) object))
               parts-list)))))
 
-#-:sbcl
+#+(or :scl :cmu)
+(defun inspected-structure-elements (object)
+  (let ((parts-list '())
+        (info (kernel:layout-info (kernel:layout-of object))))
+    (when (kernel::defstruct-description-p info)
+      (dolist (dd-slot (kernel:dd-slots info) (nreverse parts-list))
+        (push (cons (kernel:dsd-name dd-slot)
+                    (funcall (kernel:dsd-accessor dd-slot) object))
+              parts-list)))))
+
+#-(or :sbcl :scl :cmu)
 (defun inspected-structure-elements (object)
   (list))
 
@@ -207,9 +217,13 @@
 #+:sbcl
 (defun inspected-standard-object-elements (object)
   (let ((reversed-elements nil)
-	(class-slots (sb-pcl::class-slots (class-of object))))
+        (class-slots (#+:sbcl sb-pcl::class-slots
+                              #+:scl clos:class-slots
+                              (class-of object))))
     (dolist (class-slot class-slots (nreverse reversed-elements))
-      (let* ((slot-name (slot-value class-slot 'sb-pcl::name))
+      (let* ((slot-name (slot-value class-slot
+                                    #+:sbcl 'sb-pcl::name
+                                    #+:scl 'clos::name))
 	     (slot-value (if (slot-boundp object slot-name)
 			     (slot-value object slot-name)
 			     *inspect-unbound-object-marker*)))
@@ -265,8 +279,10 @@
 		  "The object is a ~:[~;displaced ~]VECTOR of length ~W.~%"
 		  #+:sbcl (and (sb-impl::array-header-p object)
 			       (sb-impl::%array-displaced-p object))
-		  #-:sbcl nil
-		  (length object))
+                  #+(or :scl :cmu) (and (kernel:array-header-p object)
+                                        (kernel:%array-displaced-p object))
+                  #-(or :sbcl :scl :cmu) nil
+                 (length object))
 	  nil
 	  ;; FIXME: Should we respect *INSPECT-LENGTH* here? If not, what
 	  ;; does *INSPECT-LENGTH* mean?
@@ -300,7 +316,9 @@
 		    (array-element-type object)
 		    #+:sbcl (and (sb-impl::array-header-p object)
 				 (sb-impl::%array-displaced-p object))
-		    #-:sbcl nil
+                    #+(or :scl :cmu) (and (kernel:array-header-p object)
+                                          (kernel:%array-displaced-p object))
+                    #-(or :sbcl :scl :cmu) nil
 		    dimensions)
 	    t
 	    (nreverse reversed-elements))))
