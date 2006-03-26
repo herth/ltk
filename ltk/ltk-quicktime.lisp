@@ -5,9 +5,9 @@
 (defpackage :ltk-quicktime
   (:use :common-lisp :ltk)
   (:export
-   :quicktime
-   ;play-movie
-   :stop-movie))
+   #:quicktime
+   #:play-movie
+   #:stop-movie))
 
 (in-package :ltk-quicktime)
 

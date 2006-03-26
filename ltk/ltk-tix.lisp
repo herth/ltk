@@ -1,13 +1,13 @@
 ;;; tix specific extension to ltk
 
-(defpackage "LTK-TIX"
-  (:use "COMMON-LISP"
-	"LTK"
+(defpackage :ltk-tix
+  (:use :common-lisp
+	:ltk
 	)
   (:export
-   	"BALLOON"
-	"BALLOON-BIND"
-	"BALLOON-UNBIND"	
+   	#:balloon
+	#:balloon-bind
+	#:balloon-unbind
    ))
 
 (in-package ltk-tix)
@@ -27,13 +27,13 @@
 
 
 (defmethod initialize-instance :after ((b balloon) &key)
-  (format-wish "tixBalloon ~a" (path b)))
+  (format-wish "tixBalloon ~a" (widget-path b)))
 
 (defgeneric balloon-bind (b w &key msg balloonmsg statusmsg))
 (defmethod balloon-bind ((balloon balloon) (widget widget) &key msg balloonmsg statusmsg)
-  (format-wish "~a bind ~a~@[ -msg {~a}~]~@[ -balloonmsg {~a}~]~@[ -statusmsg {~a}~]" (path balloon) (path widget) msg balloonmsg statusmsg))
+  (format-wish "~a bind ~a~@[ -msg {~a}~]~@[ -balloonmsg {~a}~]~@[ -statusmsg {~a}~]" (widget-path balloon) (widget-path widget) msg balloonmsg statusmsg))
 
 (defgeneric balloon-unbind (b w))
 (defmethod balloon-unbind ((balloon balloon) (widget widget))
-  (format-wish "~a unbind ~a" (path balloon) (path widget)))
+  (format-wish "~a unbind ~a" (widget-path balloon) (widget-path widget)))
 
