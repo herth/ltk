@@ -346,8 +346,9 @@ toplevel             x
 (in-package :ltk)
 
 (defun dbg (fmt &rest args)
-  (apply #'format t fmt args)
-  (finish-output))
+  (when *debug-tk*
+    (apply #'format t fmt args)
+    (finish-output)))
 
 ;communication with wish
 ;;; this ist the only function to adapted to other lisps
@@ -609,10 +610,25 @@ toplevel             x
     (coerce s 'simple-string)))
 
 ;;; read from wish 
-(defun read-wish()
+(defun read-wish ()
+  "Reads from wish. If the next thing in the stream is looks like a lisp-list
+  read it as such, otherwise read one line as a string."
+  ;; FIXME: The problem here is that wish sends us error-messages on the same
+  ;; stream that we use for our own communication. It would be good if we could
+  ;; get the error-messages (that are presumably written to stderr) onto a separate
+  ;; stream. The current workaround is based on the observation that wish error
+  ;; messages always seem to end on a newline, but this may not always be so.
+  ;;
+  ;; READ-ALL would be a bad idea anyways, as in that case we could accidentally
+  ;; snarf a real message from the stream as well, if it immediately followed
+  ;; an error message.
   (let ((*read-eval* nil)
-        (*package* (find-package :ltk)))
-    (read (wish-stream *wish*) nil nil)))
+        (*package* (find-package :ltk))
+	(stream (wish-stream *wish*)))
+    (if (eql #\( (peek-char t stream nil))
+	(read stream nil)
+	(read-line stream nil))))
+
 
 (defun can-read (stream)
   "return t, if there is something to READ on the stream"
@@ -637,19 +653,20 @@ event to read and blocking is set to nil"
           no-event-value)))
 
 (defun read-data ()
-  "read data from wish"
-  (let ((d (read-wish)))
-    (if (listp d) ; paranoia check when we do not read a list eg. error messages from wish
-        (progn
-          (loop while (not (equal (first d) :data))
-             do
-               (setf (wish-event-queue *wish*)
-                     (append (wish-event-queue *wish*) (list d)))
-             ;;(format t "postponing event: ~a ~%" d) (finish-output)
-               (setf d (read-wish)))
-                                        ;(format t "readdata: ~s~%" d) (finish-output)
-          (second d))
-        (format t "read-data:~a~a~%" d (read-all (wish-stream *wish*))))))
+  "Read data from wish. Non-data events are postponed, bogus messages (eg.
++error-strings) are ignored."
+  (loop
+     for data = (read-wish)
+     when (listp data) do
+       (cond ((eq (first data) :data)
+	      (dbg "read-data: ~s~%" data)
+	      (return (second data)))
+	     (t
+	      (dbg "postponing event: ~s~%" data)
+	      (setf (wish-event-queue *wish*)
+		    (append (wish-event-queue *wish*) (list data)))))
+       else do
+       (dbg "read-data error: ~a~%" data)))
 
 (defun read-keyword ()
   (let ((string (read-data)))
@@ -2841,7 +2858,8 @@ set y [winfo y ~a]
 (defun break-mainloop ()
   (setf *break-mainloop* t))
 
-(defmethod handle-output (key params))
+(defmethod handle-output (key params)
+  (declare (ignore key params)))
 
 (defun process-one-event (event)
   (when event
