@@ -279,7 +279,6 @@ toplevel             x
            #:pack
            #:pack-forget
            #:pack-propagate
-           #:pane-configure
            #:paned-window
            #:photo-image
            #:place
@@ -411,7 +410,7 @@ toplevel             x
 		  (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* "0.8819")
+(defvar *ltk-version* "0.889")
 
 ;;; global var for holding the communication stream
 (defstruct (ltk-connection (:constructor make-ltk-connection ())
@@ -475,6 +474,7 @@ toplevel             x
   ;; proc esc {s} {puts "\"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\""}
   ;(send-wish "proc esc {s} {puts \"\\\"[regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]\\\"\"} ")
   ;(send-wish "proc escape {s} {return [regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]} ")
+  (send-wish "package require Tk")
   (send-wish "proc escape {s} {regsub -all {\\\\} $s {\\\\\\\\} s1;regsub -all {\"} $s1 {\\\"} s2;return $s2}")
   ;;; proc senddata {s} {puts "(data \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
   (send-wish "proc senddata {s} {puts \"(:data [escape $s])\";flush stdout}")
@@ -1541,11 +1541,6 @@ can be passed to AFTER-CANCEL"
 
 
 (defwidget paned-window (widget) () "panedwindow")
-
-(defgeneric pane-configure (window option value))
-(defmethod pane-configure ((pw paned-window) option value)
-  (format-wish "~a paneconfigure ~a {~a}" (widget-path pw) option value)
-  pw)
 
 (defgeneric add-pane (window widget))
 (defmethod add-pane ((pw paned-window) (w widget))
@@ -2707,9 +2702,9 @@ set y [winfo y ~a]
 
 ;;;; Visual error handlers
 
-(defun error-popup (message title icon)
+(defun error-popup (message title icon &key (allow-yesno-p t))
   (ecase (message-box message title
-                     (if (find-restart 'continue)
+                     (if (and allow-yesno-p (find-restart 'continue))
                          "yesno"
                          "ok")
                      icon)
@@ -2734,13 +2729,14 @@ set y [winfo y ~a]
 
 (defun note-error (error)
   (declare (ignore error))
-  (error-popup "An internal error has occured." "Error" "error"))
+  (error-popup "An internal error has occured." "Error" "error"
+               :allow-yesno-p nil))
 
 (defun debug-error (error)
   (debug-popup error "Error"))
 
 (defun show-warning (warn)
-  (error-popup (princ-to-string warn) "Warning" :warning))
+  (message-box (princ-to-string warn) "Warning" "ok" "warning"))
 
 (defun debug-warning (warn)
   (debug-popup warn "Warning"))
@@ -2772,11 +2768,14 @@ set y [winfo y ~a]
   an IGNORE-ERRORS, and should return a function, a symbol naming a function,
   or NIL.")
 
-(defvar *debug-settings-table*
-  '(((0 :minimum) :handle-errors nil    :handle-warnings nil    :debugger nil)
-    ((1 :deploy)  :handle-errors t      :handle-warnings nil    :debugger t)
-    ((2 :develop) :handle-errors :debug :handle-warnings nil    :debugger t)
-    ((3 :maximum) :handle-errors :debug :handle-warnings t      :debugger t)))
+(defparameter *debug-settings-table*
+  (copy-tree
+   '(((0 :minimum) :handle-errors nil    :handle-warnings nil     :debugger nil)
+     ((1 :deploy)  :handle-errors t      :handle-warnings nil     :debugger t)
+     ((2 :develop) :handle-errors :debug :handle-warnings :simple :debugger t)
+     ((3 :maximum) :handle-errors :debug :handle-warnings t       :debugger t))))
+
+
 
 (defun debug-setting-keys (debug-setting)
   "Given a debug setting (see WITH-LTK for details), return a list of appropriate
@@ -2795,12 +2794,13 @@ set y [winfo y ~a]
       (:debug (values nothing #'debug-error))
       ((nil) (values nothing nothing)))))
 
-(defun compute-warning-handler (handle-warnings)
+(defun compute-warning-handlers (handle-warnings)
   (let ((nothing (constantly nil)))
     (ecase handle-warnings
-      ((t) #'show-warning)
-      (:debug #'debug-warning)
-      ((nil) nothing))))
+      ((t) (values #'show-warning #'show-warning))
+      (:simple (values #'show-warning nothing))
+      (:debug (values #'debug-warning #'debug-warning))
+      ((nil) (values nothing nothing)))))
 
 (defun compute-call-with-debugger-hook (debugger)
   "Return a function that will call a thunk with debugger-hook bound appropriately."
@@ -2836,18 +2836,19 @@ set y [winfo y ~a]
 (defun make-condition-handler-function
     (&key handle-errors handle-warnings (debugger t) &allow-other-keys)
   "Return a function that will call a thunk with the appropriate condition handlers in place, and *debugger-hook* bound as needed."
-  (multiple-value-bind (simple-error error) (compute-error-handlers handle-errors)
-    (let ((warning (compute-warning-handler handle-warnings))
-	  (call-with-debugger-hook (compute-call-with-debugger-hook debugger)))
-      (lambda (thunk)
-	(funcall call-with-debugger-hook
-		 (lambda ()
-		   (handler-bind ((simple-error simple-error)
-				  (error error)
-				  (warning warning))
-		     (funcall thunk))))))))
-
-
+  (multiple-value-bind (simple-error error)
+      (compute-error-handlers handle-errors)
+    (multiple-value-bind (simple-warning warning)
+        (compute-warning-handlers handle-warnings)
+      (let ((call-with-debugger-hook (compute-call-with-debugger-hook debugger)))
+        (lambda (thunk)
+          (funcall call-with-debugger-hook
+                   (lambda ()
+                     (handler-bind ((simple-error simple-error)
+                                    (error error)
+                                    (simple-warning simple-warning)
+                                    (warning warning))
+                       (funcall thunk)))))))))
 
 ;;;; main event loop, runs until stream is closed by wish (wish exited) or
 ;;;; the variable *exit-mainloop* is set
@@ -3074,7 +3075,7 @@ When an error is signalled, there are four things LTk can do:
 
 ;;; wrapper macro - initializes everything, calls body and then mainloop
 
-(defmacro with-ltk ((&rest keys &key (debug 2) stream serve-event)
+(defmacro with-ltk ((&rest keys &key (debug 2) stream serve-event &allow-other-keys)
 		    &body body)
   "Create a new Ltk connection, evaluate BODY, and enter the main loop.
 
@@ -3092,12 +3093,16 @@ When an error is signalled, there are four things LTk can do:
   (declare (ignore debug serve-event stream))
   `(call-with-ltk (lambda () ,@body) ,@keys))
 
-(defun call-with-ltk (thunk &rest keys &key (debug 2) stream serve-event)
+(defun call-with-ltk (thunk &rest keys &key (debug 2) stream serve-event
+                      &allow-other-keys)
   "Functional interface to with-ltk, provided to allow the user the build similar macros."
   (declare (ignore stream))
   (flet ((start-wish ()
-           (apply #'start-wish (append (debug-setting-keys debug)
-                                       (filter-keys '(:stream) keys))))
+           (apply #'start-wish
+                  (append (filter-keys '(:stream :handle-errors
+                                         :handle-warnings :debugger)
+                                       keys)
+                          (debug-setting-keys debug))))
          (mainloop () (apply #'mainloop (filter-keys '(:serve-event) keys))))
     (let ((*wish* (make-ltk-connection)))
       (unwind-protect
