@@ -94,17 +94,21 @@ o tooltip
   ((rect :accessor rect)
    (color :accessor bar-color :initarg :color :initform :blue)
    (percent :accessor percent :initform 0 :initarg :percent)
+   (text-display :accessor text-display :initform nil :initarg :text-display)
    ))
 
 (defmethod redraw ((progress progress))
   (let ((width (window-width progress))
 	(height (window-height progress)))
+    (set-coords progress  (text-display progress) (list (truncate width 2) (truncate height 2)))
     (set-coords progress (rect progress)
 		(list 0 0 (truncate (* (percent progress) width) 100) height))))
 
 (defmethod initialize-instance :after ((progress progress) &key)
   (configure progress :borderwidth 2 :relief :sunken)
   (setf (rect progress) (create-rectangle progress 0 0 0 20))
+  (setf (text-display progress) (make-instance 'canvas-text :canvas progress :x 0 :y 0 :text ""))
+  (configure (text-display progress) :anchor :center :fill :yellow)
   (itemconfigure progress (rect progress) :fill    (bar-color progress))
   (itemconfigure progress (rect progress) :outline (bar-color progress)))
 
@@ -117,6 +121,8 @@ o tooltip
   (declare (ignore val))
   (redraw progress))
 
+(defmethod (setf text) (value (progress progress))
+  (configure (text-display progress) :text value))
 
 ;;;; history entry widget
 ;;;;
