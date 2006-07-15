@@ -3376,7 +3376,7 @@ When an error is signalled, there are four things LTk can do:
 			       (p2x (+ (- (* 3 (truncate width 4))  (truncate diam 2)) (truncate (*  width  dx2) (* 4.5 w))))
 			       (p2y (+ (- (truncate height 2) (truncate diam 2)) (truncate (* height dy2) (* 2.3 h))))
 			       
-			       )q
+			       )
 			  (setf *debug-tk* nil)
 			  (unless (and (= x old-x)
 				       (= y old-y))
