@@ -344,11 +344,6 @@ toplevel             x
 
 (in-package :ltk)
 
-(defun dbg (fmt &rest args)
-  (when *debug-tk*
-    (apply #'format t fmt args)
-    (finish-output)))
-
 ;communication with wish
 ;;; this ist the only function to adapted to other lisps
 
@@ -410,7 +405,7 @@ toplevel             x
 		  (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* "0.889")
+(defvar *ltk-version* "0.90")
 
 ;;; global var for holding the communication stream
 (defstruct (ltk-connection (:constructor make-ltk-connection ())
@@ -455,9 +450,9 @@ toplevel             x
 
 ;;; verbosity of debug messages, if true, then all communication
 ;;; with tk is echoed to stdout
-(defvar *debug-tk* t)
+(defvar *debug-tk* nil)
 
-(defvar *trace-tk* t)
+(defvar *trace-tk* nil)
 
 (defvar *wish-pathname*
   #+freebsd "wish8.4"
@@ -466,6 +461,11 @@ toplevel             x
 (defvar *wish-args* '("-name" "LTK"))
 
 (defvar *init-wish-hook* nil)
+
+(defun dbg (fmt &rest args)
+  (when *debug-tk*
+    (apply #'format t fmt args)
+    (finish-output)))
 
 ;;; setup of wish
 ;;; put any tcl function definitions needed for running ltk here
@@ -581,8 +581,9 @@ toplevel             x
          (finish-output))
        (let ((*print-pretty* nil)
              (,stream (wish-stream *wish*)))
-         (declare (type stream ,stream)
-                  (optimize (speed 3)))
+         (declare (type stream ,stream))
+         ;(optimize (speed 3)))
+         
          (format ,stream ,control ,@args)
          (format ,stream "~%")
          (finish-output ,stream))
@@ -2859,6 +2860,8 @@ set y [winfo y ~a]
 (defun break-mainloop ()
   (setf *break-mainloop* t))
 
+(defgeneric handle-output (key params))
+
 (defmethod handle-output (key params)
   (declare (ignore key params)))
 
@@ -3300,7 +3303,7 @@ When an error is signalled, there are four things LTk can do:
 (declaim (single-float *angle* *angle2* *angle3*))
 
 (defun rotate()
-  (declare (optimize speed))
+;  (declare (optimize speed)    (single-float *angle* *angle2* *angle3*))
   (let ((*debug-tk* nil))
     (let ((lines nil)
 	  (dx (* 50 (sin *angle2*)))
@@ -3328,17 +3331,14 @@ When an error is signalled, there are four things LTk can do:
   (setf *debug-tk* nil)
   (time (dotimes (i 1000)
 	  (rotate)))
-  (finish-output)
-  )
+  (finish-output))
+
 (defun start-rotation()
-  (setf *debug-tk* nil)
   (setf *do-rotate* t)
-  (rotate)
-  )
+  (rotate))
+
 (defun stop-rotation()
-  (setf *debug-tk* t)
-  (setf *do-rotate* nil)
-  )
+  (setf *do-rotate* nil))
 
 
 ;;;; the eyes :)
@@ -3376,7 +3376,7 @@ When an error is signalled, there are four things LTk can do:
 			       (p2x (+ (- (* 3 (truncate width 4))  (truncate diam 2)) (truncate (*  width  dx2) (* 4.5 w))))
 			       (p2y (+ (- (truncate height 2) (truncate diam 2)) (truncate (* height dy2) (* 2.3 h))))
 			       
-			       )
+			       )q
 			  (setf *debug-tk* nil)
 			  (unless (and (= x old-x)
 				       (= y old-y))
