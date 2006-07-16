@@ -66,6 +66,12 @@ o tooltip
    #:register-tooltip
    #:schedule-tooltip
 
+   ;; list-select widget
+   #:list-select
+   #:data
+   #:list-select-display
+   #:selected-elements
+   #:ltk-mw-demo
    ))
 
 (in-package :ltk-mw)
@@ -99,6 +105,7 @@ o tooltip
 
 (defmethod redraw ((progress progress))
   (let ((width (window-width progress))
+        
 	(height (window-height progress)))
     (set-coords progress  (text-display progress) (list (truncate width 2) (truncate height 2)))
     (set-coords progress (rect progress)
@@ -556,3 +563,72 @@ o tooltip
      (format t "data: ~s~%" (data tree)) (force-output)
      )))
 	    
+;;; list-select box widget
+
+(defclass list-select (listbox)
+  ((data :accessor data :initarg :data :initform nil)
+   ))
+
+(defgeneric list-select-display (select item))
+
+(defmethod list-select-display ((select list-select) item)
+  (format nil "~a" item))
+
+(defgeneric selected-elements (select))
+
+(defmethod selected-elements ((select list-select))
+  (let ((selection (listbox-get-selection select)))
+    (when selection
+      (mapcar (lambda (index)
+                (nth index (data select)))
+              selection))))
+
+(defmethod (setf data) :after (val (select list-select))
+  (listbox-clear select)
+  (listbox-append select (mapcar (lambda (item)
+                                   (list-select-display select item))
+                                 (data select))))
+
+
+;;; demo
+
+(defclass list-select-demo-entry ()
+  ((file :accessor file :initarg :file :initform nil)
+   (size :accessor size :initarg :size :initform 0)))
+
+(defmethod list-select-display ((ls list-select) (entry list-select-demo-entry))
+  (format nil "~a ~d Bytes" (namestring (file entry)) (size entry)))
+
+(defun make-list-select-demo (&optional (master nil))
+  (let* ((f (make-instance 'frame :master master))
+         (ls (make-instance 'list-select :master f :selectmode :multiple))
+         (f2 (make-instance 'frame :master f))
+         (lsize (make-instance 'label :master f2 :text "Total Size:"))
+         (bsize (make-instance 'button :text "Calc" :master f2
+                               :command (lambda ()
+                                          (setf (text lsize)
+                                                (format nil "Total Size: ~a" (loop for e in (selected-elements ls)
+                                                                                  summing (size e))))))))
+    (pack ls :side :top :expand t :fill :both)
+    (pack f2 :side :top :fill :x)
+    (pack bsize :side :left)
+    (pack lsize :side :left)
+    (setf (data ls)
+          (mapcar (lambda (p)
+                    (make-instance 'list-select-demo-entry
+                                   :file p
+                                   :size (with-open-file (s p)
+                                           (file-length s))))
+                  (directory (make-pathname :name :wild :type :wild))))
+    f))
+
+(defun list-select-demo ()
+  (with-ltk ()
+    (let ((f (make-list-select-demo)))
+      (pack f :side :top :expand t :fill :both))))
+
+
+(defun ltk-mw-demo ()
+  (with-ltk ()
+    (pack (make-list-select-demo) :side :top :expand t :fill :both)
+    ))
