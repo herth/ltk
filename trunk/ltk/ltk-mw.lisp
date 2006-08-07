@@ -425,7 +425,7 @@ o tooltip
 
 (defclass tooltip (toplevel)
   ((label :accessor tooltip-label :initarg :label)
-   (popup-time :accessor popup-time :initform 200 :initarg :popup-time)
+   (popup-time :accessor popup-time :initform 1000 :initarg :popup-time)
    ))
 
 (defparameter *tooltip-afterid* nil)
@@ -438,17 +438,19 @@ o tooltip
 
 (defgeneric show (tooltip text x y))
 (defmethod show ((tooltip tooltip) text x y)
-  (setf (text (tooltip-label tooltip)) (typecase text
-					 (function
-					  (with-output-to-string (s)
-					    (funcall text s)))
-					 (string
-					  text)
-					 (t
-					  (format nil "~a" text))))
-  (set-geometry-xy tooltip (truncate x)  (truncate y))
-  (normalize tooltip)
-  (raise tooltip))
+  (let ((txt (typecase text
+               (function
+                (with-output-to-string (s)
+                  (funcall text s)))
+               (string
+                text)
+               (t
+                (format nil "~a" text)))))
+    (when (and txt (> (length txt) 0))
+      (setf (text (tooltip-label tooltip)) txt)
+      (set-geometry-xy tooltip (truncate x)  (truncate y))
+      (normalize tooltip)
+      (raise tooltip))))
 
 (defgeneric popup-tooltip (tooltip))
 (defmethod popup-tooltip ((tooltip tooltip))
