@@ -1,10 +1,10 @@
 #|
 
  This software is Copyright (c) 2003, 2004, 2005, 2006  Peter Herth <herth@peter-herth.de>
- Parts Copyright (c) 2005 Thomas F. Burdick
- Parts Copyright (c) Cadence Design Systems, GmbH
+ Portions Copyright (c) 2005 Thomas F. Burdick
+ Portions Copyright (c) 2006 Cadence Design Systems, GmbH
 
- Peter Herth grants you the rights to distribute
+ The authors grant you the rights to distribute
  and use this software as governed by the terms
  of the Lisp Lesser GNU Public License
  (http://opensource.franz.com/preamble.html),
@@ -245,6 +245,7 @@ toplevel             x
            #:load-text
            #:lower
            #:mainloop
+           #:make-items
            #:make-canvas
            #:make-frame
            #:make-image
@@ -304,10 +305,13 @@ toplevel             x
            #:scrolled-listbox
            #:scrolled-text
            #:scrollregion
+           #:search-all-text
+           #:search-next-text
            #:see
            #:send-wish
            #:set-coords
            #:set-coords*
+           #:set-focus-next
            #:set-geometry
            #:set-geometry-wh
            #:set-geometry-xy
@@ -332,6 +336,7 @@ toplevel             x
            #:widget-class-name
            #:with-ltk
            #:call-with-ltk
+           #:with-modal-toplevel
            #:with-remote-ltk
            #:with-widgets
            #:withdraw
@@ -343,7 +348,6 @@ toplevel             x
   (:use :common-lisp :ltk))
 
 (in-package :ltk)
-
 ;communication with wish
 ;;; this ist the only function to adapted to other lisps
 
@@ -405,7 +409,7 @@ toplevel             x
 		  (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* "0.90")
+(defvar *ltk-version* "0.91")
 
 ;;; global var for holding the communication stream
 (defstruct (ltk-connection (:constructor make-ltk-connection ())
@@ -485,6 +489,45 @@ toplevel             x
                      puts \"\\\"[escape $s]\\\"\"
                      }
                  puts \"))\";flush stdout} ")
+  (send-wish "proc to_keyword  {s} {
+                if {[string index $s 0] == \"-\"} {
+                   return \":[string range $s 1 [string length $s]]\" } {return \":$s\"}}")
+  
+  (send-wish "proc sendpropertylist {l} {
+               set pos 0
+               set ll [llength $l]
+               puts \"(:data (\"
+               while {$pos < $ll} {
+                 puts \" [to_keyword [lindex $l $pos]] \"
+                 set pos [expr $pos + 1]
+                 puts \" [lindex $l $pos] \"
+                 set pos [expr $pos + 1]
+                }
+               puts \"))\"
+                  
+}")
+
+  (send-wish "proc searchall {widget pattern} {
+                  set l [string length $pattern]
+                 set result [$widget search $pattern 1.0]
+                 set previous 0
+                 while {$result > $previous} {
+                     $widget tag add sel $result $result+${l}chars
+                     set previous $result
+                     set result [$widget search $pattern $result+${l}chars]
+                 }
+             }")
+  
+  (send-wish "proc searchnext {widget pattern} {
+                 set l [string length $pattern]
+                 set result [$widget search $pattern insert]
+                 if {$result > 0} {
+                     $widget tag remove sel 1.0 end
+                     $widget tag add sel $result $result+${l}chars
+                     $widget mark set insert $result+${l}chars
+                     $widget see insert
+                 }
+             }")
 
   ;;; proc sendevent {s} {puts "(event \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
   ;(send-wish "proc sendevent {s x y keycode char width height root_x root_y} {puts \"(:event \\\"$s\\\" $x $y $keycode $char $width $height $root_x $root_y)\"} ")
@@ -699,6 +742,28 @@ event to read and blocking is set to nil"
   (replace-char (replace-char (replace-char (replace-char (replace-char txt "\\" "\\\\") "$" "\\$") "[" "\\[") "]" "\\]") "\"" "\\\""))
 
 
+;; basic tk object
+(defclass tkobject ()
+  ((name :accessor name :initarg :name :initform nil)
+   )
+  (:documentation "Base class for every Tk object"))
+
+;; basic class for all widgets 
+(defclass widget(tkobject)
+  ((master :accessor master :initarg :master :initform nil) ;; parent widget or nil
+   (widget-path :initarg :path :initform nil :accessor %widget-path)         ;; pathname to refer to the widget
+   (init-command :accessor init-command :initform nil :initarg :init-command)
+   )
+  (:documentation "Base class for all widget types"))
+
+;; creating of the tk widget after creating the clos object
+(defmethod initialize-instance :after ((w widget) &key)
+  (unless (name w)			; generate name if not given 
+    (setf (name w) (create-name))))
+
+(defvar *tk* (make-instance 'widget :name "." :path ".")
+  "dummy widget to access the tk root object")
+
 ;;; tcl -> lisp: puts "$x" mit \ und " escaped
 ;;;  puts [regsub {"} [regsub {\\} $x {\\\\}] {\"}]
 
@@ -776,9 +841,9 @@ can be passed to AFTER-CANCEL"
 
 (defun create-path (master name)
   "create pathname from master widget <master> and widget name <name>"
-  (let ((master-path (if master
-                         (widget-path master)
-                         "")))
+  (let ((master-path (if (or (null master) (eql master *tk*))
+                         ""
+                         (widget-path master))))
     (format nil "~A.~A" master-path name)))
   
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -1166,7 +1231,10 @@ can be passed to AFTER-CANCEL"
   (send-wish (format nil "bell")))
 
 (defun destroy (widget)
-  (send-wish (format nil "destroy ~a" (widget-path widget))))
+  (when (slot-boundp widget 'widget-path)
+    (send-wish (format nil "destroy ~a" (widget-path widget)))
+    (unless (eql widget *tk*)
+      (slot-makunbound widget 'widget-path))))
 
 (defun clipboard-clear ()
   (send-wish "clipboard clear"))
@@ -1177,25 +1245,6 @@ can be passed to AFTER-CANCEL"
 
 (defun clipboard-append (txt)
   (format-wish "clipboard append {~a}" txt))
-
-;; basic tk object
-(defclass tkobject ()
-  ((name :accessor name :initarg :name :initform nil)
-   )
-  (:documentation "Base class for every Tk object"))
-
-;; basic class for all widgets 
-(defclass widget(tkobject)
-  ((master :accessor master :initarg :master :initform nil) ;; parent widget or nil
-   (widget-path :initarg :path :initform nil :accessor %widget-path)         ;; pathname to refer to the widget
-   (init-command :accessor init-command :initform nil :initarg :init-command)
-   )
-  (:documentation "Base class for all widget types"))
-
-;; creating of the tk widget after creating the clos object
-(defmethod initialize-instance :after ((w widget) &key)
-  (unless (name w)			; generate name if not given 
-    (setf (name w) (create-name))))
 
 ;; around - initializer
 
@@ -1285,9 +1334,6 @@ can be passed to AFTER-CANCEL"
     (format-wish "bind  ~a ~a {~:[~;+~]sendevent ~A %x %y %k %K %w %h %X %Y %b ~:[~;;break~]}" 
 		 s event append name exclusive)))
 
-(defvar *tk* (make-instance 'widget :name "." :path ".")
-  "dummy widget to access the tk root object")
-
 ;;; generic functions
 
 (defgeneric canvas (w))
@@ -1353,8 +1399,7 @@ can be passed to AFTER-CANCEL"
 
 (defclass menu(widget)
   ((text :accessor text :initarg :text)
-   (help :accessor menu-help :initarg :help :initform nil)
-   ))
+   (help :accessor menu-help :initarg :help :initform nil)))
 
 ;(defmethod create ((m menu))
 
@@ -1378,9 +1423,13 @@ can be passed to AFTER-CANCEL"
 
 ;;; menu button
 
-(defclass menubutton(widget) 
-  ((text :accessor text :initarg :text :initform "")
-   ))
+(defclass menuentry(widget)
+  ((text :accessor text :initarg :text :initform ""))
+  (:documentation "An abstract base class for menu entries.  These \"widgets\" have to be handled specially by some
+methods, e.g. 'configure'."))
+
+(defclass menubutton(menuentry) 
+  ())
 
 (defmethod initialize-instance :after ((m menubutton) &key command underline accelerator)
   (when command
@@ -1393,9 +1442,8 @@ can be passed to AFTER-CANCEL"
 			    :accelerator accelerator)))
     mb))
 
-(defclass menucheckbutton(widget) 
-  ((text :accessor text :initarg :text)
-   (command :accessor command :initarg :command :initform nil)))
+(defclass menucheckbutton(menuentry)
+  ((command :accessor command :initarg :command :initform nil)))
 
 (defmethod initialize-instance :after ((m menucheckbutton) &key)
   (when (command m)
@@ -1411,9 +1459,8 @@ can be passed to AFTER-CANCEL"
   (format-wish "set ~a ~a" (name cb) val)
   val)
 
-(defclass menuradiobutton(widget) 
-  ((text :accessor text :initarg :text)
-   (command :accessor command :initarg :command :initform nil)
+(defclass menuradiobutton(menuentry) 
+  ((command :accessor command :initarg :command :initform nil)
    (group :accessor group :initarg :group :initform nil)))
 
 (defmethod initialize-instance :after ((m menuradiobutton) &key)
@@ -1673,6 +1720,9 @@ a list of numbers may be given"
 (defmethod append-text ((txt scrolled-text) text &rest tags )
   (format-wish "~a insert end \"~a\" {~{ ~(~a~)~}}" (widget-path (textbox txt)) (tkescape text) tags)
   txt)
+
+(defmethod text ((self scrolled-text))
+  (text (textbox self)))
 
 (defmethod (setf text) (new-text (self scrolled-text))
   (setf (text (textbox self)) new-text))
@@ -2065,6 +2115,42 @@ set y [winfo y ~a]
 (defun make-rectangle (canvas x0 y0 x1 y1)
   (make-instance 'canvas-rectangle :canvas canvas :x0 x0 :y0 y0 :x1 x1 :y1 y1))
 
+(defun make-items (canvas items)
+  (let ((code (with-output-to-string (s)
+                (format s "senddata \"( ~%")
+                (dolist (item items)
+                  (let ((itemtype (pop item)))
+                    (cond
+                      ((eq itemtype :rectangle)
+                       (format s " [~a create rectangle ~a ~a ~a ~a " (widget-path canvas)
+                               (truncate (pop item))
+                               (truncate (pop item))
+                               (truncate (pop item))
+                               (truncate (pop item)))
+                       (loop
+                        while item
+                        do
+                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
+                       (format s " ]~%"))
+                      ((eq itemtype :text)
+                       (format s " [~a create text ~a ~a -text {~a} "
+                               (widget-path canvas)
+                               (truncate (pop item))
+                               (truncate (pop item))
+                               (tkescape (pop item)))
+                       (loop
+                        while item
+                        do
+                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
+                       (format s " ]~%"))))
+                  )
+                (format s ")\"~%"))))
+    (send-wish code)
+    (let ((erg (read-data)))
+      ;;(format t "data: ~s~%" erg) (finish-output)
+      (mapcar (lambda (handle)
+                (make-instance 'canvas-item :canvas canvas :handle handle))
+              erg))))
 
 
 (defun create-text (canvas x y text)
@@ -2167,6 +2253,14 @@ set y [winfo y ~a]
   (format-wish "~a see ~a" (widget-path txt) pos)
   txt)
 
+(defmethod search-all-text ((txt text) pattern)
+  (format-wish "searchall ~a ~a" (widget-path txt) pattern)
+  txt)
+
+(defmethod search-next-text ((txt text) pattern)
+  (format-wish "searchnext ~a ~a" (widget-path txt) pattern)
+  txt)
+
 (defgeneric tag-configure (txt tag option value))
 (defmethod tag-configure ((txt text) tag option value)
   (format-wish "~a tag configure ~a -~(~a~) {~(~a~)}" (widget-path txt)
@@ -2210,15 +2304,19 @@ set y [winfo y ~a]
 ;;; photo image object
 
 (defclass photo-image(tkobject)
-  ()
+  ((data :accessor data :initform nil :initarg :data)
+   )
   )
 
 (defmethod widget-path ((photo photo-image))
   (name photo))
 
-(defmethod initialize-instance :after ((p photo-image) &key width height)
+(defmethod initialize-instance :after ((p photo-image)
+                                       &key width height format grayscale data)
+  (check-type data (or null string))
   (setf (name p) (create-name))
-  (format-wish "image create photo ~A~@[ -width ~a~]~@[ -height ~a~]" (name p) width height))
+  (format-wish "image create photo ~A~@[ -width ~a~]~@[ -height ~a~]~@[ -format \"~a\"~]~@[ -grayscale~*~]~@[ -data ~s~]"
+               (name p) width height format grayscale data))
 
 (defun make-image ()
   (let* ((name (create-name))
@@ -2316,22 +2414,34 @@ set y [winfo y ~a]
 
 ;;; configure a widget parameter
 
+(defun down (stream object colon at)
+  "Print OBJECT to STREAM, downcasing unless OBJECT is a string, and giving the path of tkobjects."
+  (declare (ignore colon at))
+  (typecase object
+    (string (write-string object stream))
+    (tkobject (write-string (widget-path object) stream))
+    (t (format stream "~(~a~)" object))))
+
 (defgeneric configure (widget option value &rest others))
 (defmethod configure (widget option value &rest others)
-  ;(format t "normal config~&")
-  (format-wish "~A configure -~(~A~) {~A} ~{ -~(~a~) {~(~a~)}~}" (widget-path widget) option 
-	    (if (stringp value) ;; There may be values that need to be passed as
-		value           ;; unmodified strings, so do not downcase strings
-	      (format nil "~(~a~)" value)) ;; if its not a string, print it downcased (eg. symbols)
-	    others)
+  (format-wish "~A configure~{ -~(~a~) {~/ltk::down/}~}"
+               (widget-path widget)
+               (list* option value others))
   widget)
 
+(defmethod configure ((item menuentry) option value &rest others)
+  (let ((path (widget-path (master item))))
+    (format-wish "~A entryconfigure [~A index {~A}]~{ -~(~a~) {~/ltk::down/}~}"
+                 path
+                 path
+                 (text item)
+                 (list* option value others)))
+  item)
+
 (defmethod configure ((item canvas-item) option value &rest others)
-  (format-wish "~A itemconfigure ~A -~(~A~) {~A}~{ -~(~a~) {~(~a~)}~}" (widget-path (canvas item)) (handle item) option
-	       (if (stringp value) ;; There may be values that need to be passed as
-		   value           ;; unmodified strings, so do not downcase strings
-		 (format nil "~(~a~)" value))
-	       others)
+  (format-wish "~A itemconfigure ~A~{ -~(~a~) {~/ltk::down/}~}"
+               (widget-path (canvas item)) (handle item)
+               (list* option value others))
   item)
 
 ;;; for tkobjects, the name of the widget is taken
@@ -2396,15 +2506,26 @@ set y [winfo y ~a]
 
 ;;; grab functions
 
-(defgeneric grab (toplevel))
-(defmethod grab ((toplevel toplevel))
-  (format-wish "grab set ~a" (widget-path toplevel))
+(defgeneric grab (toplevel &key global))
+(defmethod grab ((toplevel widget) &key global)
+  (format-wish "grab set ~:[~;-global~] ~a" global (widget-path toplevel))
   toplevel)
 
 (defgeneric grab-release (toplevel))
-(defmethod grab-release ((toplevel toplevel))
+(defmethod grab-release ((toplevel widget))
   (format-wish "grab release ~a" (widget-path toplevel))
   toplevel)
+
+
+;;; font functions
+
+(defun font-create (name)
+  (format-wish "senddatastring [font create {~a}]" name)
+  (read-data))
+
+(defun font-metrics (font)
+  (format-wish "sendpropertylist [font metrics {~a}]" font)
+  (read-data))
 
 ;;; wm functions
 
@@ -2463,6 +2584,10 @@ set y [winfo y ~a]
   (format-wish "senddatastring [wm geometry ~a]" (widget-path tl))
   (read-data))
 
+(defmethod (setf geometry) (geometry (tl widget))
+  (format-wish "wm geometry ~a ~a" (widget-path tl) geometry)
+  geometry)
+
 (defgeneric set-geometry (toplevel width height x y))
 (defmethod set-geometry ((tl widget) width height x y)
   ;;(format-wish "wm geometry ~a ~ax~a+~a+~a" (widget-path tl) width height x y)
@@ -2485,6 +2610,12 @@ set y [winfo y ~a]
     (add-callback name fun)
     (format-wish "wm protocol ~a WM_DELETE_WINDOW {callback ~A}" (widget-path tl) name))
   tl)
+
+(defmethod on-close ((tl (eql *tk*)) fun)
+  (let ((name (create-name)))
+    (add-callback name fun)
+    (format-wish "wm protocol . WM_DELETE_WINDOW {callback ~A}" name)
+    tl))
 
 (defgeneric on-focus (toplevel fun))
 (defmethod on-focus ((tl toplevel) fun)
@@ -2570,6 +2701,10 @@ set y [winfo y ~a]
 (defun force-focus (widget)
   (format-wish "focus -force ~a" (widget-path widget))
   widget)
+
+(defun set-focus-next (widget next)
+  (format-wish "bind ~a <Tab> { focus ~a; break }" (widget-path widget) (widget-path next)))
+
 
 ;;; Dialog functions
 
@@ -2927,15 +3062,22 @@ tk input to terminate"
           :report "Exit Ltk main loop"
           nil)))))
 
+(defparameter *inside-mainloop* ())
+
 (defun mainloop (&key serve-event)
-  (if serve-event
-      (install-input-handler)
-      (let ((*exit-mainloop* nil)
-	    (*break-mainloop* nil)
-	    (*read-eval* nil)) ;;safety against malicious clients
-	(remove-input-handler)
-	(loop while (with-ltk-handlers ()
-		      (main-iteration))))))
+  (let ((*inside-mainloop* (adjoin *wish* *inside-mainloop*)))
+    (cond
+      (serve-event (install-input-handler))
+      ((wish-input-handler *wish*)
+       (let ((*exit-mainloop* nil)
+             (*break-mainloop* nil))
+         (loop until (or *break-mainloop* *exit-mainloop*)
+               do (serve-event))))
+      (t (let ((*exit-mainloop* nil)
+               (*break-mainloop* nil))
+           (loop while (with-ltk-handlers ()
+                         (main-iteration))))))))
+;; FIXME: why no longer: *read-eval* nil ?
 
 ;;; Event server
 
@@ -2944,7 +3086,9 @@ tk input to terminate"
   (defun install-input-handler ()
     (error "SERVE-EVENT is not implemented on this system"))
   (defun remove-input-handler ()
-    nil))
+    nil)
+  (defun serve-event ()
+    (error "SERVE-EVENT is not implemented on this system")))
 
 #+(or sbcl cmu)
 (progn
@@ -2955,6 +3099,10 @@ tk input to terminate"
   (defun remove-fd-handler (handler)
     #+sbcl (sb-sys:remove-fd-handler handler)
     #+cmu (system:remove-fd-handler handler))
+
+  (defun serve-event ()
+    #+sbcl (sb-sys:serve-event)
+    #+cmu (system:serve-event))
   
   (defun fd-stream-fd (stream)
     #+sbcl (sb-sys:fd-stream-fd stream)
@@ -2980,16 +3128,21 @@ tk input to terminate"
 	       (ltk-input-handler (fd)
 		 (declare (ignore fd))
 		 (let ((*wish* wish)) ; use the wish we were given as an argument
-                   ;; FIXME: close over all ltk dynamic variables
-                   (unless (call-main)
-		     (remove-input-handler)))))
+                   (if (find wish *inside-mainloop*)
+                       (call-main)
+                       (let ((*exit-mainloop* nil)
+                             (*break-mainloop* nil))
+                         (unless (call-main)
+                           (remove-input-handler)))))))
 	#'ltk-input-handler)))
 
   (defun install-input-handler ()
     (unless (wish-input-handler *wish*)
       (let ((fd (fd-stream-fd (two-way-stream-input-stream (wish-stream *wish*)))))
 	(setf (wish-input-handler *wish*)
-	      (add-fd-handler fd :input (make-input-handler *wish*))))))
+	      (add-fd-handler fd :input (make-input-handler *wish*))
+              *exit-mainloop* nil
+              *break-mainloop* nil))))
 
   (defun remove-input-handler ()
     (remove-fd-handler (wish-input-handler *wish*))
@@ -3395,6 +3548,18 @@ When an error is signalled, there are four things LTk can do:
      (itemconfigure c p2 "fill" "blue")
      (after 100 #'update)
      ))))
+
+(defmacro with-modal-toplevel ((var &rest toplevel-initargs) &body body)
+  `(let* ((,var (make-instance 'toplevel ,@toplevel-initargs))
+          (*exit-mainloop* nil))
+    (unwind-protect
+         (block nil
+           (grab ,var)
+           (on-close ,var (lambda () (return)))
+           ,@body
+           (mainloop))
+      (grab-release ,var)
+      (withdraw ,var))))
 
 (defun input-box (prompt &key (title "Input"))
   (let* ((*exit-mainloop* nil)
