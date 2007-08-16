@@ -1290,6 +1290,20 @@ can be passed to AFTER-CANCEL"
 (defmethod raise ((widget widget) &optional above)
   (send-wish (format nil "raise ~a~@[ ~a~]" (widget-path widget) (and above (widget-path above)))))
 
+(defun tk-number (number)
+  "convert number to integer/single float"
+  (cond
+    ((integerp number)
+     number)
+    ((typep number 'single-float)
+     number)
+    ((typep number 'double-float)
+     (coerce number 'single-float))
+    ((typep number 'rational)
+     (coerce number 'single-float))
+    (t
+     (error "~s is not a one of integer, float or rational." number))))
+
 (defstruct event
   x
   y
@@ -1486,7 +1500,8 @@ methods, e.g. 'configure'."))
 
 (defgeneric popup (menu x y))
 (defmethod popup ((menu menu) x y)
-  (format-wish "tk_popup ~A ~A ~A" (widget-path menu) x y)
+  (format-wish "tk_popup ~A ~A ~A" (widget-path menu)
+               (tk-number x) (tk-number y))
   menu)
 
 (defgeneric menu-delete (menu index))
@@ -1981,8 +1996,8 @@ set y [winfo y ~a]
    ((arrayp number)
     (dotimes (i (length number))
       (format-number stream (aref number i))))
-   ))
- 
+   ))        
+
 (defun process-coords (input)
   (with-output-to-string (s)
 			 (format-number s input)))
@@ -2011,30 +2026,30 @@ set y [winfo y ~a]
 
 (defgeneric scrollregion (canvas x0 y0 x1 y1))
 (defmethod scrollregion ((c canvas) x0 y0 x1 y1)
-  (setf (scrollregion-x0 c) x0)
-  (setf (scrollregion-y0 c) y0)
-  (setf (scrollregion-x1 c) x1)
-  (setf (scrollregion-y1 c) y1)
-  (configure c :scrollregion (format nil "~a ~a ~a ~a" x0 y0 x1 y1))
+  (setf (scrollregion-x0 c) (tk-number x0))
+  (setf (scrollregion-y0 c) (tk-number y0))
+  (setf (scrollregion-x1 c) (tk-number x1))
+  (setf (scrollregion-y1 c) (tk-number y1))
+  (configure c :scrollregion (format nil "~a ~a ~a ~a" (tk-number x0) (tk-number y0) (tk-number x1) (tk-number y1)))
   c)
 
 (defgeneric canvasx (canvas screenx))
 (defmethod canvasx ((canvas canvas) screenx)
-  (format-wish "senddata [~a canvasx ~a]" (widget-path canvas) screenx)
+  (format-wish "senddata [~a canvasx ~a]" (widget-path canvas) (tk-number screenx))
   (read-data))
 
 (defgeneric canvasy (canvas screeny))
 (defmethod canvasy ((canvas canvas) screeny)
-  (format-wish "senddata [~a canvasy ~a]" (widget-path canvas) screeny)
+  (format-wish "senddata [~a canvasy ~a]" (widget-path canvas) (tk-number screeny))
   (read-data))
 
 (defgeneric itemmove (canvas item dx dy))
 (defmethod itemmove ((canvas canvas) (item integer) dx dy)
-  (format-wish "~a move ~a ~a ~a" (widget-path canvas) item (process-coords dx) (process-coords dy))
+  (format-wish "~a move ~a ~a ~a" (widget-path canvas) item (tk-number dx) (tk-number dy))
   canvas)
 
 (defmethod itemmove ((canvas canvas) (item canvas-item) dx dy)
-  (itemmove (canvas item) (handle item) dx dy))
+  (itemmove (canvas item) (handle item) (tk-number dx) (tk-number dy)))
 
 (defgeneric itemdelete (canvas item))
 (defmethod itemdelete ((canvas canvas) (item integer))
@@ -2047,7 +2062,7 @@ set y [winfo y ~a]
 
 (defgeneric move (item dx dy))
 (defmethod move ((item canvas-item) dx dy)
-  (itemmove (canvas item) (handle item) dx dy))
+  (itemmove (canvas item) (handle item) (tk-number dx) (tk-number dy)))
 
 (defgeneric clear (widget))
 (defmethod clear ((canvas canvas))
@@ -2073,7 +2088,6 @@ set y [winfo y ~a]
 (defun make-line (canvas coords)
   (make-instance 'canvas-line :canvas canvas :coords coords))
 
-
 (defun create-polygon (canvas coords)
   (format-wish "senddata [~a create polygon ~a]" (widget-path canvas) (process-coords coords))
   (read-data))
@@ -2087,9 +2101,10 @@ set y [winfo y ~a]
 (defun make-polygon (canvas coords)
   (make-instance 'canvas-polygon :canvas canvas :coords coords))
 
-
 (defun create-oval (canvas x0 y0 x1 y1)
-  (format-wish "senddata [~a create oval ~a ~a ~a ~a]" (widget-path canvas) x0 y0 x1 y1)
+  (format-wish "senddata [~a create oval ~a ~a ~a ~a]" (widget-path canvas)
+               (tk-number x0) (tk-number y0)
+               (tk-number x1) (tk-number y1))
   (read-data))
 
 (defclass canvas-oval (canvas-item)
@@ -2103,7 +2118,8 @@ set y [winfo y ~a]
 
 
 (defun create-rectangle (canvas x0 y0 x1 y1)
-  (format-wish "senddata [~a create rectangle ~a ~a ~a ~a]" (widget-path canvas) x0 y0 x1 y1)
+  (format-wish "senddata [~a create rectangle ~a ~a ~a ~a]" (widget-path canvas)
+               (tk-number x0) (tk-number y0) (tk-number x1) (tk-number y1))
   (read-data))
 
 (defclass canvas-rectangle (canvas-item)
@@ -2153,7 +2169,9 @@ set y [winfo y ~a]
               erg))))
 
 (defun create-text (canvas x y text)
-  (format-wish "senddata [~a create text ~a ~a -anchor nw -text {~a}]" (widget-path canvas) x y text)
+  (format-wish "senddata [~a create text ~a ~a -anchor nw -text {~a}]" (widget-path canvas)
+               (tk-number x) (tk-number y)
+               text)
   (read-data))
 
 (defclass canvas-text (canvas-item)
@@ -2162,9 +2180,9 @@ set y [winfo y ~a]
 (defmethod initialize-instance :after ((c canvas-text) &key canvas x y text)
   (setf (handle c) (create-text canvas x y text)))
 
-
 (defun create-image (canvas x y &key image)
-  (format-wish "senddata [~a create image ~a ~a -anchor nw~@[ -image ~a~]]" (widget-path canvas) x y
+  (format-wish "senddata [~a create image ~a ~a -anchor nw~@[ -image ~a~]]" (widget-path canvas)
+               (tk-number x) (tk-number y)
 	       (and image (name image)))
   (read-data))
 
@@ -2179,14 +2197,16 @@ set y [winfo y ~a]
   image)
 
 (defun create-bitmap (canvas x y &key (bitmap nil))
-  (format-wish "senddata [~a create image ~a ~a -anchor nw~@[ -bitmap ~a~]]" (widget-path canvas) x y
+  (format-wish "senddata [~a create image ~a ~a -anchor nw~@[ -bitmap ~a~]]" (widget-path canvas)
+               (tk-number x) (tk-number y)
 	       (and bitmap (name bitmap)))
   (read-data))
 
 
 (defun create-arc (canvas x0 y0 x1 y1 &key (start 0) (extent 180) (style "pieslice"))
   (format-wish "senddata [~a create arc ~a ~a ~a ~a -start ~a -extent ~a -style ~a]"
-	       (widget-path canvas) x0 y0 x1 y1 start extent style)
+	       (widget-path canvas)
+               (tk-number x0) (tk-number y0) (tk-number x1) (tk-number y1) start extent style)
   (read-data))
 
 (defclass canvas-arc (canvas-item)
@@ -2198,7 +2218,7 @@ set y [winfo y ~a]
 
 (defun create-window (canvas x y widget &key (anchor :nw))
   (format-wish "senddata [~a create window ~a ~a -anchor ~(~a~) -window ~a]"
- 	       (widget-path canvas) x y anchor (widget-path widget))
+ 	       (widget-path canvas) (tk-number x) (tk-number y) anchor (widget-path widget))
   (read-data))
 
 (defun postscript (canvas filename &key rotate pagewidth pageheight)
@@ -2327,7 +2347,7 @@ set y [winfo y ~a]
 (defmethod image-load((p photo-image) filename)
   ;(format t "loading file ~a~&" filename)
   (send-wish (format nil "~A read {~A} -shrink" (name p) filename))
-  )
+  p)
 
 (defgeneric ishow (p name))
 (defmethod ishow((p photo-image) name)
@@ -2374,7 +2394,9 @@ set y [winfo y ~a]
 
 (defgeneric place (widget x y &key width height))
 (defmethod place (widget x y &key width height)
-  (format-wish "place ~A -x ~A -y ~A~@[ -width ~a~]~@[ -height ~a~]" (widget-path widget) x y width height)
+  (format-wish "place ~A -x ~A -y ~A~@[ -width ~a~]~@[ -height ~a~]" (widget-path widget)
+               (tk-number x) (tk-number y)
+               (tk-number width) (tk-number height))
   widget)
 
 (defgeneric place-forget (widget))
@@ -2388,7 +2410,7 @@ set y [winfo y ~a]
 (defmethod grid ((w widget) row column &key columnspan ipadx ipady padx pady rowspan sticky)
   (format-wish "grid ~a -row ~a -column ~a~@[ -columnspan ~a~]~@[ -ipadx ~a~]~
              ~@[ -ipady ~a~]~@[ -padx ~a~]~@[ -pady ~a~]~@[ -rowspan ~a~]~
-             ~@[ -sticky ~(~a~)~]" (widget-path w) row column columnspan ipadx ipady padx pady rowspan  sticky)
+             ~@[ -sticky ~(~a~)~]" (widget-path w) row column columnspan ipadx ipady padx pady rowspan sticky)
   w)
 
 (defgeneric grid-columnconfigure (widget c o v))
@@ -2550,12 +2572,13 @@ set y [winfo y ~a]
 
 (defgeneric minsize (widget x y))
 (defmethod minsize ((w widget) x y)
-  (format-wish "wm minsize ~a ~a ~a" (widget-path w) x y)
+  (format-wish "wm minsize ~a ~a ~a" (widget-path w)
+               (tk-number x) (tk-number y))
   w)
 
 (defgeneric maxsize (widget x y))
 (defmethod maxsize ((w widget) x y)
-  (format-wish "wm maxsize ~a ~a ~a" (widget-path w) x y)
+  (format-wish "wm maxsize ~a ~a ~a" (widget-path w) (tk-number x) (tk-number y))
   w)
 
 (defgeneric withdraw (toplevel))
@@ -2590,17 +2613,19 @@ set y [winfo y ~a]
 (defgeneric set-geometry (toplevel width height x y))
 (defmethod set-geometry ((tl widget) width height x y)
   ;;(format-wish "wm geometry ~a ~ax~a+~a+~a" (widget-path tl) width height x y)
-  (format-wish "wm geometry ~a ~ax~a~@D~@D" (widget-path tl) width height x y)
+  (format-wish "wm geometry ~a ~ax~a~@D~@D" (widget-path tl)
+               (tk-number width) (tk-number height) (tk-number x) (tk-number y))
   tl)
 
 (defgeneric set-geometry-wh (toplevel width height))
 (defmethod set-geometry-wh ((tl widget) width height)
-  (format-wish "wm geometry ~a ~ax~a" (widget-path tl) width height)
+  (format-wish "wm geometry ~a ~ax~a" (widget-path tl)
+               (tk-number width) (tk-number height))
   tl)
 
 (defgeneric set-geometry-xy (toplevel x y))
 (defmethod set-geometry-xy ((tl widget) x y)
-  (format-wish "wm geometry ~a ~@D~@D" (widget-path tl) x y)
+  (format-wish "wm geometry ~a ~@D~@D" (widget-path tl) (tk-number x) (tk-number y))
   tl)
  
 (defgeneric on-close (toplevel fun))
@@ -2749,7 +2774,7 @@ set y [winfo y ~a]
 
 (defun choose-directory (&key (initialdir (namestring *default-pathname-defaults*))
 			      parent title mustexist)
-  (format-wish "senddatastring [tk_chooseDirectory ~@[ -initialdir {~a}~]~@[ -parent ~a~]~@[ -title {~a}~]~@[ -mustexist ~a~]]" initialdir (and parent (widget-path parent)) title (and mustexist 1))
+  (format-wish "senddatastring [tk_chooseDirectory ~@[ -initialdir {~a }~]~@[ -parent ~a ~]~@[ -title {~a}~]~@[ -mustexist ~a~]]" initialdir (and parent (widget-path parent)) title (and mustexist 1))
   (read-data))
 
 (defvar *mb-icons* (list "error" "info" "question" "warning")
@@ -2758,7 +2783,7 @@ set y [winfo y ~a]
 ;;; see make-string-output-string/get-output-stream-string
 (defun message-box (message title type icon &key parent)
   ;;; tk_messageBox function
-  (format-wish "senddatastring [tk_messageBox -message {~a} -title {~a} -type ~(~a~) -icon ~(~a~)~@[ -parent ~a~]]" message title type icon (and parent (widget-path parent)))
+  (format-wish "senddatastring [tk_messageBox -message {~a } -title {~a} -type ~(~a~) -icon ~(~a~)~@[ -parent ~a~]]" message title type icon (and parent (widget-path parent)))
   (read-keyword))
 
 
@@ -3298,6 +3323,18 @@ When an error is signalled, there are four things LTk can do:
       `(let* ,defs
 	 (declare (ignorable ,@widgets))
 	 ,@body)))
+
+
+
+  (defmacro defform (name parent slots widgets &rest body)
+    `(progn
+       (defclass ,name ,parent
+         ,slots)
+       (defmethod initialize-instance :after ((self ,name) &key)
+         (let (,widgets)
+           ,@body))) 
+
+    )
   )
 ;; example-usage
 ;;
