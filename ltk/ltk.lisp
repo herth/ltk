@@ -2030,7 +2030,7 @@ set y [winfo y ~a]
 
 (defgeneric itemmove (canvas item dx dy))
 (defmethod itemmove ((canvas canvas) (item integer) dx dy)
-  (format-wish "~a move ~a ~a ~a" (widget-path canvas) item dx dy)
+  (format-wish "~a move ~a ~a ~a" (widget-path canvas) item (process-coords dx) (process-coords dy))
   canvas)
 
 (defmethod itemmove ((canvas canvas) (item canvas-item) dx dy)
@@ -2058,7 +2058,7 @@ set y [winfo y ~a]
 ;; canvas item functions
 
 (defun create-line (canvas coords)
-  (format-wish "senddata [~a create line~{ ~a~}]" (widget-path canvas) coords)
+  (format-wish "senddata [~a create line ~a]" (widget-path canvas) (process-coords coords))
   (read-data))
 
 (defun create-line* (canvas &rest coords)
@@ -2075,7 +2075,7 @@ set y [winfo y ~a]
 
 
 (defun create-polygon (canvas coords)
-  (format-wish "senddata [~a create polygon~{ ~a~}]" (widget-path canvas) coords)
+  (format-wish "senddata [~a create polygon ~a]" (widget-path canvas) (process-coords coords))
   (read-data))
 
 (defclass canvas-polygon (canvas-item)
@@ -2151,7 +2151,6 @@ set y [winfo y ~a]
       (mapcar (lambda (handle)
                 (make-instance 'canvas-item :canvas canvas :handle handle))
               erg))))
-
 
 (defun create-text (canvas x y text)
   (format-wish "senddata [~a create text ~a ~a -anchor nw -text {~a}]" (widget-path canvas) x y text)
