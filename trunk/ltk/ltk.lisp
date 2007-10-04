@@ -2,7 +2,7 @@
 
  This software is Copyright (c) 2003, 2004, 2005, 2006  Peter Herth <herth@peter-herth.de>
  Portions Copyright (c) 2005 Thomas F. Burdick
- Portions Copyright (c) 2006 Cadence Design Systems, GmbH
+ Portions Copyright (c) 2006 Cadence Design Systems
 
  The authors grant you the rights to distribute
  and use this software as governed by the terms
@@ -724,23 +724,21 @@ event to read and blocking is set to nil"
 ;;; sanitizing strings: lisp -> tcl (format (wish-stream *wish*) "{~a}" string)
 ;;; in string escaped : {} mit \{ bzw \}  und \ mit \\
 
-(defun replace-char (txt char with)
-  (let ((pos (search char txt)))
-    (loop
-       while pos
-       do
-         (progn
-           ;;(dbg "txt: ~a -> " txt)
-           (setf txt (concatenate 'string (subseq txt 0 pos) with (subseq txt (1+ pos))))
-           ;;(dbg " ~a~&" txt)
-           (setf pos (search char txt :start2 (+ pos (length with)))))))
-  txt)
+(defun make-adjustable-string (&optional (string ""))
+  (make-array (length string) :element-type 'character
+              :initial-contents string :adjustable t :fill-pointer t))
 
-
-(defun tkescape (txt)
-  (setf txt (format nil "~a" txt))
-  (replace-char (replace-char (replace-char (replace-char (replace-char txt "\\" "\\\\") "$" "\\$") "[" "\\[") "]" "\\]") "\"" "\\\""))
-
+;; Much faster version. For one test run it takes 2 seconds, where the
+;; other implementation requires 38 minutes.
+(defun tkescape (text)
+  (unless (stringp text)
+    (setf text (format nil "~a" text)))
+  (loop with result = (make-adjustable-string)
+     for c across text do
+       (when (member c '(#\\ #\$ #\[ #\] #\{ #\} #\"))
+         (vector-push-extend #\\ result))
+       (vector-push-extend c result)
+     finally (return result)))
 
 ;; basic tk object
 (defclass tkobject ()
@@ -3101,7 +3099,6 @@ tk input to terminate"
                (*break-mainloop* nil))
            (loop while (with-ltk-handlers ()
                          (main-iteration))))))))
-;; FIXME: why no longer: *read-eval* nil ?
 
 ;;; Event server
 
