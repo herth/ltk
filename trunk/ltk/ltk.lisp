@@ -409,7 +409,7 @@ toplevel             x
 		  (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* "0.91")
+(defvar *ltk-version* "0.911")
 
 ;;; global var for holding the communication stream
 (defstruct (ltk-connection (:constructor make-ltk-connection ())
@@ -1432,6 +1432,14 @@ can be passed to AFTER-CANCEL"
 (defun add-separator (menu)
    (format-wish "~A add separator" (widget-path menu))
    menu)
+
+(defgeneric state (menu menu-label state))
+(defmethod state ((a menu) menu-label state)
+  (format-wish "~a entryconfigure {~a} -state {~a}" (widget-path a) menu-label state))
+
+(defgeneric menu-label (menu old new))
+(defmethod menu-label ((a menu) old new)
+  (format-wish "~a entryconfigure {~a} -label {~a}"  (widget-path a)  old new))
 
 ;;; menu button
 
@@ -2547,6 +2555,11 @@ set y [winfo y ~a]
   (read-data))
 
 ;;; wm functions
+
+(defgeneric resizable (widget x y))
+(defmethod resizable ((tl widget) x y)
+  (format-wish "wm resizable ~a ~a ~a" (widget-path tl) x y)
+  tl)
 
 (defgeneric set-wm-overrideredirect (widget value))
 (defmethod set-wm-overrideredirect ((w widget) val)
