@@ -420,6 +420,7 @@ toplevel             x
   (counter 1)
   (after-counter 1)
   (event-queue nil)
+  (style :classic)
   ;; This is should be a function that takes a thunk, and calls it in
   ;; an environment with some condition handling in place.  It is what
   ;; allows the user to specify error-handling in START-WISH, and have
@@ -542,6 +543,12 @@ toplevel             x
   (send-wish "proc callbackval {s val} {puts \"(:callback \\\"$s\\\" $val)\"} ")
   (send-wish "proc callbackstring {s val} {puts \"(:callback \\\"$s\\\" \\\"[escape $val]\\\")\"} ")
 
+
+  (cond
+    ((equal (wish-style *wish*) :modern)
+     (send-wish "package require tile;"))
+    )
+  
   (dolist (fun *init-wish-hook*)	; run init hook funktions 
     (funcall fun)))
 
@@ -1102,8 +1109,11 @@ can be passed to AFTER-CANCEL"
 ;(defargs button (widget) anchor)
 ;(defargs text (widget button) :delete anchor color)
 
-(defargs button (widget) 
+(defargs button-classic (widget) 
   activebackground activeforeground anchor bitmap command compound default disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image justify overrelief padx pady repeatdelay repeatinterval state takefocus textvariable underline width wraplength)
+
+(defargs button-modern (widget) 
+   command compound default image state takefocus textvariable underline width)
 
 (defargs canvas ()
   background borderwidth closeenough confine cursor height highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth offset relief scrollregion selectbackground selectborderwidth selectforeground state takefocus width xscrollcommand xscrollincrement yscrollcommand yscrollincrement)
@@ -1155,7 +1165,8 @@ can be passed to AFTER-CANCEL"
 (defargs toplevel ()
   borderwidth class menu relief screen use background colormap container cursor height highlightbackground highlightcolor highlightthickness padx pady takefocus visual width)
 
-(defmacro defwidget (class parents slots cmd &rest code)
+(defmacro defwidget (class parents slots cmdspec &rest code)
+  ;; build list of argument symbols
   (let ((args (sort (copy-list (rest (assoc class *class-args*)))
 		    (lambda (x y)
 		      (string< (symbol-name x) (symbol-name y))))))
@@ -1163,14 +1174,14 @@ can be passed to AFTER-CANCEL"
 	  (codelist nil)
 	  (keylist nil)
 	  (accessors nil))
-      (dolist (arg args)
-	(let ((entry (assoc arg *initargs*)))
+      (dolist (arg args) ;; for all arguments
+	(let ((entry (assoc arg *initargs*))) ;; get information how the argument needs to be defined
 	  (cond
             (entry 
-             (setf cmdstring (concatenate 'string cmdstring (third entry)))
-             (when (iarg-key entry)
+             (setf cmdstring (concatenate 'string cmdstring (third entry))) ;; build up commandstring
+             (when (iarg-key entry) ;; put it in the keyword list, if keyword is supplied (most of the times...)
                (setf keylist (append keylist (list (iarg-key entry)))))
-             (setf codelist (append codelist (list (iarg-code entry))))
+             (setf codelist (append codelist (list (iarg-code entry)))) ;; code to retrieve the command value
              #+:generate-accessors
              (when (and (iarg-key entry)
                         (not (equal (iarg-key entry) 'variable))
@@ -1189,7 +1200,7 @@ can be passed to AFTER-CANCEL"
                    (read-data))
                 accessors))
              )
-            (t 
+            (t ;; default way of using that initarg
              (setf cmdstring (concatenate 'string cmdstring (format nil "~~@[ -~(~a~) ~~(~~A~~)~~]" arg)))
              (setf keylist (append keylist (list arg)))
              (setf codelist (append codelist (list arg)))
@@ -1517,7 +1528,9 @@ methods, e.g. 'configure'."))
 
 ;;; standard button widget
 
-(defwidget button (tktextvariable widget) () "button")
+(defwidget button (tktextvariable widget) ()
+           ((:classic "tk::button" 'button-classic)
+            (:modern  "ttk::button" 'button-modern)))
 
 (defmethod (setf command) (val (button button))
   (add-callback (name button) val)
@@ -3100,6 +3113,7 @@ tk input to terminate"
 (defparameter *inside-mainloop* ())
 
 (defun mainloop (&key serve-event)
+  ;;(format t "ml:  ~a~%" serve-event)
   (let ((*inside-mainloop* (adjoin *wish* *inside-mainloop*)))
     (cond
       (serve-event (install-input-handler))
@@ -3265,7 +3279,7 @@ When an error is signalled, there are four things LTk can do:
 
 ;;; wrapper macro - initializes everything, calls body and then mainloop
 
-(defmacro with-ltk ((&rest keys &key (debug 2) stream serve-event &allow-other-keys)
+(defmacro with-ltk ((&rest keys &key (debug 2) stream serve-event (style :classic) &allow-other-keys)
 		    &body body)
   "Create a new Ltk connection, evaluate BODY, and enter the main loop.
 
@@ -3280,10 +3294,10 @@ When an error is signalled, there are four things LTk can do:
 
   If :STREAM is non-NIL, it should be a two-way stream connected to a running
   wish.  This will be used instead of running a new wish."
-  (declare (ignore debug serve-event stream))
+  (declare (ignore debug serve-event stream style))
   `(call-with-ltk (lambda () ,@body) ,@keys))
 
-(defun call-with-ltk (thunk &rest keys &key (debug 2) stream serve-event
+(defun call-with-ltk (thunk &rest keys &key (debug 2) stream serve-event (style :classic)
                       &allow-other-keys)
   "Functional interface to with-ltk, provided to allow the user the build similar macros."
   (declare (ignore stream))
@@ -3295,6 +3309,7 @@ When an error is signalled, there are four things LTk can do:
                           (debug-setting-keys debug))))
          (mainloop () (apply #'mainloop (filter-keys '(:serve-event) keys))))
     (let ((*wish* (make-ltk-connection)))
+      (setf (wish-style *wish*) style)
       (unwind-protect
            (progn
              (start-wish)
@@ -3379,7 +3394,7 @@ When an error is signalled, there are four things LTk can do:
 
 ;;;; default ltk test
 (defun ltktest()
-  (with-ltk ()
+  (with-ltk (:style :modern)
       (let* ((bar (make-instance 'frame))
              (fradio (make-instance 'frame :master bar))
              (leggs (make-instance 'label :master fradio :text "Eggs:"))
