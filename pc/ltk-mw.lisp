@@ -66,12 +66,17 @@ o tooltip
    #:register-tooltip
    #:schedule-tooltip
 
-   ;; list-select widget
-   #:list-select
+   #:combo
+   #:selected-index
+   #:entry
+   #:entries
+   
+
+   #:mw-listbox
    #:data
-   #:list-select-display
-   #:selected-elements
-   #:ltk-mw-demo
+   #:callback
+   #:selected
+   #:select-index
    ))
 
 (in-package :ltk-mw)
@@ -105,7 +110,6 @@ o tooltip
 
 (defmethod redraw ((progress progress))
   (let ((width (window-width progress))
-        
 	(height (window-height progress)))
     (set-coords progress  (text-display progress) (list (truncate width 2) (truncate height 2)))
     (set-coords progress (rect progress)
@@ -262,6 +266,73 @@ o tooltip
      (pack f2 :side :top)
      (pack entry :side :left)
      )))
+
+
+;;; extended list widget
+
+(defparameter *listbox-background* :white)
+(defparameter *listbox-foreground* :black)
+(defparameter *listbox-selected-background* :blue)
+(defparameter *listbox-selected-foreground* :white)
+
+
+
+(defclass mw-listbox (frame)
+  ((data :accessor data :initform nil :initarg :data)
+   (slistbox :accessor slistbox :initform nil :initarg :slistbox)
+   (label    :accessor label    :initform "" :initarg :label)
+   (lbl      :accessor lbl      :initform nil :initarg :lbl)
+   
+   (listbox  :accessor listbox  :initform nil :initarg :listbox)
+   (key      :accessor key      :initform #'identity :initarg :key)
+   (selected :accessor selected :initform nil :initarg :selected)
+   (selected-index :accessor selected-index :initform nil :initarg :selected-index)
+   
+   (callback :accessor callback :initform nil :initarg :callback)
+   ))
+
+
+(defmethod initialize-instance :after ((lb mw-listbox) &key)
+  (let* ((lbl (make-instance 'label :master lb :text (label lb)))
+         (slistbox (make-instance 'scrolled-listbox :master lb))
+         (listbox (listbox slistbox)))
+    (setf (lbl lb) lbl
+          (slistbox lb) slistbox
+          (listbox lb) listbox)
+    (pack lbl :side :top :anchor :w)
+    (pack slistbox :side :top :fill :both :expand t)
+    (configure listbox 
+               :background *listbox-background*
+               :foreground *listbox-foreground*
+               :selectforeground *listbox-selected-foreground*
+               :selectbackground *listbox-selected-background*)
+
+    (bind listbox "<<ListboxSelect>>"
+          (lambda (event)
+            (declare (ignore event))
+            (focus listbox)
+            (let ((sel (car (listbox-get-selection listbox))))
+              (select-index lb sel)
+              (when (callback lb)
+                (funcall (callback lb) (selected lb))))))
+    ))
+
+
+(defmethod select-index ((lb mw-listbox) index)
+  (let* ((listbox (listbox lb))
+         (oldsel (selected-index lb)))
+    (when oldsel
+      (listbox-configure listbox oldsel :background *listbox-background* :foreground *listbox-foreground*))    
+    (when index
+      (listbox-configure listbox index :background *listbox-selected-background* :foreground *listbox-selected-foreground*)
+      (see listbox index))
+    (setf (selected-index lb) index
+          (selected lb) (and index (nth index (data lb))))))
+
+
+(defmethod (setf data) :after (val (lb mw-listbox))
+  (listbox-clear (listbox lb))
+  (listbox-append (listbox lb) (mapcar (key lb) val)))
 
 
 ;;; tree list widget
@@ -425,7 +496,7 @@ o tooltip
 
 (defclass tooltip (toplevel)
   ((label :accessor tooltip-label :initarg :label)
-   (popup-time :accessor popup-time :initform 1000 :initarg :popup-time)
+   (popup-time :accessor popup-time :initform 200 :initarg :popup-time)
    ))
 
 (defparameter *tooltip-afterid* nil)
@@ -565,72 +636,121 @@ o tooltip
      (format t "data: ~s~%" (data tree)) (force-output)
      )))
 	    
-;;; list-select box widget
+;;; combo widget
 
-(defclass list-select (listbox)
-  ((data :accessor data :initarg :data :initform nil)
+(defclass combo (frame)
+  ((entry :accessor entry :initform nil :initarg :entry)
+   (popdown :accessor popdown :initform nil :initarg :popdown)
+   (listbox :accessor listbox :initform nil :initarg :listbox)
+   (entries :accessor entries :initform nil :initarg :entries)
+   (bpopdown :accessor bpopdown :initform nil :initarg :bpopdown)
+   (popdown-visible :accessor popdown-visible :initform nil :initarg :popdown-visible)
+   (enable-edit     :accessor enable-edit     :initform nil :initarg :enable-edit)
+   (selected-index  :accessor selected-index  :initform nil :initarg :selected-index)
+   
+   (command         :accessor command         :initform nil :initarg :command)
    ))
 
-(defgeneric list-select-display (select item))
+(defmethod value ((combo combo))
+  (text (entry combo)))
 
-(defmethod list-select-display ((select list-select) item)
-  (format nil "~a" item))
+(defmethod (setf entries) :after (val (combo combo))
+  (listbox-clear (listbox combo))
+  (listbox-append (listbox combo) val))
+  
 
-(defgeneric selected-elements (select))
-
-(defmethod selected-elements ((select list-select))
-  (let ((selection (listbox-get-selection select)))
-    (when selection
-      (mapcar (lambda (index)
-                (nth index (data select)))
-              selection))))
-
-(defmethod (setf data) :after (val (select list-select))
-  (listbox-clear select)
-  (listbox-append select (mapcar (lambda (item)
-                                   (list-select-display select item))
-                                 (data select))))
-
-
-;;; demo
-
-(defclass list-select-demo-entry ()
-  ((file :accessor file :initarg :file :initform nil)
-   (size :accessor size :initarg :size :initform 0)))
-
-(defmethod list-select-display ((ls list-select) (entry list-select-demo-entry))
-  (format nil "~a ~d Bytes" (namestring (file entry)) (size entry)))
-
-(defun make-list-select-demo (&optional (master nil))
-  (let* ((f (make-instance 'frame :master master))
-         (ls (make-instance 'list-select :master f :selectmode :multiple))
-         (f2 (make-instance 'frame :master f))
-         (lsize (make-instance 'label :master f2 :text "Total Size:"))
-         (bsize (make-instance 'button :text "Calc" :master f2
-                               :command (lambda ()
-                                          (setf (text lsize)
-                                                (format nil "Total Size: ~a" (loop for e in (selected-elements ls)
-                                                                                  summing (size e))))))))
-    (pack ls :side :top :expand t :fill :both)
-    (pack f2 :side :top :fill :x)
-    (pack bsize :side :left)
-    (pack lsize :side :left)
-    (setf (data ls)
-          (mapcar (lambda (p)
-                    (make-instance 'list-select-demo-entry
-                                   :file p
-                                   :size (with-open-file (s p)
-                                           (file-length s))))
-                  (directory (make-pathname :name :wild :type :wild))))
-    f))
-
-(defun list-select-demo ()
-  (with-ltk ()
-    (let ((f (make-list-select-demo)))
-      (pack f :side :top :expand t :fill :both))))
-
-
-(defun ltk-mw-demo ()
-  (with-ltk ()
-    (pack (make-list-select-demo) :side :top :expand t :fill :both)
+(defmethod bpopdown ((c combo))
+  (cond
+    ((popdown-visible c)
+     (grab-release c)
+     (withdraw (popdown c))
+     (setf (popdown-visible c) nil)
+     )
+    (t
+     (let ((x (window-x c))
+           (y (window-y c))
+           (w (window-width c))
+           (h (window-height c)))
+       (normalize (popdown c))
+       (raise (popdown c))
+       (set-geometry (popdown c) w 150 x (+ y h))
+       (grab c :global t)
+       (setf (popdown-visible c) t)))
     ))
+
+(defmethod initialize-instance :after ((c combo) &key)
+  (format-wish
+   "set arrow_data \"
+      #define arrow_width 8
+      #define arrow_height 5
+      static unsigned char * arrow_bits[] = { ~{0x~x~^, ~} };\"
+      image create bitmap arrow -data $arrow_data"
+   '(#b11111111
+     #b11111111 
+     #b01111110 
+     #b00111100 
+     #b00011000
+     ))
+  (let* ((entry (make-instance 'entry :master c))
+         (bpopdown (make-instance 'button  :master c :width 16 
+                                  :command (lambda ()
+                                             (bpopdown c))))
+         (tl (make-instance 'toplevel :master c))
+         (slb (make-instance 'scrolled-listbox :master tl))
+         (lb (listbox slb)))
+
+    (configure bpopdown :image "arrow")
+    (configure c :relief :sunken :borderwidth 2)
+    (configure entry :relief :flat :borderwidth 0 :background :white)
+    (unless (enable-edit c)
+      (configure entry  :state :disabled))
+    (withdraw tl)
+    (set-wm-overrideredirect tl 1)
+    (pack slb :side :top :fill :both :expand t :padx 2 :pady 2)
+    (grid-forget (ltk::hscroll slb))
+    (when (entries c)
+      (listbox-append lb (entries c)))
+    (pack entry :side :left :expand t :fill :both)
+    (pack bpopdown :side :right :expand t :fill :both)
+    
+    (bind c "<ButtonRelease>" (lambda (event)
+                                 (declare (ignore event))
+                                 (when (popdown-visible c)
+                                   (bpopdown c))))
+    (bind lb "<<ListboxSelect>>" (lambda (event)
+                                   (declare (ignore event))
+                                   (let ((sel (first (listbox-get-selection lb))))
+                                     
+                                     (cond
+                                       (sel
+                                        (setf (text entry) (nth sel (entries c)))
+                                        (setf (selected-index c) sel)
+                                        (when (command c)
+                                          (funcall (command c) (nth sel (entries c)))))
+                                       (t
+                                        (setf (selected-index c) nil))
+                                       ))))
+    (bind lb "<ButtonRelease>" (lambda (event)
+                                 (declare (ignore event))
+                                 (when (popdown-visible c)
+                                   (bpopdown c))))
+     
+    (setf (popdown c) tl
+          (entry c) entry
+          (listbox c) lb)
+    
+    ))
+
+(defun combo-test ()
+  (with-ltk ()
+    (let ((c (make-instance 'combo
+                            :enable-edit nil
+                            :entries '("foo1" "bar1" "baz1"
+                                       "foo2" "bar2" "baz2"
+                                       "foo3" "bar3" "baz3"
+                                       "foo4" "bar4" "baz4")
+                            :command (lambda (val)
+                                       (format t "~a selected.~%" val)))))
+      (pack c :side :top )
+      )))
+
