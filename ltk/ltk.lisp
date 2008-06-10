@@ -204,6 +204,8 @@ toplevel             x
            #:event-mouse-button
            #:event-root-x
            #:event-root-y
+           #:event-width
+           #:event-height
            #:focus
            #:force-focus
            #:forget-pane
@@ -290,6 +292,8 @@ toplevel             x
            #:radio-button
            #:raise
            #:read-event
+           #:sash-coord
+           #:sash-place
            #:save-text
            #:scale
            #:screen-height
@@ -1629,6 +1633,15 @@ methods, e.g. 'configure'."))
   (format-wish "~a forget ~a" (widget-path pw) (widget-path w))
   pw)
 
+(defgeneric sash-coord (window index))
+(defmethod sash-coord ((pw paned-window) index)
+  (format-wish "senddata \"([~a sash coord ~a])\"" (widget-path pw) index)
+  (read-data))
+
+(defgeneric sash-place (window index x y))
+(defmethod sash-place ((pw paned-window) index x y)
+  (format-wish "~a sash place ~a ~a ~a" (widget-path pw) index x y))
+
 ;;; listbox widget
 
 (defwidget listbox (widget)
@@ -1646,7 +1659,15 @@ methods, e.g. 'configure'."))
 (defmethod listbox-append ((l listbox) values)
   "append values (which may be a list) to the list box"
   (if (listp values)
-      (format-wish "~a insert end ~{ \{~a\}~}" (widget-path l) values)
+      ;; Why this 10-at-a-time behavior?
+      ;; Is this something that the repl-ltk code fixes?
+      (progn
+	(loop 
+	 while ( > (length values) 10)
+	 do
+	 (format-wish "~a insert end ~{ \{~a\}~}" (widget-path l) (subseq values 0 10))
+	 (setf values (subseq values 10)))
+	(format-wish "~a insert end ~{ \{~a\}~}" (widget-path l) values))
       (format-wish "~a insert end \{~a\}" (widget-path l) values))
   l)
 
@@ -2162,11 +2183,22 @@ set y [winfo y ~a]
                         do
                         (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
                        (format s " ]~%"))
+                      ((eq itemtype :line)
+                       (format s " [~a create line ~a ~a ~a ~a " (widget-path canvas)
+                               (truncate (pop item))
+                               (truncate (pop item))
+                               (truncate (pop item))
+                               (truncate (pop item)))
+                       (loop
+                        while item
+                        do
+                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
+                       (format s " ]~%"))
                       ((eq itemtype :text)
-                       (format s " [~a create text ~a ~a -text {~a} "
+                       (format s " [~a create text ~a ~a -anchor nw -text {~a} "
                                (widget-path canvas)
-                               (truncate (pop item))
-                               (truncate (pop item))
+                               (tk-number (pop item))
+                               (tk-number (pop item))
                                (tkescape (pop item)))
                        (loop
                         while item
