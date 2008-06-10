@@ -409,7 +409,7 @@ toplevel             x
 		  (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* "0.911")
+(defvar *ltk-version* "0.91")
 
 ;;; global var for holding the communication stream
 (defstruct (ltk-connection (:constructor make-ltk-connection ())
@@ -468,7 +468,7 @@ toplevel             x
 
 (defun dbg (fmt &rest args)
   (when *debug-tk*
-    (apply #'format t fmt args)
+    (apply #'format *trace-output* fmt args)
     (finish-output)))
 
 ;;; setup of wish
@@ -504,6 +504,7 @@ toplevel             x
                  set pos [expr $pos + 1]
                 }
                puts \"))\"
+               flush stdout
                   
 }")
 
@@ -531,7 +532,7 @@ toplevel             x
 
   ;;; proc sendevent {s} {puts "(event \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
   ;(send-wish "proc sendevent {s x y keycode char width height root_x root_y} {puts \"(:event \\\"$s\\\" $x $y $keycode $char $width $height $root_x $root_y)\"} ")
-  (send-wish "proc sendevent {s x y keycode char width height root_x root_y mouse_button} {puts \"(:event \\\"$s\\\" $x $y $keycode $char $width $height $root_x $root_y $mouse_button)\"} ")
+  (send-wish "proc sendevent {s x y keycode char width height root_x root_y mouse_button} {puts \"(:event \\\"$s\\\" $x $y $keycode $char $width $height $root_x $root_y $mouse_button)\"; flush stdout} ")
   ;;; proc callback {s} {puts "(callback \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
 
   ;;; callback structure: (:callback "widgetname")          ;; for non-parameter callbacks
@@ -539,8 +540,8 @@ toplevel             x
   ;;;                     (:callback "widgetname" "string") ;; widget returns string value
 
   (send-wish "proc callback {s} {puts \"(:callback \\\"$s\\\")\";flush stdout} ")
-  (send-wish "proc callbackval {s val} {puts \"(:callback \\\"$s\\\" $val)\"} ")
-  (send-wish "proc callbackstring {s val} {puts \"(:callback \\\"$s\\\" \\\"[escape $val]\\\")\"} ")
+  (send-wish "proc callbackval {s val} {puts \"(:callback \\\"$s\\\" $val)\"; flush stdout} ")
+  (send-wish "proc callbackstring {s val} {puts \"(:callback \\\"$s\\\" \\\"[escape $val]\\\")\"} ; flush stdout")
 
   (dolist (fun *init-wish-hook*)	; run init hook funktions 
     (funcall fun)))
@@ -600,14 +601,14 @@ toplevel             x
   (declare (string text)
            (optimize (speed 3)))
   (when *debug-tk*
-    (format t "~A~%" text)
+    (format *trace-output* "~A~%" text)
     (finish-output))
   (let ((*print-pretty* nil)
         (stream (wish-stream *wish*)))
     (declare (stream stream))
     (handler-bind ((stream-error (lambda (e)
                                    (when *debug-tk*
-                                     (format t "Error sending command to wish: ~A" e)
+                                     (format *trace-output* "Error sending command to wish: ~A" e)
                                      (finish-output))
                                    (ignore-errors (close stream))
                                    (exit-wish))))
@@ -619,13 +620,13 @@ toplevel             x
   (let ((stream (gensym)))
     `(progn
        (when *debug-tk*
-         (format t ,control ,@args)
-         (format t "~%")
+         (format *trace-output* ,control ,@args)
+         (format *trace-output* "~%")
          (finish-output))
        (let ((*print-pretty* nil)
              (,stream (wish-stream *wish*)))
-         (declare (type stream ,stream))
-         ;(optimize (speed 3)))
+         (declare (type stream ,stream)
+                  (optimize (speed 3)))
          
          (format ,stream ,control ,@args)
          (format ,stream "~%")
@@ -775,12 +776,12 @@ event to read and blocking is set to nil"
 (defun add-callback (sym fun)
   "create a callback sym is the name to use for storage, fun is the function to call"
   (when *debug-tk*
-    (format t "add-callback (~A ~A)~%" sym fun))
+    (format *trace-output* "add-callback (~A ~A)~%" sym fun))
   (setf (gethash sym (wish-callbacks *wish*)) fun))
 
 (defun remove-callback (sym)
   (when *debug-tk*
-    (format t "remove-callback (~A)~%" sym))
+    (format *trace-output* "remove-callback (~A)~%" sym))
   (setf (gethash sym (wish-callbacks *wish*)) nil))
 
 (defun callback (sym arg)
@@ -1037,7 +1038,14 @@ can be passed to AFTER-CANCEL"
       (undo undo "~@[ -undo ~(~a~)~]" undo "")
       (use use "~@[ -use ~(~a~)~]" use "")
       (validate validate "~@[ -validate ~(~a~)~]" validate "")
-      (validatecommand validatecommand "~@[ -validatecommand ~(~a~)~]" validatecommand "")
+      ;(validatecommand validatecommand "~@[ -validatecommand ~(~a~)~]" validatecommand "")
+
+      (validatecommand validatecommand "~@[ -validatecommand {callback ~a;1}~]"
+       (and validatecommand 
+        (progn
+          (add-callback (name widget) validatecommand)
+          (name widget))))
+
       (value value "~@[ -value ~(~a~)~]" value "")
       (value-radio-button nil "~@[ -value ~(~a~)~]" (radio-button-value widget)
        "value for the radio button group to take, when the button is selected")
@@ -1432,14 +1440,6 @@ can be passed to AFTER-CANCEL"
 (defun add-separator (menu)
    (format-wish "~A add separator" (widget-path menu))
    menu)
-
-(defgeneric state (menu menu-label state))
-(defmethod state ((a menu) menu-label state)
-  (format-wish "~a entryconfigure {~a} -state {~a}" (widget-path a) menu-label state))
-
-(defgeneric menu-label (menu old new))
-(defmethod menu-label ((a menu) old new)
-  (format-wish "~a entryconfigure {~a} -label {~a}"  (widget-path a)  old new))
 
 ;;; menu button
 
@@ -2402,7 +2402,8 @@ set y [winfo y ~a]
 (defmethod place (widget x y &key width height)
   (format-wish "place ~A -x ~A -y ~A~@[ -width ~a~]~@[ -height ~a~]" (widget-path widget)
                (tk-number x) (tk-number y)
-               (tk-number width) (tk-number height))
+               (and width (tk-number width))
+               (and height (tk-number height)))
   widget)
 
 (defgeneric place-forget (widget))
@@ -2555,11 +2556,6 @@ set y [winfo y ~a]
   (read-data))
 
 ;;; wm functions
-
-(defgeneric resizable (widget x y))
-(defmethod resizable ((tl widget) x y)
-  (format-wish "wm resizable ~a ~a ~a" (widget-path tl) x y)
-  tl)
 
 (defgeneric set-wm-overrideredirect (widget value))
 (defmethod set-wm-overrideredirect ((w widget) val)
