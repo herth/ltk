@@ -388,10 +388,18 @@ toplevel             x
               (sb-sys:make-fd-stream 
                (sb-sys:fd-stream-fd (process-input proc))
                :output t  :external-format :iso-8859-1))
-             #-:ext-8859-1
+
+             (make-two-way-stream 
+              (sb-sys:make-fd-stream 
+               (sb-sys:fd-stream-fd (process-output proc))
+               :input t :external-format :utf-8)
+              (sb-sys:make-fd-stream 
+               (sb-sys:fd-stream-fd (process-input proc))
+               :output t  :external-format :utf-8))
+             #+:xxext-8859-1
 	     (make-two-way-stream 
 	      (process-output proc)              
-	      (process-input proc))	     
+	      (process-input proc))
              )
     #+:lispworks (system:open-pipe fullstring :direction :io)
     #+:allegro (let ((proc (excl:run-shell-command
@@ -473,6 +481,9 @@ toplevel             x
 (defun dbg (fmt &rest args)
   (when *debug-tk*
     (apply #'format *trace-output* fmt args)
+    (with-open-file (w "rl.log" :direction :output :if-exists :append :if-does-not-exist :create)
+      (apply #'format w fmt args)
+      (finish-output w))
     (finish-output)))
 
 ;;; setup of wish
@@ -485,33 +496,41 @@ toplevel             x
   (send-wish "package require Tk")
   (send-wish "proc escape {s} {regsub -all {\\\\} $s {\\\\\\\\} s1;regsub -all {\"} $s1 {\\\"} s2;return $s2}")
   ;;; proc senddata {s} {puts "(data \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
-  (send-wish "proc senddata {s} {puts \"(:data [escape $s])\";flush stdout}")
-  (send-wish "proc senddatastring {s} {puts \"(:data \\\"[escape $s]\\\")\";flush stdout} ")
+  (send-wish "proc senddata {s} {global server; puts $server \"(:data [escape $s])\";flush $server}")
+
+  (send-wish "proc senddatastring {s} {
+       global server
+       
+       puts $server \"(:data \\\"[escape $s]\\\")\"
+       flush $server
+    } ")
+
   (send-wish "proc senddatastrings {strings} {
-                 puts \"(:data (\"
+                 global server 
+                 puts $server \"(:data (\"
  	         foreach s $strings {
-                     puts \"\\\"[escape $s]\\\"\"
+                     puts $server \"\\\"[escape $s]\\\"\"
                      }
-                 puts \"))\";flush stdout} ")
+                 puts $server \"))\";flush $server} ")
   (send-wish "proc to_keyword  {s} {
                 if {[string index $s 0] == \"-\"} {
                    return \":[string range $s 1 [string length $s]]\" } {return \":$s\"}}")
   
   (send-wish "proc sendpropertylist {l} {
+               global server; 
                set pos 0
                set ll [llength $l]
-               puts \"(:data (\"
+               puts $server \"(:data (\"
                while {$pos < $ll} {
-                 puts \" [to_keyword [lindex $l $pos]] \"
+                 puts $server \" [to_keyword [lindex $l $pos]] \"
                  set pos [expr $pos + 1]
-                 puts \" [lindex $l $pos] \"
+                 puts $server \" [lindex $l $pos] \"
                  set pos [expr $pos + 1]
                 }
-               puts \"))\"
-               flush stdout
+               puts $server \"))\"
                   
 }")
-
+  (finish-output (wish-stream *wish*))
   (send-wish "proc searchall {widget pattern} {
                   set l [string length $pattern]
                  set result [$widget search $pattern 1.0]
@@ -536,17 +555,19 @@ toplevel             x
 
   ;;; proc sendevent {s} {puts "(event \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
   ;(send-wish "proc sendevent {s x y keycode char width height root_x root_y} {puts \"(:event \\\"$s\\\" $x $y $keycode $char $width $height $root_x $root_y)\"} ")
-  (send-wish "proc sendevent {s x y keycode char width height root_x root_y mouse_button} {puts \"(:event \\\"$s\\\" $x $y $keycode $char $width $height $root_x $root_y $mouse_button)\"; flush stdout} ")
+  (send-wish "proc sendevent {s x y keycode char width height root_x root_y mouse_button} {global server; puts $server \"(:event \\\"$s\\\" $x $y $keycode $char $width $height $root_x $root_y $mouse_button)\"; flush $server} ")
   ;;; proc callback {s} {puts "(callback \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
 
   ;;; callback structure: (:callback "widgetname")          ;; for non-parameter callbacks
   ;;;                     (:callback "widgetname" val)      ;; wideget returns non-string value
   ;;;                     (:callback "widgetname" "string") ;; widget returns string value
 
-  (send-wish "proc callback {s} {puts \"(:callback \\\"$s\\\")\";flush stdout} ")
-  (send-wish "proc callbackval {s val} {puts \"(:callback \\\"$s\\\" $val)\"; flush stdout} ")
-  (send-wish "proc callbackstring {s val} {puts \"(:callback \\\"$s\\\" \\\"[escape $val]\\\")\"} ; flush stdout")
+  (send-wish "proc callback {s} {global server; puts $server \"(:callback \\\"$s\\\")\";flush $server} ")
+  (send-wish "proc callbackval {s val} {global server; puts $server \"(:callback \\\"$s\\\" $val)\"} ")
+  (send-wish "proc callbackstring {s val} {global server; puts $server \"(:callback \\\"$s\\\" \\\"[escape $val]\\\")\"} ")
 
+
+  
   (dolist (fun *init-wish-hook*)	; run init hook funktions 
     (funcall fun)))
 
@@ -600,13 +621,16 @@ toplevel             x
       (setf *wish-connections* (remove *wish* *wish-connections*)))
     nil))
 
+
+(defun slength (text)
+  (length (sb-ext:string-to-octets text :external-format :utf-8)))
+
 ;;; send a string to wish
 (defun send-wish (text)
   (declare (string text)
            (optimize (speed 3)))
   (when *debug-tk*
-    (format *trace-output* "~A~%" text)
-    (finish-output))
+    (dbg "~D ~A~%" (length text) text))
   (let ((*print-pretty* nil)
         (stream (wish-stream *wish*)))
     (declare (stream stream))
@@ -616,9 +640,15 @@ toplevel             x
                                      (finish-output))
                                    (ignore-errors (close stream))
                                    (exit-wish))))
-    (format stream "~A~%" text)
-    (finish-output stream))))
+      (format stream "~D ~A~%" (length text) text)
+      (finish-output stream))))
 
+(defun format-wish (control &rest args)
+  "format 'args using 'control as control string to wish"
+  (send-wish (apply #'format nil control args)))
+  
+
+#+nil
 (defmacro format-wish (control &rest args)
   "format 'args using 'control as control string to wish"
   (let ((stream (gensym)))
@@ -636,6 +666,7 @@ toplevel             x
          (format ,stream "~%")
          (finish-output ,stream))
        nil)))
+
 
 
 ;; differences:
@@ -794,11 +825,21 @@ event to read and blocking is set to nil"
     (when fun
       (apply fun arg))))
 
+(defun senddatastring (tclcmd args)
+  (let ((fmt (format nil "if {[catch {~a} result]} {
+            puts \"(:error $result)\"
+           } else { 
+           senddatastring $result
+}" tclcmd)))
+    (apply 'format-wish fmt args)))
+
+
 (defun after (time fun)
  "after <time> msec call function <fun>, returns the after event id,
 which can be passed to AFTER-CANCEL"
  (let ((name (format nil "after~a" (incf (wish-after-counter *wish*)))))
    (format-wish "senddatastring [after ~a {callback ~A}]" time name)
+   ;(senddatastring "[after ~a {callback ~A}]" time name)
    (let ((id (read-data))
          (blah (wish-after-ids *wish*)))
      (setf (gethash id blah) name)
@@ -835,7 +876,6 @@ can be passed to AFTER-CANCEL"
 (defun get-counter()
   "incremental counter to create unique numbers"
   (incf (wish-counter *wish*)))
-
 
 (defun create-name ()
   "create unique widget name, append unique number to 'w'"
@@ -1030,7 +1070,7 @@ can be passed to AFTER-CANCEL"
       ;;(textvariable textvariable "~@[ -textvariable text_~a~]" (and textvariable (name widget)) "")
       (textvariable text "~@[ -textvariable text_~a~]" (progn
                                                          (when text
-                                                           (format-wish "set text_~a \"~a\"" (name widget) (tkescape text)))
+                                                           (format-wish "global text_~a ; set text_~a \"~a\"" (name widget) (name widget) (tkescape text)))
                                                          (name widget)) "")
 
       (tickinterval tickinterval "~@[ -tickinterval ~(~a~)~]" tickinterval "")
@@ -1373,12 +1413,12 @@ can be passed to AFTER-CANCEL"
   (format-wish "~a configure -variable ~a" (widget-path v) (name v)))
 
 (defmethod value ((v tkvariable))
-  (format-wish "senddata $~a" (name v))
+  (format-wish "global ~a; senddata $~a" (name v) (name v))
   (read-data))
 
 (defgeneric (setf value) (widget val))
 (defmethod (setf value) (val (v tkvariable))
-  (format-wish "set ~a {~a}" (name v) val)
+  (format-wish "global ~a; set ~a {~a}" (name v) (name v) val)
   val)
 
 (defclass tktextvariable ()
@@ -1394,13 +1434,13 @@ can be passed to AFTER-CANCEL"
   )
 
 (defmethod text ((v tktextvariable))
-  (format-wish "senddatastring $text_~a" (name v))
+  (format-wish "global text_~a ; senddatastring $text_~a" (name v) (name v))
   (read-data))
 
 (defgeneric (setf text) (val variable))
 
 (defmethod (setf text) (val (v tktextvariable))
-  (format-wish "set text_~a \"~a\"" (name v) (tkescape val))
+  (format-wish "global text_~a ; set text_~a \"~a\""  (name v)  (name v) (tkescape val))
   val)
 
 ;;; window menu bar
@@ -1476,11 +1516,11 @@ methods, e.g. 'configure'."))
 	       (widget-path (master m)) (text m) (name m) (and (command m) (name m))))
 
 (defmethod value ((cb menucheckbutton))
-  (format-wish "senddata $~a" (name cb))
+  (format-wish "global ~a; senddata $~a" (name cb) (name cb))
   (read-data))
 
 (defmethod (setf value) (val (cb menucheckbutton))
-  (format-wish "set ~a ~a" (name cb) val)
+  (format-wish "global ~a; set ~a ~a" (name cb) (name cb) val)
   val)
 
 (defclass menuradiobutton(menuentry) 
@@ -1498,11 +1538,11 @@ methods, e.g. 'configure'."))
                (and (command m) (name m))))
 
 (defmethod value ((cb menuradiobutton))
-  (format-wish "senddata $~a" (group cb))
+  (format-wish "global ~a; senddata $~a" (group cb) (group cb))
   (read-data))
 
 (defmethod (setf value) (val (cb menuradiobutton))
-  (format-wish "set ~a ~a" (group cb) val)
+  (format-wish "global ~a; set ~a ~a" (group cb) (group cb) val)
   val)
 
 
@@ -1549,19 +1589,19 @@ methods, e.g. 'configure'."))
   "reads the content of the shared variable of the radio button set"
   (if (radio-button-variable rb)
       (progn
-	(format-wish "senddata $~a" (radio-button-variable rb))
+	(format-wish "global ~a; senddata $~a" (radio-button-variable rb) (radio-button-variable rb))
 	(read-data))
       nil))
 
 (defmethod (setf value) (val (rb radio-button))
   "sets the content of the shared variable of the radio button set"
   (when (radio-button-variable rb)
-    (format-wish "set ~a ~a" (radio-button-variable rb) val))
+    (format-wish "global ~a; set ~a ~a" (radio-button-variable rb) (radio-button-variable rb) val))
   val)
 
 (defmethod (setf command) (val (rb radio-button))
   (add-callback (name rb) val)
-  (format-wish "~a configure -command {callbackval ~a $~a}" (widget-path rb) (name rb) (radio-button-variable rb))
+  (format-wish "~a configure -command {global ~a;callbackval ~a $~a}" (widget-path rb) (name rb) (name rb) (radio-button-variable rb))
   val)
 
 ;; text entry widget
@@ -1651,13 +1691,7 @@ methods, e.g. 'configure'."))
 (defmethod listbox-append ((l listbox) values)
   "append values (which may be a list) to the list box"
   (if (listp values)
-      (progn
-	(loop 
-	 while ( > (length values) 10)
-	 do
-	 (format-wish "~a insert end ~{ \{~a\}~}" (widget-path l) (subseq values 0 10))
-	 (setf values (subseq values 10)))
-	(format-wish "~a insert end ~{ \{~a\}~}" (widget-path l) values))
+      (format-wish "~a insert end ~{ \{~a\}~}" (widget-path l) values)
       (format-wish "~a insert end \{~a\}" (widget-path l) values))
   l)
 
@@ -2173,7 +2207,7 @@ set y [winfo y ~a]
                         do
                         (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
                        (format s " ]~%"))
-                      ((eq itemtype :line)
+                                            ((eq itemtype :line)
                        (format s " [~a create line ~a ~a ~a ~a " (widget-path canvas)
                                (truncate (pop item))
                                (truncate (pop item))
@@ -2745,12 +2779,12 @@ set y [winfo y ~a]
 
 (defun window-x (tl)
   "give the x position of the toplevel in pixels"
-  (format-wish "senddata [winfo rootx ~a];flush stdout" (widget-path tl))
+  (format-wish "senddata [winfo rootx ~a];flush $server" (widget-path tl))
   (read-data))
 
 (defun window-y (tl)
   "give the y position of the toplevel in pixels"
-  (format-wish "senddata [winfo rooty ~a];flush stdout" (widget-path tl))
+  (format-wish "senddata [winfo rooty ~a];flush $server" (widget-path tl))
   (read-data))
 
 ;;; misc functions
@@ -2886,7 +2920,7 @@ set y [winfo y ~a]
    (t
     (let* ((name (create-name)))
       (add-callback name (second tree))		     
-      (send-wish (format nil "~A add command -label {~A} -command {puts -nonewline  {(\"~A\")};flush stdout}" widget-path (first tree) name))
+      (send-wish (format nil "~A add command -label {~A} -command {puts -nonewline  {(\"~A\")};flush $server}" widget-path (first tree) name))
       ))))
 
 (defun create-menu2 (menutree)
@@ -2943,9 +2977,8 @@ set y [winfo y ~a]
   (format *error-output* "~&An error of type ~A has occured: ~A~%"
 	  (type-of condition) condition)
   #+sbcl (progn (sb-debug:backtrace most-positive-fixnum *error-output*)
-		(unless (or (find-package :swank)
-                            (find-package :fly))
-                  (quit)))
+                ;; FIXME - this should be generalized
+                (quit))
   #+(or cmu scl)
   (progn (debug:backtrace most-positive-fixnum *error-output*)
          ;; FIXME - this should be generalized
@@ -3062,9 +3095,8 @@ set y [winfo y ~a]
 
 (defun process-one-event (event)
   (when event
-    (when *debug-tk*
-      (format *trace-output* "l:~s<=~%" event)
-      (finish-output *trace-output*))
+    (dbg "l:~s<=~%" event)
+    
     (cond
      ((and (not (listp event))
            *trace-tk*)
