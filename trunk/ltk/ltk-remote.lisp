@@ -155,7 +155,6 @@
 (defun stop-server ()
   (setf *stop-remote* t))
 
-
 ;;; sbcl version
 
 #+:sbcl
@@ -256,6 +255,48 @@
                 (quit ()
                   :report "Shutdown ltk remote server"
                   nil)))))))
+
+;;; MCL version !!?! FTW!
+
+#+:mcl (require "OPENTRANSPORT")
+
+;; #+:mcl
+;; (defun stop-server ()
+;;   (setf *stop-remote* t))
+
+#+:mcl
+(defmacro otransport-bind-wait-accept (port)
+  (let ((server (ccl::open-tcp-stream nil port))
+        (abort? t))
+    (unwind-protect (progn
+                      (ccl:process-wait "Waiting for an Ltk-Remote client"
+                                        (lambda ()
+                                          (eql (ccl::opentransport-stream-connection-state server)
+                                               :dataxfer)))
+                      (setf abort? nil)
+                      server)
+      (when abort?
+        (close server)))))
+
+#+:mcl
+(defmacro with-remote-ltk (port bindings form &rest cleanup)
+  `(setf ltk-remote::*server*
+         (ccl:process-run-function
+          (format nil "Ltk-Remote serving port ~D" ,port)
+          (lambda ()
+            (restart-case
+              (let ((client (otransport-bind-wait-accept ,port)))
+                (ccl:process-run-function
+                 (format nil "Ltk-Remote connection <~s>" client)
+                 (lambda ()
+                   (let ,bindings
+                     (ltk::call-with-ltk (lambda () ,form)
+                                         :stream client)
+                     ,@cleanup))))
+              (quit ()
+                :report "Shutdown Ltk-Remote server"
+                nil))))))
+
 
 ;;; simple test function
 
