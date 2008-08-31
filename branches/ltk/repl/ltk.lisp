@@ -466,7 +466,7 @@ toplevel             x
 
 ;;; verbosity of debug messages, if true, then all communication
 ;;; with tk is echoed to stdout
-(defvar *debug-tk* nil)
+(defparameter *debug-tk* t)
 
 (defvar *trace-tk* nil)
 
@@ -572,6 +572,80 @@ toplevel             x
     (funcall fun)))
 
 
+(defun init-tcl ()
+  (format (wish-stream *wish*) "set buffer \"\"
+set server stdout
+
+set tclside_ltkdebug 0
+
+if {$tclside_ltkdebug} {
+   text .debug
+   pack .debug -side top -expand 1 -fill both
+
+}
+
+proc ltkdebug {text} {
+  global tclside_ltkdebug
+  if {$tclside_ltkdebug} {
+    .debug insert end \"$text\\\n\"
+    .debug see end
+  }
+}
+
+
+proc getcount {s} { 
+    if {[regexp {^\\s*(\\d+) } $s match num]} {
+        return $num
+    }
+}
+
+proc getstring {s} { 
+    if {[regexp {^\\s*(\\d+) } $s match]} {
+        return [string range $s [string length $match] end]
+    }
+}
+
+proc process_buffer {} {
+    global buffer
+    global server
+
+    set count [getcount $buffer]
+    set tmp_buf [getstring $buffer]
+
+    while {($count > 0) && ([string length $tmp_buf] >= $count)} {
+        ltkdebug \"count=$count have=[string length $tmp_buf] bufl=[string length $buffer]\"
+        set cmd [string range $tmp_buf 0 $count]
+        set buffer [string range $tmp_buf [expr $count+1] end]
+        
+        if {[catch $cmd result]>0} {
+            tk_messageBox -icon error -type ok -title \"Error!\" -message $result
+            puts $server \"(error: \\\"$result\\\")\"
+            flush $server
+            close $server
+            exit
+        }
+        set count [getcount $buffer]
+        set tmp_buf [getstring $buffer]
+    }
+}
+
+proc sread {} {
+    global buffer
+    if {[eof stdin]} {
+        tk_messageBox -icon info -type ok -title \"Connection closed\" -message \"The connection has been closed by the server.\"
+        exit
+    } else {
+        set txt [read stdin];
+        set buffer \"$buffer$txt\"
+        ltkdebug \"buffer=$buffer\\n\" 
+        process_buffer
+    }
+}
+
+fconfigure stdin -blocking 0
+fileevent stdin readable sread
+"))
+
 ;;; start wish and set (wish-stream *wish*)
 (defun start-wish (&rest keys &key handle-errors handle-warnings (debugger t)
                    stream)
@@ -584,6 +658,7 @@ toplevel             x
 	      (apply #'make-condition-handler-function keys))
 	;; perform tcl initialisations
         (with-ltk-handlers ()
+          (init-tcl)
           (init-wish)))
       ;; By default, we don't automatically create a new connection, because the
       ;; user may have simply been careless and doesn't want to push the old
@@ -623,7 +698,8 @@ toplevel             x
 
 
 (defun slength (text)
-  (length (sb-ext:string-to-octets text :external-format :utf-8)))
+  (length #+sbcl(sb-ext:string-to-octets text :external-format :utf-8)
+          #-sbcl text))
 
 ;;; send a string to wish
 (defun send-wish (text)
