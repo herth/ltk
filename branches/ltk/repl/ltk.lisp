@@ -3067,21 +3067,18 @@ set y [winfo y ~a]
 	  (type-of condition) condition)
   #+sbcl (progn (sb-debug:backtrace most-positive-fixnum *error-output*)
                 ;; FIXME - this should be generalized
-		(unless (or (find-package :swank)
-                            (find-package :fly))
+		(unless (or (find-package :swank))
                   (quit)))
   #+(or cmu scl)
   (progn (debug:backtrace most-positive-fixnum *error-output*)
          ;; FIXME - this should be generalized
-         (unless (or (find-package :swank)
-                     (find-package :fly))
+         (unless (or (find-package :swank))
            (ext:quit))))
 
 ;;;; Error handling
 
 (defvar *ltk-default-debugger*
-  '((fdefinition (find-symbol (symbol-name '#:debugger) :fly))
-    (fdefinition (find-symbol (symbol-name '#:swank-debugger-hook)  :swank)))
+  '((fdefinition (find-symbol (symbol-name '#:swank-debugger-hook)  :swank)))
   "A list of debuggers to try before falling back to the Lisp system's debugger.
   An item in this list may be a function, a symbol naming a function, or a
   complex form to evaluate.  If it is a complex form, it will be evaled inside
