@@ -25,9 +25,21 @@
        #+:sbcl :sb-thread
        #+:sbcl :sb-bsd-sockets)
   (:export
+   #:stop-server
    #:with-remote-ltk))
 
 (in-package ltk-remote)
+
+(defmacro with-remote-ltk (port bindings form &rest cleanups)
+  (let ((vars (mapcar (lambda (b) (if (consp b) (car b) b)) bindings))
+        (vals (mapcar (lambda (b) (when (consp b) (cadr b))) bindings)))
+    `(invoke-remote-ltk ,port 
+                        ',vars
+                        (list ,@vals)
+                        (lambda () ,form) 
+                        (lambda () ,@cleanups))))
+
+;;; IMPLEMENTATIONS OF INVOKE-REMOTE-LTK
 
 ;;; cmu version
 
@@ -42,51 +54,52 @@
 (defvar *stop-remote* nil)
 
 #+:cmu
-(defmacro with-remote-ltk (port bindings form &rest cleanup)
-  `(mp:make-process
-    (lambda ()
-      (setf *stop-remote* nil)
-      (let ((fd (ext:create-inet-listener ,port :stream :reuse-address t)))
-        (unwind-protect
-             (loop
-                (when (or *stop-remote* mp::*quitting-lisp*)
-                  (return))
-                (let ((winp (mp:process-wait-until-fd-usable fd :input 2)))
-                  (when (or *stop-remote* mp::*quitting-lisp*)
-                    (return))
-                  (when winp
-                    (let ((new-fd (ignore-errors (ext:accept-tcp-connection fd))))
-                      (when new-fd
-                        (mp:make-process
-                         (lambda ()
-                           (multiple-value-bind (server-address server-port)
-                               (ext:get-socket-host-and-port new-fd)
-                             (multiple-value-bind (remote-address remote-port)
-                                 (ext:get-peer-host-and-port new-fd)
-                               (flet ((host-name (address)
-                                        (let ((host-entry (ext:lookup-host-entry address)))
-                                          (if host-entry
-                                              (ext:host-entry-name host-entry)
-                                              (ip-address-string address)))))
-                                 (let ((stream (sys:make-fd-stream new-fd :input t :output t))
-                                       (server-name (host-name server-address))
-                                       (remote-name (host-name remote-address)))
-                                   (format t "Connection to ~A:~D from ~A:~D at "
-                                           server-name server-port
-                                           remote-name remote-port)
-                                   (ext:format-universal-time t (get-universal-time)
-                                                              :style :rfc1123)
-                                   (setf (mp:process-name mp:*current-process*)
-                                         (format nil "LTK connection to ~A:~D from ~A:~D"
-                                                 server-name server-port
-                                                 remote-name remote-port))
-                                   (let ,bindings
-                                     (ltk::call-with-ltk (lambda ()
-                                                           ,form)
-                                                         :stream stream)
-                                     ,@cleanup))))))))))))
-          (unix:unix-close fd))))
-    :name (format nil "LTK connection listener on port ~D" ,port)))
+(defun invoke-remote-ltk (port vars vals form cleanup)
+  (mp:make-process
+   (lambda ()
+     (setf *stop-remote* nil)
+     (let ((fd (ext:create-inet-listener port :stream :reuse-address t)))
+       (unwind-protect
+           (loop
+            (when (or *stop-remote* mp::*quitting-lisp*)
+              (return))
+            (let ((winp (mp:process-wait-until-fd-usable fd :input 2)))
+              (when (or *stop-remote* mp::*quitting-lisp*)
+                (return))
+              (when winp
+                (let ((new-fd (ignore-errors (ext:accept-tcp-connection fd))))
+                  (when new-fd
+                    (mp:make-process
+                     (lambda ()
+                       (multiple-value-bind (server-address server-port)
+                           (ext:get-socket-host-and-port new-fd)
+                         (multiple-value-bind (remote-address remote-port)
+                             (ext:get-peer-host-and-port new-fd)
+                           (flet ((host-name (address)
+                                    (let ((host-entry (ext:lookup-host-entry address)))
+                                      (if host-entry
+                                          (ext:host-entry-name host-entry)
+                                        (ip-address-string address)))))
+                             (let ((stream (sys:make-fd-stream new-fd :input t :output t))
+                                   (server-name (host-name server-address))
+                                   (remote-name (host-name remote-address)))
+                               (format t "Connection to ~A:~D from ~A:~D at "
+                                       server-name server-port
+                                       remote-name remote-port)
+                               (ext:format-universal-time t (get-universal-time)
+                                                          :style :rfc1123)
+                               (setf (mp:process-name mp:*current-process*)
+                                     (format nil "LTK connection to ~A:~D from ~A:~D"
+                                             server-name server-port
+                                             remote-name remote-port))
+                               (progv vars vals
+                                 (ltk::call-with-ltk form
+                                                     :stream stream
+                                                     :remotep t)
+                                 (when cleanup
+                                   (funcall cleanup))))))))))))))
+         (unix:unix-close fd))))
+   :name (format nil "LTK connection listener on port ~D" port)))
 
 #+:cmu
 (defun stop-server ()
@@ -105,11 +118,11 @@
 ;;; SCL version
 
 #+:scl
-(defmacro with-remote-ltk (port bindings form &rest cleanup)
+(defun invoke-remote-ltk (port vars vals form cleanup)
   `(thread:thread-create
     (lambda ()
       (setf *stop-remote* nil)
-      (let ((fd (ext:create-inet-listener ,port :stream :reuse-address t)))
+      (let ((fd (ext:create-inet-listener port :stream :reuse-address t)))
         (unwind-protect
              (loop
                 (when (or *stop-remote* thread:*quitting-lisp*)
@@ -143,13 +156,14 @@
                                          (format nil "LTK connection to ~A:~D from ~A:~D"
                                                  server-name server-port
                                                  remote-name remote-port))
-                                   (let ,bindings
-                                     (ltk::call-with-ltk (lambda ()
-                                                           ,form)
-                                                         :stream stream)
-                                     ,@cleanup))))))))))))
+                                   (progv vars vals
+                                     (ltk::call-with-ltk form
+                                                         :stream stream
+                                                         :remotep t)
+                                     (when cleanup
+                                       (funcall cleanup))))))))))))))
           (unix:unix-close fd))))
-    :name (format nil "LTK connection listener on port ~D" ,port)))
+    :name (format nil "LTK connection listener on port ~D" port)))
 
 #+:scl
 (defun stop-server ()
@@ -177,52 +191,70 @@
     stream)) ;; do we need to return s as well ?
 
 #+:sbcl
-(defmacro with-remote-ltk (port bindings form &rest cleanup)
-  `(make-thread
-    (lambda () 
-      (setf *stop-remote* nil)      
-      (let ((socket (make-socket-server ,port)))
-	(loop
-	  (when *stop-remote*
-	    (socket-close socket)
-	    (return))
-	  (let* ((s (socket-accept socket))
-		 (stream (socket-make-stream s :input t :output t)))
-	    (make-thread
-             (lambda ()
-               (let ,bindings
-                 (ltk::call-with-ltk (lambda ()
-                                       ,form)
-                                     :stream stream)
-                 ,@cleanup)))))
-        (socket-close socket)))))
+(defun invoke-remote-ltk (port vars vals form cleanup)
+  (make-thread
+   (lambda () 
+     (setf *stop-remote* nil)      
+     (let ((socket (make-socket-server port)))
+       (loop
+        (when *stop-remote*
+          (socket-close socket)
+          (return))
+        (let* ((s (socket-accept socket))
+               (stream (socket-make-stream s :input t :output t)))
+          (make-thread
+           (lambda ()
+             (progv vars vals
+               (ltk::call-with-ltk form
+                                   :stream stream
+                                   :remotep t)
+               (when cleanup
+                 (funcall cleanup)))))))
+       (socket-close socket)))))
+
+
 ;; lispworks version
-(defvar *server* nil)
-#+:lispworks
-(defun stop-server ()
- (mp:process-kill ltk-remote::*server*))
+
 #+:lispworks
 (require "comm")
+
 #+:lispworks
-(defmacro with-remote-ltk (port bindings form &rest cleanup)
-  `(setf ltk-remote::*server*
-         (comm:start-up-server :function 
-                               (lambda (handle)
-                                 (let ((stream (make-instance 'comm:socket-stream
-                                                              :socket handle
-                                                              :direction :io
-                                                              :element-type
-                                                              'base-char)))
-                                   (mp:process-run-function
-                                    (format nil "ltk-remote ~D" handle)
-                                    '()
-                                    (lambda ()
-                                      (let ,bindings
-                                        (ltk::call-with-ltk (lambda ()
-                                                              ,form)
-                                                            :stream stream)
-                                        ,@cleanup)))))
-                               :service ,port)))
+(defvar *server* nil)
+
+#+:lispworks
+(defun stop-server ()
+  (when *server*
+    (mp:process-kill *server*)))
+
+
+#+:lispworks
+(defun invoke-remote-ltk (port vars vals form cleanup)
+  (setf *server*
+        (comm:start-up-server :function (lambda (handle)
+                                          (handle-client-connection handle vars vals form cleanup))
+                              :service port)))
+
+#+:lispworks
+(defun handle-client-connection (handle vars vals form cleanup)
+  (let ((stream (make-instance 'comm:socket-stream
+                               :socket handle
+                               :direction :io
+                               :element-type 'base-char)))
+    (mp:process-run-function (format nil "ltk-remote ~d" handle)
+                             nil
+                             'thread-invoke-ltk
+                             stream vars vals form cleanup)))
+
+#+:lispworks
+(defun thread-invoke-ltk (stream vars vals form cleanup)
+  (catch 'exit-with-remote-ltk
+    (progv vars vals
+      (call-with-ltk form
+                     :stream stream
+                     :remotep t)
+      (when cleanup
+        (funcall cleanup)))))
+
 
 ;; allegro version
 
@@ -230,32 +262,40 @@
 (progn
   (require :sock)
   (use-package :socket))
+
 #+:allegro
-(defmacro with-remote-ltk (port bindings form &rest cleanup)
-  `(setf ltk-remote::*server*
-         (mp:process-run-function
-          (format nil "ltk remote server [~a]" ,port)
-          (lambda ()
-            (let ((server (make-socket :type :stream :address-family :internet :connect :passive
-                                       :local-host "0.0.0.0" :local-port ,port
-                                       :reuse-address t :keepalive t)))
-              (restart-case 
-                  (unwind-protect
-                       (loop
-                          (let ((connection (accept-connection server)))
-                            (mp:process-run-function
-                             (format nil "ltk remote connection <~s>"  (ipaddr-to-hostname
-                                                                        (remote-host connection)))
-                             (lambda ()
-                               (let ,bindings
-                                 (ltk::call-with-ltk (lambda ()
-                                                       ,form)
-                                                     :stream connection)
-                                 ,@cleanup)))))
-                    (close server))
-                (quit ()
-                  :report "Shutdown ltk remote server"
-                  nil)))))))
+(defvar *server* nil)
+
+#+:allegro
+(defun invoke-remote-ltk (port vars vals form cleanup)
+  (setf *server*
+        (mp:process-run-function
+         (format nil "ltk remote server [~a]" port)
+         (lambda ()
+           (let ((server (make-socket :type :stream :address-family :internet :connect :passive
+                                      :local-host "0.0.0.0" :local-port port
+                                      :reuse-address t :keepalive t)))
+             (restart-case 
+                 (unwind-protect
+                     (loop
+                      (let ((connection (accept-connection server)))
+                        (mp:process-run-function
+                         (format nil "ltk remote connection <~s>"  (ipaddr-to-hostname
+                                                                    (remote-host connection)))
+                         (lambda ()
+                           (progv vars vals
+                             (ltk::call-with-ltk form
+                                                 :stream connection
+                                                 :remotep t)
+                             (when cleanup
+                               (funcall cleanup)))))))
+                   (close server))
+               (quit ()
+                 :report "Shutdown ltk remote server"
+                 nil)))))))
+
+;;;;;;;;;;;;;;;;; END OF IMPLEMENTATION DEPENDANCIES
+
 
 ;;; simple test function
 
@@ -330,3 +370,6 @@
 
      )))
 
+;;;
+
+(pushnew :ltk-remote *features*)

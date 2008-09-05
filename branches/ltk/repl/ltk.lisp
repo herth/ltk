@@ -25,7 +25,7 @@ options may not be supported.
 command      supported comment
 bell                 x
 bind                 x 
-bindtags               modifly the tag list of a widget that describes which events it gets
+bindtags               modify the tag list of a widget that describes which events it gets
 bitmap               - see image
 button               x
 canvas               x 
@@ -160,6 +160,7 @@ toplevel             x
            #:canvas-rectangle
            #:canvas-text
            #:canvas-image
+           #:canvas-item
            #:canvas-arc
            #:canvas-bbox
            #:canvasx
@@ -340,6 +341,7 @@ toplevel             x
            #:widget-class-name
            #:with-ltk
            #:call-with-ltk
+           #:exit-with-remote-ltk
            #:with-modal-toplevel
            #:with-remote-ltk
            #:with-widgets
@@ -359,7 +361,7 @@ toplevel             x
   "execute program with args a list containing the arguments passed to the program
    if wt is non-nil, the function will wait for the execution of the program to return.
    returns a two way stream connected to stdin/stdout of the program"
-  #+:clisp (declare (ignore wt))
+  #+(or :clisp :lispworks) (declare (ignore wt))
   (let ((fullstring program))
     (dolist (a args)
       (setf fullstring (concatenate 'string fullstring " " a)))
@@ -424,7 +426,7 @@ toplevel             x
 (defvar *ltk-version* "0.911")
 
 ;;; global var for holding the communication stream
-(defstruct (ltk-connection (:constructor make-ltk-connection ())
+(defstruct (ltk-connection (:constructor make-ltk-connection (&key remotep))
 			   (:conc-name #:wish-))
   (stream nil)
   (callbacks (make-hash-table :test #'equal))
@@ -438,7 +440,8 @@ toplevel             x
   ;; it take place inside of MAINLOOP.
   (call-with-condition-handlers-function (lambda (f) (funcall f)))
   ;; This is only used to support SERVE-EVENT.
-  (input-handler nil))
+  (input-handler nil)
+  (remotep nil))
 
 (defmacro with-ltk-handlers (() &body body)
   `(funcall (wish-call-with-condition-handlers-function *wish*)
@@ -481,10 +484,10 @@ toplevel             x
 (defun dbg (fmt &rest args)
   (when *debug-tk*
     (apply #'format *trace-output* fmt args)
+    (finish-output *trace-output*)
     (with-open-file (w "rl.log" :direction :output :if-exists :append :if-does-not-exist :create)
       (apply #'format w fmt args)
-      (finish-output w))
-    (finish-output)))
+      (finish-output w))))
 
 ;;; setup of wish
 ;;; put any tcl function definitions needed for running ltk here
@@ -647,7 +650,7 @@ fileevent stdin readable sread
 "))
 
 ;;; start wish and set (wish-stream *wish*)
-(defun start-wish (&rest keys &key handle-errors handle-warnings (debugger t)
+(defun start-wish (&rest keys &key handle-errors handle-warnings (debugger t) remotep
                    stream)
   (declare (ignore handle-errors handle-warnings debugger))
   ;; open subprocess
@@ -658,7 +661,8 @@ fileevent stdin readable sread
 	      (apply #'make-condition-handler-function keys))
 	;; perform tcl initialisations
         (with-ltk-handlers ()
-          (init-tcl)
+          (unless remotep
+            (init-tcl))
           (init-wish)))
       ;; By default, we don't automatically create a new connection, because the
       ;; user may have simply been careless and doesn't want to push the old
@@ -667,7 +671,7 @@ fileevent stdin readable sread
 	(new-wish ()
 	  :report "Create an additional inferior wish."
 	  (push *wish* *wish-connections*)
-	  (setf *wish* (make-ltk-connection))
+	  (setf *wish* (make-ltk-connection :remotep remotep))
 	  (apply #'start-wish keys)))))
 
 ;;; CMUCL, SCL, and SBCL, use a two-way-stream and the constituent
@@ -693,8 +697,11 @@ fileevent stdin readable sread
         (close-process-stream stream))
       (setf (wish-stream *wish*) nil)
       #+:allegro (system:reap-os-subprocess)
-      (setf *wish-connections* (remove *wish* *wish-connections*)))
-    nil))
+      (setf *wish-connections* (remove *wish* *wish-connections*))))
+  #+:lispworks
+  (when (wish-remotep *wish*)
+    (throw 'exit-with-remote-ltk nil))
+  nil)
 
 
 (defun slength (text)
@@ -710,14 +717,18 @@ fileevent stdin readable sread
   (let ((*print-pretty* nil)
         (stream (wish-stream *wish*)))
     (declare (stream stream))
-    (handler-bind ((stream-error (lambda (e)
-                                   (when *debug-tk*
-                                     (format *trace-output* "Error sending command to wish: ~A" e)
-                                     (finish-output))
-                                   (ignore-errors (close stream))
-                                   (exit-wish))))
-      (format stream "~D ~A~%" (length text) text)
+    (handler-bind ((stream-error (lambda (e) (handle-dead-stream e stream)))
+                   #+lispworks 
+                   (comm:socket-error (lambda (e) (handle-dead-stream e stream))))
+      (format stream "~d ~a~%" (length text) text)
       (finish-output stream))))
+
+(defun handle-dead-stream (err stream)
+  (when *debug-tk*
+    (format *trace-output* "Error sending command to wish: ~A" err)
+    (finish-output))
+  (ignore-errors (close stream))
+  (exit-wish))
 
 (defun format-wish (control &rest args)
   "format 'args using 'control as control string to wish"
@@ -755,7 +766,7 @@ fileevent stdin readable sread
 
 (defun read-all(stream)
   (declare (stream stream)
-           (inline read-char-no-hang))
+           #-:lispworks (inline read-char-no-hang))
   (let ((c (read-char-no-hang stream nil nil))
         (s (make-array 256 :adjustable t :element-type 'character :fill-pointer 0)))
     (loop
@@ -764,6 +775,18 @@ fileevent stdin readable sread
          (vector-push-extend c s)
          (setf c (read-char-no-hang stream nil nil)))
     (coerce s 'simple-string)))
+
+#+(and lispworks mswindows)
+(lw:defadvice (mp:process-wait-with-timeout peek-char-no-hang :around)
+    (whostate timeout &optional function &rest args)
+  (apply #'lw:call-next-advice
+         whostate
+         (if (and (eq timeout 1)
+                  (stringp whostate)
+                  (string= whostate "Waiting for pipe input"))
+             0.001
+           timeout)
+         function args))
 
 ;;; read from wish 
 (defun read-wish ()
@@ -789,7 +812,7 @@ fileevent stdin readable sread
 (defun can-read (stream)
   "return t, if there is something to READ on the stream"
   (declare (stream stream)
-           (inline read-char-no-hang unread-char))
+           #-:lispworks (inline read-char-no-hang unread-char))
   (let ((c (read-char-no-hang stream)))
     (loop 
        while (and c
@@ -804,9 +827,10 @@ fileevent stdin readable sread
   "read the next event from wish, return the event or nil, if there is no
 event to read and blocking is set to nil"
   (or (pop (wish-event-queue *wish*))
-      (if (or blocking (can-read (wish-stream *wish*)))
-          (read-preserving-whitespace (wish-stream *wish*) nil nil)
-          no-event-value)))
+      (let ((wstream (wish-stream *wish*)))
+        (if (or blocking (can-read wstream))
+            (read-preserving-whitespace wstream nil nil)
+          no-event-value))))
 
 (defun read-data ()
   "Read data from wish. Non-data events are postponed, bogus messages (eg.
@@ -2279,6 +2303,8 @@ set y [winfo y ~a]
                 (format s "senddata \"( ~%")
                 (dolist (item items)
                   (let ((itemtype (pop item)))
+                    (when (consp itemtype)
+                      (setf itemtype (car itemtype)))
                     (cond
                       ((eq itemtype :rectangle)
                        (format s " [~a create rectangle ~a ~a ~a ~a " (widget-path canvas)
@@ -2316,11 +2342,13 @@ set y [winfo y ~a]
                   )
                 (format s ")\"~%"))))
     (send-wish code)
-    (let ((erg (read-data)))
+    (let ((handles (read-data)))
       ;;(format t "data: ~s~%" erg) (finish-output)
-      (mapcar (lambda (handle)
-                (make-instance 'canvas-item :canvas canvas :handle handle))
-              erg))))
+      (loop for handle in handles as (itemtype) in items collect
+            (let ((class (if (consp itemtype)
+                             (cdr itemtype)
+                           'canvas-item)))
+              (make-instance class :canvas canvas :handle handle))))))
 
 (defun create-text (canvas x y text)
   (format-wish "senddata [~a create text ~a ~a -anchor nw -text {~a}]" (widget-path canvas)
@@ -2520,9 +2548,7 @@ set y [winfo y ~a]
          (warn "Using a string for the :SIDE parameter is deprecated."))
         ((stringp fill)
          (warn "Using a string for the :FILL parameter is deprecated.")))
-  (format-wish "pack ~A -side ~(~A~) -fill ~(~A~)~@[~* -expand 1~]~
-             ~@[ -after ~A~]~@[ -before ~A~]~@[ -padx ~A~]~
-             ~@[ -pady ~A~]~@[ -ipadx ~A~]~@[ -ipady ~A~]~@[ -anchor ~(~A~)~]"
+  (format-wish "pack ~A -side ~(~A~) -fill ~(~A~)~@[~* -expand 1~] ~@[ -after ~A~]~@[ -before ~A~]~@[ -padx ~A~] ~@[ -pady ~A~]~@[ -ipadx ~A~]~@[ -ipady ~A~]~@[ -anchor ~(~A~)~]"
           (widget-path w) side fill expand (and after (widget-path after)) (and before (widget-path before)) padx pady ipadx ipady anchor)
   w)
 
@@ -3077,8 +3103,9 @@ set y [winfo y ~a]
 
 ;;;; Error handling
 
-(defvar *ltk-default-debugger*
-  '((fdefinition (find-symbol (symbol-name '#:swank-debugger-hook)  :swank)))
+(defparameter *ltk-default-debugger*
+  (when (find-package :swank)
+    '((fdefinition (find-symbol (symbol-name '#:swank-debugger-hook)  :swank))))
   "A list of debuggers to try before falling back to the Lisp system's debugger.
   An item in this list may be a function, a symbol naming a function, or a
   complex form to evaluate.  If it is a complex form, it will be evaled inside
@@ -3429,23 +3456,25 @@ When an error is signalled, there are four things LTk can do:
   (declare (ignore debug serve-event stream))
   `(call-with-ltk (lambda () ,@body) ,@keys))
 
-(defun call-with-ltk (thunk &rest keys &key (debug 2) stream serve-event
+(defun call-with-ltk (thunk &rest keys &key (debug 2) stream serve-event remotep
                       &allow-other-keys)
   "Functional interface to with-ltk, provided to allow the user the build similar macros."
   (declare (ignore stream))
   (flet ((start-wish ()
            (apply #'start-wish
+                  :remotep remotep
                   (append (filter-keys '(:stream :handle-errors
                                          :handle-warnings :debugger)
                                        keys)
                           (debug-setting-keys debug))))
          (mainloop () (apply #'mainloop (filter-keys '(:serve-event) keys))))
-    (let ((*wish* (make-ltk-connection)))
+    (let ((*wish* (make-ltk-connection :remotep remotep)))
       (unwind-protect
            (progn
              (start-wish)
-             (with-ltk-handlers () (funcall thunk))
-             (mainloop))
+             (multiple-value-prog1
+                 (with-ltk-handlers () (funcall thunk))
+               (mainloop)))
         (unless serve-event
           (exit-wish))))))
        
