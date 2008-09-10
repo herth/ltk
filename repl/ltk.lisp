@@ -357,6 +357,9 @@ toplevel             x
 ;communication with wish
 ;;; this ist the only function to adapted to other lisps
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (pushnew :tk85 *features*))
+
 (defun do-execute (program args &optional (wt nil))
   "execute program with args a list containing the arguments passed to the program
    if wt is non-nil, the function will wait for the execution of the program to return.
@@ -497,6 +500,8 @@ toplevel             x
   ;(send-wish "proc esc {s} {puts \"\\\"[regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]\\\"\"} ")
   ;(send-wish "proc escape {s} {return [regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]} ")
   (send-wish "package require Tk")
+  #+tk85
+  (send-wish "package require Ttk")
   (send-wish "proc escape {s} {regsub -all {\\\\} $s {\\\\\\\\} s1;regsub -all {\"} $s1 {\\\"} s2;return $s2}")
   ;;; proc senddata {s} {puts "(data \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
   (send-wish "proc senddata {s} {global server; puts $server \"(:data [escape $s])\";flush $server}")
@@ -1193,7 +1198,7 @@ can be passed to AFTER-CANCEL"
       (value value "~@[ -value ~(~a~)~]" value "")
       (value-radio-button nil "~@[ -value ~(~a~)~]" (radio-button-value widget)
        "value for the radio button group to take, when the button is selected")
-      (values values "~@[ -values ~(~a~)~]" values "")
+      (values values "~@[ -values {~{{~a}~^ ~}}~]" values "")
       (variable variable "~@[ -variable ~(~a~)~]" variable "name of the variable associated with the widget")
       (variable-radio-button nil "~@[ -variable ~(~a~)~]" (radio-button-variable widget)
        "name of the radio button group the button shall belong to as a string")
@@ -1306,6 +1311,11 @@ can be passed to AFTER-CANCEL"
 
 (defargs toplevel ()
   borderwidth class menu relief screen use background colormap container cursor height highlightbackground highlightcolor highlightthickness padx pady takefocus visual width)
+
+#+tk85
+(defargs combobox ()
+  cursor style takefocus exportselection justify height postcommand state textvariable values width)
+
 
 (defmacro defwidget (class parents slots cmd &rest code)
   (let ((args (sort (copy-list (rest (assoc class *class-args*)))
@@ -1711,6 +1721,11 @@ methods, e.g. 'configure'."))
   (add-callback (name rb) val)
   (format-wish "~a configure -command {global ~a;callbackval ~a $~a}" (widget-path rb) (name rb) (name rb) (radio-button-variable rb))
   val)
+
+;; ttk combo box
+
+#+tk85
+(defwidget combobox (tktextvariable widget) () "ttk::combobox")
 
 ;; text entry widget
 
@@ -3561,6 +3576,7 @@ When an error is signalled, there are four things LTk can do:
              (r1 (make-instance 'radio-button :master fradio :text "fried" :value 1 :variable "eggs"))
              (r2 (make-instance 'radio-button :master fradio :text "stirred" :value 2 :variable "eggs"))
              (r3 (make-instance 'radio-button :master fradio :text "cooked" :value 3 :variable "eggs"))
+             #+tk85 (combo (make-instance 'combobox :master fradio :text "foo"))
 	     (fr (make-instance 'frame :master bar))
 	     (lr (make-instance 'label :master fr :text "Rotation:"))
 	     (bstart (make-instance 'button :master fr :text "Start" :command 'start-rotation))
@@ -3639,6 +3655,7 @@ When an error is signalled, there are four things LTk can do:
 	(pack sc :side :top :fill :both :expand t)
 	(pack bar :side :bottom)
         (pack (list fradio leggs r1 r2 r3) :side :left)
+        #+tk85 (pack combo :side :left)
         (dolist (r (list r1 r2 r3))
           (let ((button r))
             (setf (command r) (lambda (val)
@@ -3826,5 +3843,10 @@ When an error is signalled, there are four things LTk can do:
 				       (finish-output))))))
      (pack b))))
 
+#+tk85
+(defun combotest ()
+  (with-ltk ()
+    (let ((c (make-instance 'combobox :text "foo" :values '("bar" "baz" "foo bar"))))
+      (pack c :side :left))))
 
 (pushnew :ltk *features*)
