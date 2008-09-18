@@ -174,6 +174,7 @@ toplevel             x
            #:clipboard-append
            #:clipboard-clear
            #:clipboard-get
+           #:combobox
            #:command
            #:coords
            #:configure
@@ -293,6 +294,7 @@ toplevel             x
            #:radio-button
            #:raise
            #:read-event
+           #:resizable
            #:sash-coord
            #:sash-place
            #:save-text
@@ -1577,19 +1579,19 @@ can be passed to AFTER-CANCEL"
 
 ;(defmethod create ((m menu))
 
-(defmethod initialize-instance :after ((m menu) &key underline)
+(defmethod initialize-instance :after ((m menu) &key underline (tearoff 0))
   (when (menu-help m) ;; special treatment for help menu
     (setf (name m) "help")
     (setf (slot-value m 'widget-path) (create-path (master m) (name m))))
-  (format-wish "menu ~A -tearoff 0" (widget-path m))
+  (format-wish "menu ~A -tearoff ~a" (widget-path m) tearoff)
   (when (master m)
     (format-wish "~A add cascade -label {~A} -menu ~a~@[ -underline ~a ~]"
                  (widget-path (master m)) (text m) (widget-path m) underline)))
 
-(defun make-menu(menu text &key underline name)
+(defun make-menu(menu text &key underline name (tearoff 0))
   (if name
-      (make-instance 'menu :master menu :text text :underline underline :name name)
-      (make-instance 'menu :master menu :text text :underline underline)))
+      (make-instance 'menu :master menu :text text :underline underline :name name :tearoff tearoff)
+      (make-instance 'menu :master menu :text text :underline underline :name name :tearoff tearoff)))
 
 (defun add-separator (menu)
    (format-wish "~A add separator" (widget-path menu))
@@ -2587,12 +2589,15 @@ set y [winfo y ~a]
 
 ;;; place manager
 
-(defgeneric place (widget x y &key width height))
-(defmethod place (widget x y &key width height)
-  (format-wish "place ~A -x ~A -y ~A~@[ -width ~a~]~@[ -height ~a~]" (widget-path widget)
+(defgeneric place (widget x y &key anchor bordermode width height in relheight relwidth relx rely))
+(defmethod place (widget x y &key anchor width bordermode height in relheight relwidth relx rely)
+  (format-wish "place ~A -x ~A -y ~A~@[ -anchor ~a~]~@[ -width ~a~]~@[ -height ~a~]~@[ -bordermode ~a~]~@[ -in ~a~]~@[ -relheight ~a~]~@[ -relwidth ~a~]~@[ -relx ~a~]~@[ -rely ~a~]" (widget-path widget)
                (tk-number x) (tk-number y)
-               (and width (tk-number width))
-               (and height (tk-number height)))
+               anchor
+               (tk-number width)
+               (tk-number height)
+               bordermode in (tk-number relheight) (tk-number relwidth) (tk-number relx) (tk-number rely)
+               )
   widget)
 
 (defgeneric place-forget (widget))
@@ -3843,10 +3848,22 @@ When an error is signalled, there are four things LTk can do:
 				       (finish-output))))))
      (pack b))))
 
+
 #+tk85
 (defun combotest ()
   (with-ltk ()
-    (let ((c (make-instance 'combobox :text "foo" :values '("bar" "baz" "foo bar"))))
+    (let* ((c (make-instance 'combobox :text "foo" :values '("bar" "baz" "foo bar")))
+           (ok (make-instance 'button :text "Ok" :command
+                             (lambda ()
+                               (format t "text: ~a~%" (text c))
+                               (break-mainloop)))))
+      (bind c "<KeyRelease>" (lambda (event)
+                               (declare (ignore event))
+                               (format t "newsel:~a~%" (text c))))
+      (bind c "<<ComboboxSelected>>" (lambda (event)
+                                       (declare (ignore event))
+                                       (format t "newsel:~a~%" (text c))))
+      (pack ok :side :right)
       (pack c :side :left))))
 
 (pushnew :ltk *features*)
