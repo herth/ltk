@@ -1499,6 +1499,8 @@ can be passed to AFTER-CANCEL"
      (coerce number 'single-float))
     ((typep number 'rational)
      (coerce number 'single-float))
+    ((null number)
+     nil)
     (t
      (error "~s is not a one of integer, float or rational." number))))
 
