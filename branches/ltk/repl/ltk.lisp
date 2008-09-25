@@ -315,6 +315,7 @@ toplevel             x
            #:search-all-text
            #:search-next-text
            #:see
+           #:send-lazy
            #:send-wish
            #:set-coords
            #:set-coords*
@@ -341,6 +342,7 @@ toplevel             x
            #:window-y
            #:make-ltk-connection
            #:widget-class-name
+           #:with-atomic
            #:with-ltk
            #:call-with-ltk
            #:exit-with-remote-ltk
@@ -446,7 +448,9 @@ toplevel             x
   (call-with-condition-handlers-function (lambda (f) (funcall f)))
   ;; This is only used to support SERVE-EVENT.
   (input-handler nil)
-  (remotep nil))
+  (remotep nil)
+  (output-buffer nil)
+  )
 
 (defmacro with-ltk-handlers (() &body body)
   `(funcall (wish-call-with-condition-handlers-function *wish*)
@@ -486,6 +490,8 @@ toplevel             x
 
 (defvar *init-wish-hook* nil)
 
+(defparameter *buffer-for-atomic-output* nil)
+
 (defun dbg (fmt &rest args)
   (when *debug-tk*
     (apply #'format *trace-output* fmt args)
@@ -497,6 +503,7 @@ toplevel             x
 ;;; setup of wish
 ;;; put any tcl function definitions needed for running ltk here
 (defun init-wish ()
+  (send-lazy
   ;; print string readable, escaping all " and \
   ;; proc esc {s} {puts "\"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\""}
   ;(send-wish "proc esc {s} {puts \"\\\"[regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]\\\"\"} ")
@@ -579,7 +586,7 @@ toplevel             x
 
   
   (dolist (fun *init-wish-hook*)	; run init hook funktions 
-    (funcall fun)))
+    (funcall fun))))
 
 
 (defun init-tcl ()
@@ -589,7 +596,7 @@ set server stdout
 set tclside_ltkdebug 0
 
 if {$tclside_ltkdebug} {
-   text .debug
+   text .debug -height 10
    pack .debug -side top -expand 1 -fill both
 
 }
@@ -623,8 +630,9 @@ proc process_buffer {} {
     set tmp_buf [getstring $buffer]
 
     while {($count > 0) && ([string length $tmp_buf] >= $count)} {
-        ltkdebug \"count=$count have=[string length $tmp_buf] bufl=[string length $buffer]\"
         set cmd [string range $tmp_buf 0 $count]
+        ltkdebug \"count=$count have=[string length $tmp_buf] bufl=[string length $buffer] cmd=$cmd<=\"
+
         set buffer [string range $tmp_buf [expr $count+1] end]
         
         if {[catch $cmd result]>0} {
@@ -716,7 +724,7 @@ fileevent stdin readable sread
           #-sbcl text))
 
 ;;; send a string to wish
-(defun send-wish (text)
+(defun send-wish-raw (text)
   (declare (string text)
            (optimize (speed 3)))
   (when *debug-tk*
@@ -729,6 +737,34 @@ fileevent stdin readable sread
                    (comm:socket-error (lambda (e) (handle-dead-stream e stream))))
       (format stream "~d ~a~%" (length text) text)
       (finish-output stream))))
+
+(defun send-wish (text)
+  (cond
+    (*buffer-for-atomic-output*
+     (setf (wish-output-buffer *wish*)
+           (format nil "~@[~a~]~%~a" (wish-output-buffer *wish*) text)))
+    ((wish-output-buffer *wish*)
+     (send-wish-raw
+      (format nil "~a~%~a" (wish-output-buffer *wish*) text))
+     (setf (wish-output-buffer *wish*) nil))
+    (t
+     (send-wish-raw text))))
+
+(defun flush-wish ()
+  (when (wish-output-buffer *wish*)
+    (send-wish-raw (wish-output-buffer *wish*))
+    (setf (wish-output-buffer *wish*) nil)))
+
+(defmacro with-atomic (&rest code)
+  `(let ((*buffer-for-atomic-output* t))
+     ,@code
+     (flush-wish)))
+
+(defmacro send-lazy (&rest code)
+  `(let ((*buffer-for-atomic-output* t))
+     ,@code
+     ))
+     
 
 (defun handle-dead-stream (err stream)
   (when *debug-tk*
@@ -3865,5 +3901,20 @@ When an error is signalled, there are four things LTk can do:
                                        (format t "newsel:~a~%" (text c))))
       (pack ok :side :right)
       (pack c :side :left))))
+
+(defun packtest1 ()
+  (with-ltk ()
+    (dotimes (i 10)
+      (pack (make-instance 'button :text (format nil "Button Nr. ~a" i)))
+      (sleep 0.1))
+    ))
+
+(defun packtest2 ()
+  (with-ltk ()
+    (with-atomic
+        (dotimes (i 10)
+          (pack (make-instance 'button :text (format nil "Button Nr. ~a" i)))
+          (sleep 0.1))    
+      )))
 
 (pushnew :ltk *features*)
