@@ -361,8 +361,8 @@ toplevel             x
 ;communication with wish
 ;;; this ist the only function to adapted to other lisps
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (pushnew :tk85 *features*))
+;(eval-when (:compile-toplevel :load-toplevel :execute)
+;  (pushnew :tk85 *features*))
 
 (defun do-execute (program args &optional (wt nil))
   "execute program with args a list containing the arguments passed to the program
@@ -500,6 +500,17 @@ toplevel             x
       (apply #'format w fmt args)
       (finish-output w))))
 
+(defmacro with-atomic (&rest code)
+  `(let ((*buffer-for-atomic-output* t))
+     ,@code
+     (flush-wish)))
+
+(defmacro send-lazy (&rest code)
+  `(let ((*buffer-for-atomic-output* t))
+     ,@code
+     ))
+     
+
 ;;; setup of wish
 ;;; put any tcl function definitions needed for running ltk here
 (defun init-wish ()
@@ -596,16 +607,20 @@ set server stdout
 set tclside_ltkdebug 0
 
 if {$tclside_ltkdebug} {
-   text .debug -height 10
-   pack .debug -side top -expand 1 -fill both
-
+   toplevel .ltk
+   wm title .ltk \"Debug output\"
+   text .ltk.debug -height 20
+   pack .ltk.debug -side left -expand 1 -fill both
+   scrollbar .ltk.vs -orient vertical -command {.ltk.debug yview}
+   .ltk.debug configure -yscrollcommand {.ltk.vs set}
+   pack .ltk.vs -side right -fill y
 }
 
 proc ltkdebug {text} {
   global tclside_ltkdebug
   if {$tclside_ltkdebug} {
-    .debug insert end \"$text\\\n\"
-    .debug see end
+    .ltk.debug insert end \"$text\\\n\"
+    .ltk.debug see end
   }
 }
 
@@ -754,17 +769,6 @@ fileevent stdin readable sread
   (when (wish-output-buffer *wish*)
     (send-wish-raw (wish-output-buffer *wish*))
     (setf (wish-output-buffer *wish*) nil)))
-
-(defmacro with-atomic (&rest code)
-  `(let ((*buffer-for-atomic-output* t))
-     ,@code
-     (flush-wish)))
-
-(defmacro send-lazy (&rest code)
-  `(let ((*buffer-for-atomic-output* t))
-     ,@code
-     ))
-     
 
 (defun handle-dead-stream (err stream)
   (when *debug-tk*
@@ -3916,7 +3920,8 @@ When an error is signalled, there are four things LTk can do:
     (with-atomic
         (dotimes (i 10)
           (pack (make-instance 'button :text (format nil "Button Nr. ~a" i)))
-          (sleep 0.1))    
+          ;(sleep 0.1)
+          )
       )))
 
 (pushnew :ltk *features*)
