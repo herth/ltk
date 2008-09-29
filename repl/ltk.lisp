@@ -639,6 +639,7 @@ proc getstring {s} {
     }
 }
 
+proc proc escape_for_lisp {s} {regsub -all {\\\\} $s {\\\\\\\\} s1;regsub -all {\"} $s1 {\\\"} s2;return $s2}
 proc process_buffer {} {
     global buffer
     global server
@@ -654,7 +655,7 @@ proc process_buffer {} {
         
         if {[catch $cmd result]>0} {
             tk_messageBox -icon error -type ok -title \"Error!\" -message $result
-            puts $server \"(:error \\\"$result\\\")\"
+            puts $server \"(:error \\\"[escape_for_lisp $result]\\\")\"
             flush $server
         }
         set count [getcount $buffer]
@@ -990,7 +991,7 @@ event to read and blocking is set to nil"
 
 (defun senddatastring (tclcmd args)
   (let ((fmt (format nil "if {[catch {~a} result]} {
-            puts \"(:error \\\"$result\\\")\"
+            puts \"(:error \\\"[escape $result]\\\")\"
            } else { 
            senddatastring $result
 }" tclcmd)))
@@ -3935,7 +3936,7 @@ When an error is signalled, there are four things LTk can do:
     )))
 
 (defun packtest2 ()
-  (with-ltk (:debug-tcl nil)
+  (with-ltk (:debug-tcl t)
     (with-atomic
         (dotimes (i 10)
           (pack (make-instance 'button :text (format nil "Button Nr. ~a" i)))
