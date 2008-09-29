@@ -478,7 +478,7 @@ toplevel             x
 
 ;;; verbosity of debug messages, if true, then all communication
 ;;; with tk is echoed to stdout
-(defparameter *debug-tk* t)
+(defparameter *debug-tk* nil)
 
 (defvar *trace-tk* nil)
 
@@ -654,10 +654,8 @@ proc process_buffer {} {
         
         if {[catch $cmd result]>0} {
             tk_messageBox -icon error -type ok -title \"Error!\" -message $result
-            puts $server \"(error: \\\"$result\\\")\"
+            puts $server \"(:error \\\"$result\\\")\"
             flush $server
-            close $server
-            exit
         }
         set count [getcount $buffer]
         set tmp_buf [getstring $buffer]
@@ -850,6 +848,7 @@ fileevent stdin readable sread
   ;; READ-ALL would be a bad idea anyways, as in that case we could accidentally
   ;; snarf a real message from the stream as well, if it immediately followed
   ;; an error message.
+  (flush-wish)
   (let ((*read-eval* nil)
         (*package* (find-package :ltk))
 	(stream (wish-stream *wish*)))
@@ -872,13 +871,27 @@ fileevent stdin readable sread
       (unread-char c stream)
       t)))
 
+(define-condition tk-error (error)
+  ((message :initarg :message :reader message))
+  (:report (lambda (error stream)
+	     (format stream "Tcl/Tk error: ~A" (message error)))))
+
+(defun verify-event (event)
+  (cond
+    ((not (listp event))
+     (error "When reading from tcl, expected a list but instead got ~S" event))
+    ((eq (first event) :error)
+     (error 'tk-error :message (second event)))
+    (t event)))
+
 (defun read-event (&key (blocking t) (no-event-value nil))
   "read the next event from wish, return the event or nil, if there is no
 event to read and blocking is set to nil"
   (or (pop (wish-event-queue *wish*))
       (let ((wstream (wish-stream *wish*)))
+	(flush-wish)
         (if (or blocking (can-read wstream))
-            (read-preserving-whitespace wstream nil nil)
+            (verify-event (read-preserving-whitespace wstream nil nil))
           no-event-value))))
 
 (defun read-data ()
@@ -891,6 +904,7 @@ event to read and blocking is set to nil"
 	      (dbg "read-data: ~s~%" data)
 	      (return (second data)))
 	     (t
+	      (verify-event data)
 	      (dbg "postponing event: ~s~%" data)
 	      (setf (wish-event-queue *wish*)
 		    (append (wish-event-queue *wish*) (list data)))))
@@ -976,7 +990,7 @@ event to read and blocking is set to nil"
 
 (defun senddatastring (tclcmd args)
   (let ((fmt (format nil "if {[catch {~a} result]} {
-            puts \"(:error $result)\"
+            puts \"(:error \\\"$result\\\")\"
            } else { 
            senddatastring $result
 }" tclcmd)))
@@ -3303,8 +3317,7 @@ tk input to terminate"
   (let (event)
     (loop 
      while (setf event (read-event :blocking nil))
-     do
-     (process-one-event event))))
+     do (with-atomic (process-one-event event)))))
 
 (defun main-iteration (&key (blocking t))
   "The heart of the main loop.  Returns true as long as the main loop should continue."
@@ -3319,7 +3332,7 @@ tk input to terminate"
 		    nil)
 		   ((eql event no-event)
 		    t)
-		   (t (process-one-event event)
+		   (t (with-atomic (process-one-event event))
 		      (cond
 			(*break-mainloop* nil)
 			(*exit-mainloop*
@@ -3537,7 +3550,8 @@ When an error is signalled, there are four things LTk can do:
            (progn
              (start-wish)
              (multiple-value-prog1
-                 (with-ltk-handlers () (funcall thunk))
+                 (with-ltk-handlers ()
+		   (with-atomic (funcall thunk)))
                (mainloop)))
         (unless serve-event
           (exit-wish))))))
