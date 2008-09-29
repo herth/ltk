@@ -605,6 +605,8 @@ toplevel             x
 set server stdout
 
 set tclside_ltkdebug 0
+package require Tk
+wm protocol . WM_DELETE_WINDOW exit
 
 if {$tclside_ltkdebug} {
    toplevel .ltk
