@@ -600,11 +600,11 @@ toplevel             x
     (funcall fun))))
 
 
-(defun init-tcl ()
+(defun init-tcl (&key debug-tcl)
   (format (wish-stream *wish*) "set buffer \"\"
 set server stdout
 
-set tclside_ltkdebug 1
+set tclside_ltkdebug ~:[0~;1~]
 package require Tk
 wm protocol . WM_DELETE_WINDOW exit
 
@@ -679,11 +679,11 @@ proc sread {} {
 
 fconfigure stdin -blocking 0
 fileevent stdin readable sread
-"))
+" debug-tcl))
 
 ;;; start wish and set (wish-stream *wish*)
 (defun start-wish (&rest keys &key handle-errors handle-warnings (debugger t) remotep
-                   stream)
+                   stream debug-tcl)
   (declare (ignore handle-errors handle-warnings debugger))
   ;; open subprocess
   (if (null (wish-stream *wish*))
@@ -694,7 +694,7 @@ fileevent stdin readable sread
 	;; perform tcl initialisations
         (with-ltk-handlers ()
           (unless remotep
-            (init-tcl))
+            (init-tcl :debug-tcl debug-tcl))
           (init-wish)))
       ;; By default, we don't automatically create a new connection, because the
       ;; user may have simply been careless and doesn't want to push the old
@@ -3528,7 +3528,7 @@ When an error is signalled, there are four things LTk can do:
            (apply #'start-wish
                   :remotep remotep
                   (append (filter-keys '(:stream :handle-errors
-                                         :handle-warnings :debugger)
+                                         :handle-warnings :debugger :debug-tcl)
                                        keys)
                           (debug-setting-keys debug))))
          (mainloop () (apply #'mainloop (filter-keys '(:serve-event) keys))))
@@ -3921,7 +3921,7 @@ When an error is signalled, there are four things LTk can do:
     )))
 
 (defun packtest2 ()
-  (with-ltk ()
+  (with-ltk (:debug-tcl nil)
     (with-atomic
         (dotimes (i 10)
           (pack (make-instance 'button :text (format nil "Button Nr. ~a" i)))
