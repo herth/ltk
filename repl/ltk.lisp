@@ -604,7 +604,7 @@ toplevel             x
   (format (wish-stream *wish*) "set buffer \"\"
 set server stdout
 
-set tclside_ltkdebug 0
+set tclside_ltkdebug 1
 package require Tk
 wm protocol . WM_DELETE_WINDOW exit
 
@@ -2609,7 +2609,7 @@ set y [winfo y ~a]
          (warn "Using a string for the :SIDE parameter is deprecated."))
         ((stringp fill)
          (warn "Using a string for the :FILL parameter is deprecated.")))
-  (format-wish "pack ~A -side ~(~A~) -fill ~(~A~)~@[~* -expand 1~] ~@[ -after ~A~]~@[ -before ~A~]~@[ -padx ~A~] ~@[ -pady ~A~]~@[ -ipadx ~A~]~@[ -ipady ~A~]~@[ -anchor ~(~A~)~]"
+  (format-wish "pack ~A -side ~(~A~) -fill ~(~A~)~@[~* -expand 1~]~@[ -after ~A~]~@[ -before ~A~]~@[ -padx ~A~]~@[ -pady ~A~]~@[ -ipadx ~A~]~@[ -ipady ~A~]~@[ -anchor ~(~A~)~]"
           (widget-path w) side fill expand (and after (widget-path after)) (and before (widget-path before)) padx pady ipadx ipady anchor)
   w)
 
@@ -3913,9 +3913,12 @@ When an error is signalled, there are four things LTk can do:
 (defun packtest1 ()
   (with-ltk ()
     (dotimes (i 10)
-      (pack (make-instance 'button :text (format nil "Button Nr. ~a" i)))
+      (let ((s ""))
+        (dotimes (j i)
+          (setf s (format nil "~a " s))) 
+      (pack (make-instance 'button :text (format nil "Button~a Nr. ~a" s i)))
       (sleep 0.1))
-    ))
+    )))
 
 (defun packtest2 ()
   (with-ltk ()
