@@ -654,7 +654,7 @@ proc process_buffer {} {
         set buffer [string range $tmp_buf [expr $count+1] end]
         
         if {[catch $cmd result]>0} {
-            tk_messageBox -icon error -type ok -title \"Error!\" -message $result
+            # tk_messageBox -icon error -type ok -title \"Error!\" -message $result
             puts $server \"(:error \\\"[escape $result]\\\")\"
             flush $server
         }
