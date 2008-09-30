@@ -522,7 +522,6 @@ toplevel             x
   (send-wish "package require Tk")
   #+tk85
   (send-wish "package require Ttk")
-  (send-wish "proc escape {s} {regsub -all {\\\\} $s {\\\\\\\\} s1;regsub -all {\"} $s1 {\\\"} s2;return $s2}")
   ;;; proc senddata {s} {puts "(data \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
   (send-wish "proc senddata {s} {global server; puts $server \"(:data [escape $s])\";flush $server}")
 
@@ -639,7 +638,8 @@ proc getstring {s} {
     }
 }
 
-proc proc escape_for_lisp {s} {regsub -all {\\\\} $s {\\\\\\\\} s1;regsub -all {\"} $s1 {\\\"} s2;return $s2}
+proc escape {s} {regsub -all {\\\\} $s {\\\\\\\\} s1;regsub -all {\"} $s1 {\\\"} s2;return $s2}
+
 proc process_buffer {} {
     global buffer
     global server
@@ -655,7 +655,7 @@ proc process_buffer {} {
         
         if {[catch $cmd result]>0} {
             tk_messageBox -icon error -type ok -title \"Error!\" -message $result
-            puts $server \"(:error \\\"[escape_for_lisp $result]\\\")\"
+            puts $server \"(:error \\\"[escape $result]\\\")\"
             flush $server
         }
         set count [getcount $buffer]
