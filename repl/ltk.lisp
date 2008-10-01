@@ -190,7 +190,7 @@ toplevel             x
            #:create-rectangle
            #:create-text
            #:create-window
-           #:debug-setting-keys
+           #:*debug-settings-table*
            #:defargs
            #:deiconify
            #:destroy
@@ -685,15 +685,13 @@ fileevent stdin readable sread
 " debug-tcl))
 
 ;;; start wish and set (wish-stream *wish*)
-(defun start-wish (&rest keys &key handle-errors handle-warnings (debugger t) remotep
-                   stream debug-tcl)
-  (declare (ignore handle-errors handle-warnings debugger))
+(defun start-wish (&rest keys &key debugger-class remotep stream debug-tcl)
   ;; open subprocess
   (if (null (wish-stream *wish*))
       (progn
 	(setf (wish-stream *wish*) (or stream (do-execute *wish-pathname* *wish-args*))
 	      (wish-call-with-condition-handlers-function *wish*)
-	      (apply #'make-condition-handler-function keys))
+	      (make-call-with-condition-handlers-function debugger-class))
 	;; perform tcl initialisations
         (with-ltk-handlers ()
           (unless remotep
@@ -3187,112 +3185,32 @@ set y [winfo y ~a]
 (defun debug-warning (warn)
   (debug-popup warn "Warning"))
 
-(defun trivial-debugger (condition hook)
-  (declare (ignore hook))
-  (format *error-output* "~&An error of type ~A has occured: ~A~%"
-	  (type-of condition) condition)
-  #+sbcl (progn (sb-debug:backtrace most-positive-fixnum *error-output*)
-                ;; FIXME - this should be generalized
-		(unless (or (find-package :swank))
-                  (quit)))
-  #+(or cmu scl)
-  (progn (debug:backtrace most-positive-fixnum *error-output*)
-         ;; FIXME - this should be generalized
-         (unless (or (find-package :swank))
-           (ext:quit))))
-
 ;;;; Error handling
-
-(defparameter *ltk-default-debugger*
-  (when (find-package :swank)
-    '((fdefinition (find-symbol (symbol-name '#:swank-debugger-hook)  :swank))))
-  "A list of debuggers to try before falling back to the Lisp system's debugger.
-  An item in this list may be a function, a symbol naming a function, or a
-  complex form to evaluate.  If it is a complex form, it will be evaled inside
-  an IGNORE-ERRORS, and should return a function, a symbol naming a function,
-  or NIL.")
 
 (defparameter *debug-settings-table*
   (copy-tree
-   '(((0 :minimum) :handle-errors nil    :handle-warnings nil     :debugger nil)
-     ((1 :deploy)  :handle-errors t      :handle-warnings nil     :debugger t)
-     ((2 :develop) :handle-errors :debug :handle-warnings :simple :debugger t)
-     ((3 :maximum) :handle-errors :debug :handle-warnings t       :debugger t))))
+   '(((0 :minimum) . nil)
+     ((1 :deploy)  . production-debugger)
+     ((2 :develop) . graphical-debugger)
+     ((3 :maximum) . paranoid-debugger))))
 
-
-
-(defun debug-setting-keys (debug-setting)
-  "Given a debug setting (see WITH-LTK for details), return a list of appropriate
-   keyword arguments to pass to START-WISH."
+(defun debug-setting-debugger (debug-setting)
+  "Given a debug setting (see WITH-LTK for details), return the debugger class to use."
   (let ((debug (if (numberp debug-setting)
                    (min 3 (max 0 (ceiling debug-setting)))
                    debug-setting)))
     (or (cdr (assoc (list debug) *debug-settings-table* :test #'intersection))
         (error "Unknown debug setting ~S" debug))))
 
-(defun compute-error-handlers (handle-errors)
-  (let ((nothing (constantly nil)))
-    (ecase handle-errors
-      ((t) (values #'show-error #'note-error))
-      (:simple (values #'show-error nothing))
-      (:debug (values nothing #'debug-error))
-      ((nil) (values nothing nothing)))))
-
-(defun compute-warning-handlers (handle-warnings)
-  (let ((nothing (constantly nil)))
-    (ecase handle-warnings
-      ((t) (values #'show-warning #'show-warning))
-      (:simple (values #'show-warning nothing))
-      (:debug (values #'debug-warning #'debug-warning))
-      ((nil) (values nothing nothing)))))
-
-(defun compute-call-with-debugger-hook (debugger)
-  "Return a function that will call a thunk with debugger-hook bound appropriately."
-  (labels ((find-a-debugger ()
-             (loop for attempt in *ltk-default-debugger*
-                   when (typecase attempt
-                                  (symbol (and (fboundp attempt) attempt))
-                                  (function attempt)
-                                  (list (ignore-errors (eval attempt))))
-                     return it))
-           (use-debugger (debugger thunk)
-             (let* ((*debugger-hook* debugger)
-                    #+sbcl (sb-ext:*invoke-debugger-hook* (constantly nil)))
-               (funcall thunk)))
-           (use-default-debugger (thunk)
-             (let ((debugger (find-a-debugger)))
-               (if debugger
-                   (use-debugger debugger thunk)
-                   (funcall thunk))))
-	   (use-trivial-debugger (thunk)
-             (use-debugger #'trivial-debugger thunk))
-	   (use-custom-debugger (thunk)
-             (use-debugger debugger thunk)))
-    (case debugger
-      ((t) #'use-default-debugger)
-      ((nil) #'use-trivial-debugger)
-      (t (if (or (functionp debugger)
-		 (and (symbolp debugger)
-		      (fboundp debugger)))
-	     #'use-custom-debugger
-	     (error "~S does not designate a function" debugger))))))
-
-(defun make-condition-handler-function
-    (&key handle-errors handle-warnings (debugger t) &allow-other-keys)
+(defun make-call-with-condition-handlers-function (debugger-class)
   "Return a function that will call a thunk with the appropriate condition handlers in place, and *debugger-hook* bound as needed."
-  (multiple-value-bind (simple-error error)
-      (compute-error-handlers handle-errors)
-    (multiple-value-bind (simple-warning warning)
-        (compute-warning-handlers handle-warnings)
-      (let ((call-with-debugger-hook (compute-call-with-debugger-hook debugger)))
-        (lambda (thunk)
-          (funcall call-with-debugger-hook
-                   (lambda ()
-                     (handler-bind ((simple-error simple-error)
-                                    (error error)
-                                    (simple-warning simple-warning)
-                                    (warning warning))
-                       (funcall thunk)))))))))
+  (let ((warning-handler (make-debugger-function :class debugger-class :title "Warning"))
+	(error-handler (make-debugger-function :class debugger-class :title "Error")))
+    (lambda (thunk)
+      (let ((*debugger-hook* error-handler))
+	(handler-bind ((error error-handler)
+		       (warning warning-handler))
+	  (funcall thunk))))))
 
 ;;;; main event loop, runs until stream is closed by wish (wish exited) or
 ;;;; the variable *exit-mainloop* is set
@@ -3454,81 +3372,6 @@ tk input to terminate"
     (remove-fd-handler (wish-input-handler *wish*))
     (setf (wish-input-handler *wish*) nil)))
 
-#|
-:HANDLE-ERRORS determines what to do if an error is signaled.  It can be set to
-T, NIL, :SIMPLE, or :DEBUG.
-
-When an error is signalled, there are four things LTk can do:
-
- (default)
-     The simplest is to do nothing, which usually means you will end out in the
-     SLIME debugger (although see the discussion of :DEBUGGER below).
-
- note
-     Show a dialog box indicating that an error has occured.  The only thing
-     the user can do in this case is to hit "OK" and try to keep using the
-     application.  The "OK" button will invoke the ABORT restart, which in most
-     cases will just return to the LTk main loop.
-
- show, offer to continue
-     Show a dialog box containing the error message.  If there is a CONTINUE
-     restart, the user will be prompted with a question and presented with
-     "Yes" button and a "No" button.  If there is not CONTINUE restart, the
-     only thing the user can do is to hit "OK".  The "Yes" button will invoke
-     the CONTINUE restart.  The "No" and "OK" buttons will invoke the ABORT
-     restart (see above).
-
-     CONTINUE restarts are usually created by the CERROR function.  In a
-     situation where "show, offer to continue" is handling the error, the
-     following code:
-
-        (when (= (+ 1 1) 2)
-          (cerror "Continue anyway"
-                  "One plus one is two."))
-
-     Will tell you that there is an error, display the error message "One plus
-     one is two", and ask you "Continue anyway?".  Contrast this with the
-     following:
-
-        (when (= (+ 1 1) 2)
-          (error "One plus one is two."))
-
-     This will show the user the error "One plus one is two" and allow them to
-     hit "OK".
-
- show, offer to start the debugger
-     Show a dialog box containing the error message, and ask the user if they
-     want to start the debugger.  Answering "No" will abort (usually to the LTk
-     main loop).  Answering "Yes" will invoke the debugger; usually this means
-     you will see the SLIME debugger, but see the description of :DEBUGGER
-     below.
-
- LTk considers two types of errors: SIMPLE-ERRORs and all others.  SIMPLE-ERROR
- is what is signalled when you type a form like (error "Something is wrong.").
-
- If :HANDLE-ERRORS is T, SIMPLE-ERRORs will be shown to the user, and all others
- (such as those generated by the Lisp system itself, eg, if you attempt to divide
-      by zero) will be noted.  In this model, you can call ERROR yourself to send an
- error message to the user in a user-friendly manner.  If :HANDLE-ERRORS is NIL,
- LTk will not interfere with the normal error handling mechanism.
-
- For details of all the options, see the tables below.
-
- :HANDLE-WARNINGS can be T, NIL, or :DEBUG.
-
-
- :DEBUGGER can be T, NIL, or a function designator.  If it is a function
- designator, that function will be used as the debugger.  If it is T, Ltk will
- use the default debugger (see *ltk-default-debugger* for details).  If it is
- NIL, LTk will prevent the user from ever seeing the Lisp debugger.  In the
- event that the debugger would be invoked, LTk will use its "trivial debugger"
- which dumps a stack trace and quits (note that this is only implemented on SBCL
- and CMUCL).  This is useful in conjunction with :HANDLE-ERRORS T, which should
- never call the debugger if :HANDLE-ERRORS is T and the debugger is called, this
- means that the system is confused beyond all hope, and dumping a stack trace is
- probably the right thing to do.
-|#
-
 ;;
 
 (defun filter-keys (desired-keys keyword-arguments)
@@ -3562,10 +3405,9 @@ When an error is signalled, there are four things LTk can do:
   (flet ((start-wish ()
            (apply #'start-wish
                   :remotep remotep
-                  (append (filter-keys '(:stream :handle-errors
-                                         :handle-warnings :debugger :debug-tcl)
+                  (append (filter-keys '(:stream :debugger-class :debug-tcl)
                                        keys)
-                          (debug-setting-keys debug))))
+                          (list :debugger-class (debug-setting-debugger debug)))))
          (mainloop () (apply #'mainloop (filter-keys '(:serve-event) keys))))
     (let ((*wish* (make-ltk-connection :remotep remotep)))
       (unwind-protect
@@ -3886,6 +3728,190 @@ When an error is signalled, there are four things LTk can do:
              (mainloop)))
       (grab-release ,var)
       (withdraw ,var))))
+
+;;; Basic graphical debugger
+
+(defun make-debugger-function (&key (class 'graphical-debugger)
+			       (title "Error"))
+  "Create a function appropriate for use in a handler-bind or for use in *debugger-hook*"
+  (let ((prototype (make-instance class)))
+    (lambda (condition &rest ignore)
+      (declare (ignore ignore))
+      (when (handle-condition-p prototype condition)
+	(with-modal-toplevel (tl :title title)
+	  (let ((debugger (make-instance class :master tl :condition condition)))
+	    (on-close tl (lambda ()
+			   (abort-debugger debugger)
+			   (return)))
+	    (pack debugger)))))))
+
+(defgeneric handle-condition-p (debugger condition))
+(defgeneric debugger-condition (debugger))
+(defgeneric debugp (debugger))
+(defgeneric describe-error (debugger))
+(defgeneric compute-buttons (debugger frame))
+(defgeneric report-bug (debugger))
+(defgeneric abort-debugger (debugger))
+
+(defclass graphical-debugger (frame)
+  ((condition :initform nil :initarg :condition :accessor debugger-condition)
+   (debugp :initform t :initarg :debugp :accessor debugp)
+   (details-pane :accessor details-pane)))
+
+(defmethod handle-condition-p ((d graphical-debugger) condition)
+  (typep condition 'serious-condition))
+
+(defmethod initialize-instance :after ((debugger graphical-debugger) &rest ignore)
+  (declare (ignore ignore))
+  (let* ((message (make-instance 'label
+		    :master debugger
+		    :text (describe-error debugger)
+		    :justify :left))
+	 (buttons (make-instance 'frame :master debugger)))
+    (setf (details-pane debugger) (make-instance 'scrolled-text :master debugger))
+    (pack (compute-buttons debugger buttons) :side :left)
+    (pack (list message buttons))))
+
+(defmethod describe-error ((debugger graphical-debugger))
+  (let ((cont (find-restart 'continue))
+	(cond (debugger-condition debugger)))
+    (cond
+      ((and cont cond) (format nil "~A~%~A" cond cont))
+      (cond (princ-to-string cond))
+      (cont (format nil "An internal error has occured.~%~A" cont))
+      (t "An internal error has occured."))))
+
+(defmethod compute-buttons ((debugger graphical-debugger) buttons)
+  (let ((ok (make-instance 'button :master buttons :text "OK"))
+	(yes (make-instance 'button :master buttons :text "Yes"))
+	(no (make-instance 'button :master buttons :text "No"))
+	(show (make-instance 'button :master buttons :text "Show Details"))
+	(report (make-instance 'button :master buttons :text "Report Bug"))
+	(details (details-pane debugger))
+	(backtrace-done? nil))
+    (labels ((ensure-backtrace ()
+	       (unless backtrace-done?
+		 (append-text details (backtrace-as-string (debugger-condition debugger)))
+		 (setf backtrace-done? t)))
+	     (show ()
+	       (ensure-backtrace)
+	       (pack details)
+	       (setf (text show) "Hide details"
+		     (command show) #'hide))
+	     (hide ()
+	       (pack-forget details)
+	       (setf (text show) "Show details"
+		     (command show) #'show))
+	     (give-up () (abort-debugger debugger)))
+      (setf (command ok) #'give-up
+	    (command yes) (lambda () (continue))
+	    (command no) #'give-up
+	    (command show) #'show
+	    (command report) (lambda () (report-bug debugger)))
+      (append (if (find-restart 'continue)
+		  (list yes no)
+		  (list ok))
+	      (when (debugp debugger) (list show))
+	      (list report)))))
+
+(defun backtrace-as-string (error)
+  (with-output-to-string (out)
+    (format out "~A~%  [Condition of type ~A]"
+	    error (class-name (class-of error)))
+    #+allegro
+    (loop for f = (excl::int-newest-frame)
+	  then (excl::int-next-older-frame f)
+	  while f
+	  do (terpri out)
+	    (debugger:output-frame out f))
+    #+sbcl (sb-debug:backtrace most-positive-fixnum out)
+    #+(or cmu scl) (debug:backtrace most-positive-fixnum out)
+    ))
+
+(defmethod report-bug ((debugger graphical-debugger))
+  ;; This is modal only because the earlier non-modal one sometimes
+  ;; died before the error report could be sent. I'd rather not be
+  ;; modal here, and Ltk users are encouraged to write their own bug
+  ;; reporters that start a new Tcl/Tk process and send reports over
+  ;; the net.
+  (with-modal-toplevel (tl :title "Save a bug report")
+    (let ((summary (make-instance 'label :master tl :text "Summary:"))
+          (esummary (make-instance 'entry :master tl :text ""))
+          (desc (make-instance 'message :master tl :width 400 :text "Please describe what you were doing, and where so the developers can try to reproduce this situation"))
+          (edesc (make-instance 'scrolled-text :master tl))
+          (bsave (make-instance 'button :master tl :text "Save")))
+      (labels ((save ()
+		 (let ((summary (text esummary))
+		       (desc (text edesc))
+		       (file (get-save-file)))
+		   (with-open-file (out file :direction :output :if-exists :supersede)
+		     (multiple-value-bind (sec min hr day mo yr)
+			 (decode-universal-time (get-universal-time) 0)
+		       (let ((timestamp (format nil "~D/~D/~D ~D:~D:~D GMT"
+						yr mo day hr min sec)))
+			 (format out "This bug report was generated by the Ltk debugger on ~A.~%"
+				 timestamp)
+			 (format out "Ltk version: ~A~%" *ltk-version*)
+			 (format out "Lisp: ~A ~A~%"
+				 (lisp-implementation-type) (lisp-implementation-version))
+			 (format out "Summary: ~A~%Description:~%~A~%~%" summary desc)
+			 (princ (backtrace-as-string (debugger-condition debugger)) out))))
+		   (return))))
+	(setf (command bsave) #'save)
+        (grid-columnconfigure tl 0 :weight 0)
+        (grid-columnconfigure tl 1 :weight 1)
+        (grid summary 2 0 :sticky :w)
+        (grid esummary 2 1 :sticky :ew)
+        (grid desc 3 0 :columnspan 2 :sticky :w)
+        (grid edesc 4 0 :columnspan 2 :sticky :ew)
+        (grid bsave 5 0)))))
+
+(defmethod abort-debugger ((debugger graphical-debugger))
+  (invoke-restart
+   (find 'abort (cdr (member 'abort (compute-restarts)
+			     :key #'restart-name))
+	 :key #'restart-name)))
+
+;;; The production debugger
+
+(defclass production-debugger (graphical-debugger)
+  ((debugp :initform nil)))
+
+;;; Paranoid debugger
+
+(defclass paranoid-debugger (graphical-debugger) ())
+
+(defmethod handle-condition-p ((debugger paranoid-debugger) condition)
+  (declare (ignore condition))
+  t)
+
+;;; Trivial debugger
+
+(defclass trivial-debugger (graphical-debugger)
+  ())
+
+(defmethod initialize-instance :after ((d trivial-debugger) &rest ignore)
+  (declare (ignore ignore))
+  (let ((condition (debugger-condition d)))
+    (when condition
+      (format *error-output* "An error of has occured: ~%")
+      (princ (backtrace-as-string condition) *error-output*)
+	      (type-of condition) condition)
+      #+sbcl (quit)
+      #+(or cmu scl) (ext:quit)))
+
+(defun debugger-test (debugger-class)
+  (with-ltk (:debugger-class debugger-class)
+    (pack (list (make-instance 'label :text (format nil "Debugger class ~S" debugger-class))
+		(make-instance 'button
+		  :text "Error"
+		  :command (lambda () (error "This is an error.")))
+		(make-instance 'button
+		  :text "Warning"
+		  :command (lambda () (warn "This is a warning.")))
+		(make-instance 'button
+		  :text "Signal"
+		  :command (lambda () (signal 'condition)))))))
 
 (defun input-box (prompt &key (title "Input"))
   (let* ((*exit-mainloop* nil)
