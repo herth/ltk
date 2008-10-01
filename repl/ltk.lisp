@@ -132,6 +132,7 @@ toplevel             x
            #:*exit-mainloop*
            #:*init-wish-hook*
            #:*mb-icons*
+           #:*ltk-debug*
            #:*tk*
            #:*wish*
            #:wish-stream
@@ -174,7 +175,7 @@ toplevel             x
            #:clipboard-append
            #:clipboard-clear
            #:clipboard-get
-           #:combobox
+           #+tk85  #:combobox
            #:command
            #:coords
            #:configure
@@ -223,6 +224,7 @@ toplevel             x
            #:grid-configure
            #:grid-forget
            #:grid-rowconfigure
+           #:hscroll
            #:iconify
            #:iconwindow
            #:image-load
@@ -333,6 +335,7 @@ toplevel             x
            #:tkobject
            #:toplevel
            #:value
+           #:vscroll
            #:widget
            #:widget-path
            #:window-height
@@ -522,8 +525,7 @@ toplevel             x
   (send-wish "package require Tk")
   #+tk85
   (send-wish "package require Ttk")
-  (send-wish "proc escape {s} {regsub -all {\\\\} $s {\\\\\\\\} s1;regsub -all 
-{\"} $s1 {\\\"} s2;return $s2}")
+  (send-wish "proc escape {s} {regsub -all {\\\\} $s {\\\\\\\\} s1;regsub -all {\"} $s1 {\\\"} s2;return $s2}")
   ;;; proc senddata {s} {puts "(data \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
   (send-wish "proc senddata {s} {global server; puts $server \"(:data [escape $s])\";flush $server}")
 
@@ -2088,10 +2090,10 @@ a list of numbers may be given"
    (vscroll :accessor vscroll)
    ))
 
-(defmethod initialize-instance :after ((sf scrolled-frame) &key)
-  (let ((f (make-instance 'frame :master sf)))
+(defmethod initialize-instance :after ((sf scrolled-frame) &key background packer)
+  (let ((f (make-instance 'frame :master sf :background background)))
     (setf (scrolled-frame-display sf) f)
-    (setf (interior sf) (make-instance 'frame :master f))
+    (setf (interior sf) (make-instance 'frame :master f :background background))
     (setf (hscroll sf) (make-instance 'scrollbar :master sf :orientation "horizontal"))
     (setf (vscroll sf) (make-instance 'scrollbar :master sf :orientation "vertical"))
     (grid f 0 0 :sticky "news")
@@ -2101,7 +2103,9 @@ a list of numbers may be given"
     (grid-columnconfigure sf 1 "weight" 0)
     (grid-rowconfigure sf 0 "weight" 1)
     (grid-rowconfigure sf 1 "weight" 0)
-    (place (interior sf) 0 0)
+    (if packer
+        (funcall packer (interior sf))
+      (place (interior sf) 0 0))
     (send-wish (format nil "~a set  0.1 0.5" (widget-path (hscroll sf))))
     (send-wish (format nil "~a set  0.1 0.5" (widget-path (vscroll sf))))
     (send-wish (format nil "~a configure -command ~axv" (widget-path (hscroll sf)) (name sf)))
@@ -2386,21 +2390,35 @@ set y [winfo y ~a]
                     (cond
                       ((eq itemtype :rectangle)
                        (format s " [~a create rectangle ~a ~a ~a ~a " (widget-path canvas)
-                               (truncate (pop item))
-                               (truncate (pop item))
-                               (truncate (pop item))
-                               (truncate (pop item)))
+                               (tk-number (pop item))
+                               (tk-number (pop item))
+                               (tk-number (pop item))
+                               (tk-number (pop item)))
                        (loop
                         while item
                         do
                         (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
                        (format s " ]~%"))
+                      
+                      ((eq itemtype :arc)
+                       (format s " [~a create arc ~a ~a ~a ~a " (widget-path canvas)
+                               (tk-number (pop item))
+                               (tk-number (pop item))
+                               (tk-number (pop item))
+                               (tk-number (pop item)))
+                       (loop
+                        while item
+                        do
+                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
+                       (format s " ]~%"))
+
+                     
                       ((eq itemtype :line)
                        (format s " [~a create line ~a ~a ~a ~a " (widget-path canvas)
-                               (truncate (pop item))
-                               (truncate (pop item))
-                               (truncate (pop item))
-                               (truncate (pop item)))
+                               (tk-number (pop item))
+                               (tk-number (pop item))
+                               (tk-number (pop item))
+                               (tk-number (pop item)))
                        (loop
                         while item
                         do
@@ -2416,7 +2434,8 @@ set y [winfo y ~a]
                         while item
                         do
                         (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
-                       (format s " ]~%"))))
+                       (format s " ]~%"))
+                      ))
                   )
                 (format s ")\"~%"))))
     (send-wish code)
@@ -3858,10 +3877,13 @@ When an error is signalled, there are four things LTk can do:
           (*exit-mainloop* nil))
     (unwind-protect
          (block nil
+           (flush-wish)
            (grab ,var)
            (on-close ,var (lambda () (return)))
-           ,@body
-           (mainloop))
+           (multiple-value-prog1
+               (progn ,@body)
+             (flush-wish)
+             (mainloop)))
       (grab-release ,var)
       (withdraw ,var))))
 
