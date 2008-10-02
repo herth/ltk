@@ -496,12 +496,13 @@ toplevel             x
 (defparameter *buffer-for-atomic-output* nil)
 
 (defun dbg (fmt &rest args)
+  (with-open-file (w "rl.log" :direction :output :if-exists :append :if-does-not-exist :create)
+      (apply #'format w fmt args)
+      (finish-output w))
   (when *debug-tk*
     (apply #'format *trace-output* fmt args)
     (finish-output *trace-output*)
-    (with-open-file (w "rl.log" :direction :output :if-exists :append :if-does-not-exist :create)
-      (apply #'format w fmt args)
-      (finish-output w))))
+    ))
 
 (defmacro with-atomic (&rest code)
   `(let ((*buffer-for-atomic-output* t))
@@ -744,23 +745,23 @@ fileevent stdin readable sread
 ;;; send a string to wish
 (defun send-wish-raw (text)
   (declare (string text)
-           (optimize (speed 3)))
-  (when *debug-tk*
-    (dbg "~D ~A~%" (length text) text))
+           ;(optimize (speed 3))
+           )
+  (dbg "~D ~A~%" (slength text) text)
   (let ((*print-pretty* nil)
         (stream (wish-stream *wish*)))
     (declare (stream stream))
     (handler-bind ((stream-error (lambda (e) (handle-dead-stream e stream)))
                    #+lispworks 
                    (comm:socket-error (lambda (e) (handle-dead-stream e stream))))
-      (format stream "~d ~a~%" (length text) text)
+      (format stream "~d ~a~%" (slength text) text)
       (finish-output stream))))
 
 (defun send-wish (text)
   (cond
     (*buffer-for-atomic-output*
      (setf (wish-output-buffer *wish*)
-           (format nil "~@[~a~]~%~a" (wish-output-buffer *wish*) text)))
+           (format nil "~@[~a~%~]~a" (wish-output-buffer *wish*) text)))
     ((wish-output-buffer *wish*)
      (send-wish-raw
       (format nil "~a~%~a" (wish-output-buffer *wish*) text))
@@ -3716,15 +3717,14 @@ tk input to terminate"
 
 (defmacro with-modal-toplevel ((var &rest toplevel-initargs) &body body)
   `(let* ((,var (make-instance 'toplevel ,@toplevel-initargs))
-          (*exit-mainloop* nil))
+          (*exit-mainloop* nil)
+          (*buffer-for-atomic-output* nil))
     (unwind-protect
          (block nil
-           (flush-wish)
            (grab ,var)
            (on-close ,var (lambda () (return)))
            (multiple-value-prog1
                (progn ,@body)
-             (flush-wish)
              (mainloop)))
       (grab-release ,var)
       (withdraw ,var))))
