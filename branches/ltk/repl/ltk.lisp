@@ -668,21 +668,15 @@ proc process_buffer {} {
     }
 }
 
-proc sread {} {
+
+proc buffer_text {txt} {
     global buffer
-    if {[eof stdin]} {
-        tk_messageBox -icon info -type ok -title \"Connection closed\" -message \"The connection has been closed by the server.\"
-        exit
-    } else {
-        set txt [read stdin];
-        set buffer \"$buffer$txt\"
-        ltkdebug \"buffer=$buffer\\n\" 
-        process_buffer
-    }
+    set buffer \"$buffer$txt\"
+    ltkdebug \"buffer=$buffer\\n\" 
 }
 
-fconfigure stdin -blocking 0
-fileevent stdin readable sread
+fconfigure stdin -encoding utf-8 -translation binary
+#fileevent stdin readable sread
 " debug-tcl))
 
 ;;; start wish and set (wish-stream *wish*)
@@ -749,33 +743,52 @@ fileevent stdin readable sread
   (declare (string text)
            ;(optimize (speed 3))
            )
-  (dbg "~D ~A~%" (slength text) text)
+  ;(dbg "~D ~A~%" (slength text) text)
   (let ((*print-pretty* nil)
         (stream (wish-stream *wish*)))
     (declare (stream stream))
     (handler-bind ((stream-error (lambda (e) (handle-dead-stream e stream)))
                    #+lispworks 
                    (comm:socket-error (lambda (e) (handle-dead-stream e stream))))
-      (format stream "~d ~a~%" (slength text) text)
+      ;(format stream "~d ~a~%" (slength text) text)
+      (format stream "buffer_text {~A}~%" text)
       (finish-output stream))))
 
 (defun send-wish (text)
-  (cond
-    (*buffer-for-atomic-output*
-     (setf (wish-output-buffer *wish*)
-           (format nil "~@[~a~%~]~a" (wish-output-buffer *wish*) text)))
-    ((wish-output-buffer *wish*)
-     (send-wish-raw
-      (format nil "~a~%~a" (wish-output-buffer *wish*) text))
-     (setf (wish-output-buffer *wish*) nil))
-    (t
-     (send-wish-raw text))))
+  (push text (wish-output-buffer *wish*))
+  (unless *buffer-for-atomic-output*
+    (flush-wish)))
 
 (defun flush-wish ()
-  (when (wish-output-buffer *wish*)
-    (send-wish-raw (wish-output-buffer *wish*))
-    (setf (wish-output-buffer *wish*) nil)))
+  (let ((buffer (nreverse (wish-output-buffer *wish*))))
+    (when buffer
+      (let ((len (loop for s in buffer summing (length s)))
+	    (*print-pretty* nil)
+	    (stream (wish-stream *wish*)))
+	(declare (stream stream))
+        (incf len (length buffer))
+	(setf (wish-output-buffer *wish*) nil)
+	(handler-bind ((stream-error (lambda (e) (handle-dead-stream e stream)))
+		       #+lispworks 
+		       (comm:socket-error (lambda (e) (handle-dead-stream e stream))))
+	  (format stream "buffer_text {~D }~%" len)
+	  (dbg "buffer_text {~D }~%" len)
+	  (loop for string in buffer
+             do (loop with end = (length string)
+                   with start = 0
+                   for amount = (min 1024 (- end start))
+                   while (< start end)
+                   do (let ((string (subseq string start (+ start amount))))
+                        (format stream "buffer_text {~A}~%" string)
+                        (dbg "buffer_text {~A}~%" string)
+                        (incf start amount)))
+               (format stream "buffer_text \"\\n\"~%")
+               (dbg "buffer_text \"\\n\"~%")
+             finally (progn (format stream "process_buffer~%")
+                            (dbg "process_buffer~%")))
+	  (setf (wish-output-buffer *wish*) nil))))))
 
+  
 (defun handle-dead-stream (err stream)
   (when *debug-tk*
     (format *trace-output* "Error sending command to wish: ~A" err)
@@ -2113,12 +2126,15 @@ a list of numbers may be given"
     (send-wish (format nil "~a configure -command ~ayv" (widget-path (vscroll sf)) (name sf)))
     (send-wish (format nil "
 proc ~axv {{com moveto} {val 0} {unit 0}} {
+
 set x [winfo x ~a]
 set y [winfo y ~a]
 set wx [winfo width ~a]
 set w [winfo width ~a]
+
 if {$val < 0} {set val 0}
 if {$val > [expr 1.0*($wx-$w)/$wx]} {set val  [expr 1.0*($wx-$w)/$wx]}
+if {$wx<$w} { set val 0 }
 place ~a -x [expr -($val * $wx)] -y $y
 set x [winfo x ~a]
 ~a set [expr -1.0*$x/$wx] [expr 1.0*($w-$x)/$wx]
@@ -2130,29 +2146,23 @@ set wy [winfo height ~a]
 set h [winfo height ~a]
 if {$val < 0} {set val 0}
 if {$val > [expr 1.0*($wy-$h)/$wy]} {set val  [expr 1.0*($wy-$h)/$wy]}
+if {$wy<$h} { set val 0 }
 place ~a -x $x -y [expr -($val * $wy)]
 set y [winfo y ~a]
 ~a set [expr -1.0*$y/$wy] [expr 1.0*($h-$y)/$wy]
 }
 
 " (name sf)
-  (widget-path (interior sf))
-  (widget-path (interior sf))
-  (widget-path (interior sf))
-  (widget-path f)
-  (widget-path (interior sf))
-  (widget-path (interior sf))		   
+  (widget-path (interior sf)) (widget-path (interior sf)) (widget-path (interior sf))
+  (widget-path f)  (widget-path (interior sf))  (widget-path (interior sf))		   
   (widget-path (hscroll sf))
-  
-  (name sf)
-  (widget-path (interior sf))
-  (widget-path (interior sf))
-  (widget-path (interior sf))
-  (widget-path f)
-  (widget-path (interior sf))
-  (widget-path (interior sf))		   
-  (widget-path (vscroll sf))
-  ))))
+  (name sf)   (widget-path (interior sf))  (widget-path (interior sf))
+  (widget-path (interior sf))  (widget-path f)  (widget-path (interior sf))
+  (widget-path (interior sf))    (widget-path (vscroll sf))
+  ))
+    (format-wish "bind ~a <Configure> {ltkdebug \"~a configure\";~axv configure;~ayv configure}" (widget-path sf) (name sf)(name sf)(name sf))
+    (format-wish "bind ~a <Configure> {ltkdebug \"~a iconfigure\";~axv configure;~ayv configure}" (widget-path (interior sf)) (name sf)(name sf)(name sf))
+    ))
 
 ;;; canvas widget
 
@@ -3655,7 +3665,7 @@ When an error is signalled, there are four things LTk can do:
 
 ;;;; default ltk test
 (defun ltktest()
-  (with-ltk ()
+  (with-ltk (:debug-tcl nil)
       (let* ((bar (make-instance 'frame))
              (fradio (make-instance 'frame :master bar))
              (leggs (make-instance 'label :master fradio :text "Eggs:"))
@@ -3807,7 +3817,8 @@ When an error is signalled, there are four things LTk can do:
 (defun test-rotation()
   (setf *debug-tk* nil)
   (time (dotimes (i 1000)
-	  (rotate)))
+	  (rotate)
+          (flush-wish)))
   (finish-output))
 
 (defun start-rotation()
@@ -3967,5 +3978,23 @@ When an error is signalled, there are four things LTk can do:
           ;(sleep 0.1)
           )
       )))
+
+
+(defun sctest()
+  (with-ltk (:debug-tcl t)
+    (let* ((sf (make-instance 'scrolled-frame))
+           (f (interior sf))
+           (n 1)
+           (b1 (make-instance 'button :master f :text "Button 1"
+                              :command (lambda ()
+                                         (incf n)
+                                         (pack (make-instance 'button :master f
+                                                              :text (format nil "Button ~a" n))
+                                               :side :left))))
+           )
+      (pack sf :side :top :fill :both :expand t)
+      (pack b1 :side :left)
+
+    )))
 
 (pushnew :ltk *features*)
