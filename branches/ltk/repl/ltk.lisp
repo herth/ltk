@@ -335,6 +335,7 @@ toplevel             x
            #:tkobject
            #:toplevel
            #:value
+           #:options
            #:vscroll
            #:widget
            #:widget-path
@@ -1806,6 +1807,13 @@ methods, e.g. 'configure'."))
 #+tk85
 (defwidget combobox (tktextvariable widget) () "ttk::combobox")
 
+#+tk85
+(defmethod (setf options) (values (combobox combobox))
+  (format-wish "~a configure -values {~{ \{~a\}~}}" (widget-path combobox) values))
+
+
+
+
 ;; text entry widget
 
 (defwidget entry (tktextvariable widget) () "entry")
@@ -2104,7 +2112,7 @@ a list of numbers may be given"
    (vscroll :accessor vscroll)
    ))
 
-(defmethod initialize-instance :after ((sf scrolled-frame) &key background packer)
+(defmethod initialize-instance :after ((sf scrolled-frame) &key background)
   (let ((f (make-instance 'frame :master sf :background background)))
     (setf (scrolled-frame-display sf) f)
     (setf (interior sf) (make-instance 'frame :master f :background background))
@@ -2117,9 +2125,8 @@ a list of numbers may be given"
     (grid-columnconfigure sf 1 "weight" 0)
     (grid-rowconfigure sf 0 "weight" 1)
     (grid-rowconfigure sf 1 "weight" 0)
-    (if packer
-        (funcall packer (interior sf))
-      (place (interior sf) 0 0))
+    
+    (place (interior sf) 0 0)
     (send-wish (format nil "~a set  0.1 0.5" (widget-path (hscroll sf))))
     (send-wish (format nil "~a set  0.1 0.5" (widget-path (vscroll sf))))
     (send-wish (format nil "~a configure -command ~axv" (widget-path (hscroll sf)) (name sf)))
@@ -3947,16 +3954,20 @@ When an error is signalled, there are four things LTk can do:
 (defun combotest ()
   (with-ltk ()
     (let* ((c (make-instance 'combobox :text "foo" :values '("bar" "baz" "foo bar")))
+           (add (make-instance 'button :text "Add values"
+                               :command (lambda ()
+                                          (setf (options c) (list 1 2 "asdf xx" "bb" "cc")))))
            (ok (make-instance 'button :text "Ok" :command
                              (lambda ()
                                (format t "text: ~a~%" (text c))
-                               (break-mainloop)))))
+                               (exit-wish)))))
       (bind c "<KeyRelease>" (lambda (event)
                                (declare (ignore event))
                                (format t "newsel:~a~%" (text c))))
       (bind c "<<ComboboxSelected>>" (lambda (event)
                                        (declare (ignore event))
                                        (format t "newsel:~a~%" (text c))))
+      (pack add :side :right)
       (pack ok :side :right)
       (pack c :side :left))))
 
