@@ -497,9 +497,9 @@ toplevel             x
 (defparameter *buffer-for-atomic-output* nil)
 
 (defun dbg (fmt &rest args)
-  (with-open-file (w "rl.log" :direction :output :if-exists :append :if-does-not-exist :create)
-      (apply #'format w fmt args)
-      (finish-output w))
+;  (with-open-file (w "rl.log" :direction :output :if-exists :append :if-does-not-exist :create)
+;      (apply #'format w fmt args)
+;      (finish-output w))
   (when *debug-tk*
     (apply #'format *trace-output* fmt args)
     (finish-output *trace-output*)
@@ -585,6 +585,10 @@ toplevel             x
                      $widget see insert
                  }
              }")
+
+  (send-wish "proc resetScroll {c} {
+    $c configure -scrollregion [$c bbox all] 
+}")
 
   ;;; proc sendevent {s} {puts "(event \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
   ;(send-wish "proc sendevent {s x y keycode char width height root_x root_y} {puts \"(:event \\\"$s\\\" $x $y $keycode $char $width $height $root_x $root_y)\"} ")
@@ -772,9 +776,21 @@ fconfigure stdin -encoding utf-8 -translation binary
 	(handler-bind ((stream-error (lambda (e) (handle-dead-stream e stream)))
 		       #+lispworks 
 		       (comm:socket-error (lambda (e) (handle-dead-stream e stream))))
+
+          
+          
 	  (format stream "buffer_text {~D }~%" len)
 	  (dbg "buffer_text {~D }~%" len)
-	  (loop for string in buffer
+
+          (dolist (string buffer)
+            (format stream "buffer_text {~A~%}~%" string)
+            (dbg "buffer_text {~A}~%" string))
+
+          (format stream "process_buffer~%")
+          (dbg "process_buffer~%")
+          (finish-output stream)
+          
+	  #+nil(loop for string in buffer
              do (loop with end = (length string)
                    with start = 0
                    for amount = (min 1024 (- end start))
@@ -786,7 +802,10 @@ fconfigure stdin -encoding utf-8 -translation binary
                (format stream "buffer_text \"\\n\"~%")
                (dbg "buffer_text \"\\n\"~%")
              finally (progn (format stream "process_buffer~%")
-                            (dbg "process_buffer~%")))
+                            (dbg "process_buffer~%")
+                            (finish-output stream)))
+
+          
 	  (setf (wish-output-buffer *wish*) nil))))))
 
   
@@ -1693,15 +1712,15 @@ methods, e.g. 'configure'."))
 (defclass menubutton(menuentry) 
   ())
 
-(defmethod initialize-instance :after ((m menubutton) &key command underline accelerator)
+(defmethod initialize-instance :after ((m menubutton) &key command underline accelerator state)
   (when command
     (add-callback (name m) command))
-  (format-wish "~A add command -label {~A}  -command {callback ~A}~@[ -underline ~a ~]~@[ -accelerator {~a} ~]"
-               (widget-path (master m)) (text m) (name m) underline accelerator))
+  (format-wish "~A add command -label {~A}  -command {callback ~A}~@[ -underline ~a ~]~@[ -accelerator {~a} ~]~@[ -state ~(~a~)~]"
+               (widget-path (master m)) (text m) (name m) underline accelerator state))
 
-(defun make-menubutton(menu text command &key underline accelerator)
+(defun make-menubutton(menu text command &key underline accelerator state)
   (let* ((mb (make-instance 'menubutton :master menu :text text :command command :underline underline
-			    :accelerator accelerator)))
+			    :accelerator accelerator :state state)))
     mb))
 
 (defclass menucheckbutton(menuentry)
@@ -2104,7 +2123,49 @@ a list of numbers may be given"
   (configure (canvas sc) "yscrollcommand" (concatenate 'string (widget-path (vscroll sc)) " set"))
   )
 
+(defclass scrolled-frame (frame)
+  ((inner :accessor interior)
+   (hscroll :accessor hscroll)
+   (vscroll :accessor vscroll)
+   ))
 
+(defmethod initialize-instance :after ((sf scrolled-frame) &key background)
+  (let* ((canvas (make-instance 'canvas :master sf :background background))
+         (f (make-instance 'frame :master canvas :background background)))
+                                        ;(setf (scrolled-frame-display sf) f)
+    (setf (interior sf) f) ;; (make-instance 'frame :master f :background background))
+    (setf (hscroll sf) (make-instance 'scrollbar :master sf :orientation "horizontal"))
+    (setf (vscroll sf) (make-instance 'scrollbar :master sf :orientation "vertical"))
+    (grid canvas 0 0 :sticky "news")
+    (grid (hscroll sf) 1 0 :sticky "we")
+    (grid (vscroll sf) 0 1 :sticky "ns")
+    (grid-columnconfigure sf 0 "weight" 1)
+    (grid-columnconfigure sf 1 "weight" 0)
+    (grid-rowconfigure sf 0 "weight" 1)
+    (grid-rowconfigure sf 1 "weight" 0)
+    (format-wish 
+     "
+~a configure -xscrollcommand [list ~a set] -yscrollcommand [list ~a set]
+~a configure -command [list ~a xview]
+~a configure -command [list ~a yview]
+~a create window 10 10 -window ~a -anchor nw -tags f
+
+after idle [list resetScroll ~a]
+
+bind ~a <Configure> [list resetScroll ~a] 
+
+"
+     (widget-path canvas) (widget-path (hscroll sf)) (widget-path (vscroll sf))
+     (widget-path (hscroll sf)) (widget-path canvas)
+     (widget-path (vscroll sf)) (widget-path canvas)
+     (widget-path canvas) (widget-path f)
+     (widget-path canvas)
+     (widget-path f) (widget-path canvas) 
+     )
+    ))
+
+
+#+nil
 (defclass scrolled-frame (frame)
   ((inner :accessor interior)
    (displayframe :accessor scrolled-frame-display)
@@ -2112,6 +2173,7 @@ a list of numbers may be given"
    (vscroll :accessor vscroll)
    ))
 
+#+nil
 (defmethod initialize-instance :after ((sf scrolled-frame) &key background)
   (let ((f (make-instance 'frame :master sf :background background)))
     (setf (scrolled-frame-display sf) f)
@@ -2453,6 +2515,18 @@ set y [winfo y ~a]
                         do
                         (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
                        (format s " ]~%"))
+
+                      ((eq itemtype :ctext)
+                       (format s " [~a create text ~a ~a -anchor n -text {~a} "
+                               (widget-path canvas)
+                               (tk-number (pop item))
+                               (tk-number (pop item))
+                               (tkescape (pop item)))
+                       (loop
+                        while item
+                        do
+                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
+		       (format s " ]~%"))
                       ))
                   )
                 (format s ")\"~%"))))
