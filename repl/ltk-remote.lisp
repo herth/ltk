@@ -267,6 +267,11 @@
 (defvar *server* nil)
 
 #+:allegro
+(defun stop-server ()
+  (setf *stop-remote* t))
+
+
+#+:allegro
 (defun invoke-remote-ltk (port vars vals form cleanup)
   (setf *server*
         (mp:process-run-function
