@@ -768,29 +768,32 @@ fconfigure stdin -encoding utf-8 -translation binary
   (let ((buffer (nreverse (wish-output-buffer *wish*))))
     (when buffer
       (let ((len (loop for s in buffer summing (length s)))
-	    (*print-pretty* nil)
-	    (stream (wish-stream *wish*)))
-	(declare (stream stream))
+            (*print-pretty* nil)
+            (stream (wish-stream *wish*)))
+        (declare (stream stream))
         (incf len (length buffer))
-	(setf (wish-output-buffer *wish*) nil)
-	(handler-bind ((stream-error (lambda (e) (handle-dead-stream e stream)))
-		       #+lispworks 
-		       (comm:socket-error (lambda (e) (handle-dead-stream e stream))))
+        (setf (wish-output-buffer *wish*) nil)
+        (handler-bind ((stream-error (lambda (e) (handle-dead-stream e stream)))
+                       #+lispworks
+                       (comm:socket-error (lambda (e) (handle-dead-stream e stream)))
+                       )
+          (cond
+            ((wish-remotep *wish*)
+             (let ((content (format nil "~{~a~%~}" buffer)))
+               (format stream "~d ~a~%"(length content) content)
+               (dbg "~d ~a%" (length content) content)))
+            (t
+             (format stream "buffer_text {~D }~%" len)
+             (dbg "buffer_text {~D }~%" len)
+             (dolist (string buffer)
+               (format stream "buffer_text {~A~%}~%" string)
+               (dbg "buffer_text {~A}~%" string))
 
-          
-          
-	  (format stream "buffer_text {~D }~%" len)
-	  (dbg "buffer_text {~D }~%" len)
-
-          (dolist (string buffer)
-            (format stream "buffer_text {~A~%}~%" string)
-            (dbg "buffer_text {~A}~%" string))
-
-          (format stream "process_buffer~%")
-          (dbg "process_buffer~%")
+             (format stream "process_buffer~%")
+             (dbg "process_buffer~%")))
           (finish-output stream)
-          
-	  #+nil(loop for string in buffer
+
+          #+nil(loop for string in buffer
              do (loop with end = (length string)
                    with start = 0
                    for amount = (min 1024 (- end start))
@@ -805,9 +808,7 @@ fconfigure stdin -encoding utf-8 -translation binary
                             (dbg "process_buffer~%")
                             (finish-output stream)))
 
-          
-	  (setf (wish-output-buffer *wish*) nil))))))
-
+          (setf (wish-output-buffer *wish*) nil))))))
   
 (defun handle-dead-stream (err stream)
   (when *debug-tk*
