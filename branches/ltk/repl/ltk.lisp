@@ -252,6 +252,7 @@ toplevel             x
            #:lower
            #:mainloop
            #:make-items
+           #:create-items
            #:make-canvas
            #:make-frame
            #:make-image
@@ -2460,6 +2461,80 @@ set y [winfo y ~a]
 
 (defun make-rectangle (canvas x0 y0 x1 y1)
   (make-instance 'canvas-rectangle :canvas canvas :x0 x0 :y0 y0 :x1 x1 :y1 y1))
+
+
+(defun create-items (canvas items)
+  (let ((code (with-output-to-string (s)
+                (dolist (item items)
+                  (let ((itemtype (pop item)))
+                    (when (consp itemtype)
+                      (setf itemtype (car itemtype)))
+                    (cond
+                      ((eq itemtype :rectangle)
+                       (format s "~a create rectangle ~a ~a ~a ~a " (widget-path canvas)
+                               (tk-number (pop item))
+                               (tk-number (pop item))
+                               (tk-number (pop item))
+                               (tk-number (pop item)))
+                       (loop
+                        while item
+                        do
+                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
+                       (format s "~%"))
+                      
+                      ((eq itemtype :arc)
+                       (format s "~a create arc ~a ~a ~a ~a " (widget-path canvas)
+                               (tk-number (pop item))
+                               (tk-number (pop item))
+                               (tk-number (pop item))
+                               (tk-number (pop item)))
+                       (loop
+                        while item
+                        do
+                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
+                       (format s "~%"))
+
+                     
+                      ((eq itemtype :line)
+                       (format s "~a create line ~a ~a ~a ~a " (widget-path canvas)
+                               (tk-number (pop item))
+                               (tk-number (pop item))
+                               (tk-number (pop item))
+                               (tk-number (pop item)))
+                       (loop
+                        while item
+                        do
+                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
+                       (format s "~%"))
+                      ((eq itemtype :text)
+                       (format s "~a create text ~a ~a -anchor nw -text {~a} "
+                               (widget-path canvas)
+                               (tk-number (pop item))
+                               (tk-number (pop item))
+                               (tkescape (pop item)))
+                       (loop
+                        while item
+                        do
+                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
+                       (format s "~%"))
+
+                      ((eq itemtype :ctext)
+                       (format s "~a create text ~a ~a -anchor n -text {~a} "
+                               (widget-path canvas)
+                               (tk-number (pop item))
+                               (tk-number (pop item))
+                               (tkescape (pop item)))
+                       (loop
+                        while item
+                        do
+                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
+		       (format s "~%"))
+                      ))
+                  )
+                )))
+    (send-wish code)))
+
+
 
 (defun make-items (canvas items)
   (let ((code (with-output-to-string (s)
