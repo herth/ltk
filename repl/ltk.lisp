@@ -1081,9 +1081,28 @@ can be passed to AFTER-CANCEL"
   "incremental counter to create unique numbers"
   (incf (wish-counter *wish*)))
 
-(defun create-name ()
+#+nil(defun create-name ()
   "create unique widget name, append unique number to 'w'"
   (format nil "w~A" (get-counter)))
+
+
+(defun encode-base-52 (value)
+  (let ((numerals "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        (result ""))
+    (loop
+       while (> value 0)
+       do
+      (multiple-value-bind (mul rest) (truncate value 52)
+        (setf result (format nil "~a~a" result (elt numerals rest)))
+        (setf value mul)))
+    result))
+    
+  
+(defun create-name ()
+  "create unique widget name, append unique number to 'w'"
+  (format nil "w~A" (encode-base-52 (get-counter))))
+
+
 
 
 (defun create-path (master name)
@@ -2463,157 +2482,82 @@ set y [winfo y ~a]
   (make-instance 'canvas-rectangle :canvas canvas :x0 x0 :y0 y0 :x1 x1 :y1 y1))
 
 
+(defun create-item-command (canvas item stream)
+  "Create the tk command string for creating a canvas item according to the item spec.
+   The item spec has the format '(itemtype args @rest)
+   Where itemtype is the type of item to create, args its mandatory arguments
+   and rest any number of option value pairs.
+   Understood item types are:
+     :rectangle x0 y0 y1 y2
+     :arc x0 y0 y1 y2
+     :line x0 y0 x1 y1
+     :text x y text
+     :ctext x y text
+"
+  (labels ((arg ()
+             (pop item))
+           (number ()
+             (tk-number (pop item)))
+           (args ()
+             (loop
+                while item
+                do
+                (format stream " -~(~a~) {~(~a~)}" (pop item) (pop item)))))
+    (let ((itemtype (pop item))
+          (cpath (widget-path canvas)))
+      (when (consp itemtype)
+        (setf itemtype (car itemtype)))
+      (cond
+        ((eq itemtype :rectangle)
+         (format stream "~a create rectangle ~a ~a ~a ~a " cpath (number) (number) (number) (number))
+         (args))
+      
+        ((eq itemtype :arc)
+         (format stream "~a create arc ~a ~a ~a ~a " cpath (number) (number) (number) (number))
+         (args))
+      
+        ((eq itemtype :line)
+         (format stream "~a create line ~a ~a ~a ~a " cpath (number) (number) (number) (number))
+         (args))
+
+        ((eq itemtype :text)
+         (format stream "~a create text ~a ~a -anchor nw -text {~a} "
+                 cpath (number) (number) (tkescape (arg)))
+         (args))
+      
+        ((eq itemtype :ctext)
+         (format stream "~a create text ~a ~a -anchor n -text {~a} "
+                 cpath (number) (number) (tkescape (arg)))
+         (args))
+        ))))
+
 (defun create-items (canvas items)
+  "Create canvas items according to the item specs without returning ltk objects for them.
+   This means, they cannot be accessed in any way, but also the creation does not flush
+   the ltk output buffer."
   (let ((code (with-output-to-string (s)
                 (dolist (item items)
-                  (let ((itemtype (pop item)))
-                    (when (consp itemtype)
-                      (setf itemtype (car itemtype)))
-                    (cond
-                      ((eq itemtype :rectangle)
-                       (format s "~a create rectangle ~a ~a ~a ~a " (widget-path canvas)
-                               (tk-number (pop item))
-                               (tk-number (pop item))
-                               (tk-number (pop item))
-                               (tk-number (pop item)))
-                       (loop
-                        while item
-                        do
-                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
-                       (format s "~%"))
-                      
-                      ((eq itemtype :arc)
-                       (format s "~a create arc ~a ~a ~a ~a " (widget-path canvas)
-                               (tk-number (pop item))
-                               (tk-number (pop item))
-                               (tk-number (pop item))
-                               (tk-number (pop item)))
-                       (loop
-                        while item
-                        do
-                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
-                       (format s "~%"))
-
-                     
-                      ((eq itemtype :line)
-                       (format s "~a create line ~a ~a ~a ~a " (widget-path canvas)
-                               (tk-number (pop item))
-                               (tk-number (pop item))
-                               (tk-number (pop item))
-                               (tk-number (pop item)))
-                       (loop
-                        while item
-                        do
-                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
-                       (format s "~%"))
-                      ((eq itemtype :text)
-                       (format s "~a create text ~a ~a -anchor nw -text {~a} "
-                               (widget-path canvas)
-                               (tk-number (pop item))
-                               (tk-number (pop item))
-                               (tkescape (pop item)))
-                       (loop
-                        while item
-                        do
-                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
-                       (format s "~%"))
-
-                      ((eq itemtype :ctext)
-                       (format s "~a create text ~a ~a -anchor n -text {~a} "
-                               (widget-path canvas)
-                               (tk-number (pop item))
-                               (tk-number (pop item))
-                               (tkescape (pop item)))
-                       (loop
-                        while item
-                        do
-                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
-		       (format s "~%"))
-                      ))
-                  )
-                )))
+                  (create-item-command canvas item s)
+                  (format s "~%")))))
     (send-wish code)))
 
-
-
 (defun make-items (canvas items)
+  "Create canvas items according to the item specs and return a list of canvas-items."
   (let ((code (with-output-to-string (s)
                 (format s "senddata \"( ~%")
                 (dolist (item items)
-                  (let ((itemtype (pop item)))
-                    (when (consp itemtype)
-                      (setf itemtype (car itemtype)))
-                    (cond
-                      ((eq itemtype :rectangle)
-                       (format s " [~a create rectangle ~a ~a ~a ~a " (widget-path canvas)
-                               (tk-number (pop item))
-                               (tk-number (pop item))
-                               (tk-number (pop item))
-                               (tk-number (pop item)))
-                       (loop
-                        while item
-                        do
-                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
-                       (format s " ]~%"))
-                      
-                      ((eq itemtype :arc)
-                       (format s " [~a create arc ~a ~a ~a ~a " (widget-path canvas)
-                               (tk-number (pop item))
-                               (tk-number (pop item))
-                               (tk-number (pop item))
-                               (tk-number (pop item)))
-                       (loop
-                        while item
-                        do
-                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
-                       (format s " ]~%"))
-
-                     
-                      ((eq itemtype :line)
-                       (format s " [~a create line ~a ~a ~a ~a " (widget-path canvas)
-                               (tk-number (pop item))
-                               (tk-number (pop item))
-                               (tk-number (pop item))
-                               (tk-number (pop item)))
-                       (loop
-                        while item
-                        do
-                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
-                       (format s " ]~%"))
-                      ((eq itemtype :text)
-                       (format s " [~a create text ~a ~a -anchor nw -text {~a} "
-                               (widget-path canvas)
-                               (tk-number (pop item))
-                               (tk-number (pop item))
-                               (tkescape (pop item)))
-                       (loop
-                        while item
-                        do
-                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
-                       (format s " ]~%"))
-
-                      ((eq itemtype :ctext)
-                       (format s " [~a create text ~a ~a -anchor n -text {~a} "
-                               (widget-path canvas)
-                               (tk-number (pop item))
-                               (tk-number (pop item))
-                               (tkescape (pop item)))
-                       (loop
-                        while item
-                        do
-                        (format s " -~(~a~) {~(~a~)}" (pop item) (pop item)))
-		       (format s " ]~%"))
-                      ))
-                  )
+                  (format s " [")
+                  (create-item-command canvas item s)
+                  (format s " ]~%"))
                 (format s ")\"~%"))))
     (send-wish code)
     (let ((handles (read-data)))
       ;;(format t "data: ~s~%" erg) (finish-output)
       (loop for handle in handles as (itemtype) in items collect
-            (let ((class (if (consp itemtype)
-                             (cdr itemtype)
-                           'canvas-item)))
-              (make-instance class :canvas canvas :handle handle))))))
+           (let ((class (if (consp itemtype)
+                            (cdr itemtype)
+                            'canvas-item)))
+             (make-instance class :canvas canvas :handle handle))))))
 
 (defun create-text (canvas x y text)
   (format-wish "senddata [~a create text ~a ~a -anchor nw -text {~a}]" (widget-path canvas)
