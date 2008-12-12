@@ -175,7 +175,7 @@ toplevel             x
            #:clipboard-append
            #:clipboard-clear
            #:clipboard-get
-           #+tk85  #:combobox
+           #+:tk85  #:combobox
            #:command
            #:coords
            #:configure
@@ -357,6 +357,9 @@ toplevel             x
            #:withdraw
            #:wm-title
            #:wm-state
+
+	   ;#+:tktable
+	   #:table
 	   ))
 
 (defpackage :ltk-user
@@ -366,8 +369,10 @@ toplevel             x
 ;communication with wish
 ;;; this ist the only function to adapted to other lisps
 
-;(eval-when (:compile-toplevel :load-toplevel :execute)
-;  (pushnew :tk85 *features*))
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (pushnew :tk85 *features*)
+  ;;(pushnew :tktable *features*)
+  )
 
 (defun do-execute (program args &optional (wt nil))
   "execute program with args a list containing the arguments passed to the program
@@ -483,7 +488,7 @@ toplevel             x
 
 ;;; verbosity of debug messages, if true, then all communication
 ;;; with tk is echoed to stdout
-(defparameter *debug-tk* nil)
+(defvar *debug-tk* nil)
 
 (defvar *trace-tk* nil)
 
@@ -526,8 +531,8 @@ toplevel             x
   ;(send-wish "proc esc {s} {puts \"\\\"[regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]\\\"\"} ")
   ;(send-wish "proc escape {s} {return [regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]} ")
   (send-wish "package require Tk")
-  #+tk85
-  (send-wish "package require Ttk")
+  (send-wish "catch {package require Ttk}")
+  (send-wish "catch {package require Tktable}")
   (send-wish "proc escape {s} {regsub -all {\\\\} $s {\\\\\\\\} s1;regsub -all {\"} $s1 {\\\"} s2;return $s2}")
   ;;; proc senddata {s} {puts "(data \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
   (send-wish "proc senddata {s} {global server; puts $server \"(:data [escape $s])\";flush $server}")
@@ -1195,7 +1200,7 @@ can be passed to AFTER-CANCEL"
 								 (progn
 								   (add-callback (name widget) command)
 								   (name widget)))"")
-      
+      (cols cols "~@[ -cols ~d~]" cols "")
       (compound compound "~@[ -compound ~(~a~)~]" compound
        "")
       
@@ -1263,6 +1268,7 @@ can be passed to AFTER-CANCEL"
       (repeatdelay repeatdelay "~@[ -repeatdelay ~(~a~)~]" repeatdelay "")
       (repeatinterval repeatinterval "~@[ -repeatinterval ~(~a~)~]" repeatinterval "")
       (resolution resolution "~@[ -resolution ~(~a~)~]" resolution "")
+      (rows rows "~@[ -rows ~d~]" rows "")
       (sashcursor sashcursor "~@[ -sashcursor ~(~a~)~]" sashcursor "")
       (sashpad sashpad "~@[ -sashpad ~(~a~)~]" sashpad "")
       (sashrelief sashrelief "~@[ -sashrelief ~(~a~)~]" sashrelief "")
@@ -1365,10 +1371,21 @@ can be passed to AFTER-CANCEL"
       ))
   )
 
+#+nil(defmacro defargs (class parents &rest defs)
+  (let ((args (build-args class parents defs)))
+    (setf *class-args* (append (remove-if (lambda (entry)
+					     (equal (car entry) class))
+					   *class-args*)))
+    `(setf *class-args* (append (remove-if (lambda (entry)
+					     (equal (car entry) ',class))
+					   *class-args*) (list '(,class ,@args))))))
+
 (defmacro defargs (class parents &rest defs)
   (let ((args (build-args class parents defs)))
     (setf *class-args* (append *class-args* (list (cons class args))))
-    `(setf *class-args* (append *class-args* (list '(,class ,@args))))))
+   `(setf *class-args* (append *class-args* (list '(,class ,@args))))))
+
+
 
 (defargs widget () 
   relief cursor borderwidth background
@@ -1430,7 +1447,6 @@ can be passed to AFTER-CANCEL"
 (defargs toplevel ()
   borderwidth class menu relief screen use background colormap container cursor height highlightbackground highlightcolor highlightthickness padx pady takefocus visual width)
 
-#+tk85
 (defargs combobox ()
   cursor style takefocus exportselection justify height postcommand state textvariable values width)
 
@@ -1658,6 +1674,7 @@ can be passed to AFTER-CANCEL"
   (:documentation "reads the value of the textvariable associated with the widget")
   )
 
+#+nil
 (defmethod initialize-instance :around ((v tktextvariable) &key)
   (call-next-method)
   ;;(format-wish "~a configure -textvariable text_~a" (widget-path v) (name v))
@@ -1844,14 +1861,118 @@ methods, e.g. 'configure'."))
 
 ;; ttk combo box
 
-#+tk85
+#+:tk85
 (defwidget combobox (tktextvariable widget) () "ttk::combobox")
 
-#+tk85
+#+:tk85
 (defmethod (setf options) (values (combobox combobox))
   (format-wish "~a configure -values {~{ \{~a\}~}}" (widget-path combobox) values))
 
 
+;;; tktable widget
+
+(defargs table ()
+  anchor relief rows cols borderwidth titlecols titlerows)
+
+(defwidget table (widget) ; tkvariable)
+  ((rows :accessor rows :initarg :rows :initform nil)
+   (cols :accessor cols :initarg :cols :initform nil)
+   (data :accessor data :initarg :data :initform nil)
+   (cache :accessor cache :initarg :cache :initform 1)
+   (xscroll :accessor xscroll :initarg :xscroll :initform nil)
+   (yscroll :accessor yscroll :initarg :yscroll :initform nil)
+   
+   )
+  "table"
+  (configure widget :cache (cache widget))
+  (format-wish "~a configure -variable ~a" (widget-path widget) (name widget))
+  (when (and (data widget)
+	       (not (rows widget))
+	       (not (cols widget)))
+    (setf (rows widget) (length (data widget)))
+    (setf (cols widget) (length (car (data widget)))))
+  (let ((r 0))
+    (dolist (row (data widget))
+      (set-row widget r row)
+      (incf r))))
+
+(defmethod value ((v table))
+  (format-wish "global ~a; senddata $~a" (name v) (name v))
+  (read-data))
+
+(defgeneric (setf value) (widget val))
+(defmethod (setf value) (val (v table))
+  (format-wish "global ~a; set ~a {~a}" (name v) (name v) val)
+  val)
+
+
+(defmethod (setf rows) :after (val (table table))
+  (format-wish "~a configure -rows ~d" (widget-path table) val))
+
+(defmethod (setf cols) :after (val (table table))
+  (format-wish "~a configure -cols ~d" (widget-path table) val))
+
+(defmethod vals ((table table))
+  (format-wish "senddatastrings [~a get 0,0 end]" (widget-path table))
+  (read-data))
+
+(defmethod subvals ((table table) row col &optional to-row to-col)
+  (format-wish "senddatastrings [~a get ~a,~a ~a,~a]" (widget-path table)
+	       row col (or to-row row) (or to-col col))
+  (read-data))
+
+(defgeneric set-row (table row value-list))
+(defmethod set-row ((table table) row value-list)
+  (format-wish "~a set row ~d,0 {~{{~a}~^ ~}}" (widget-path table) row value-list))  
+
+(defclass scrolled-table (frame)
+  ((table :accessor table)
+   (hscroll :accessor hscroll)
+   (vscroll :accessor vscroll)
+   (rows :accessor rows :initarg :rows :initform nil)
+   (cols :accessor cols :initarg :rows :initform nil)
+   (titlerows :accessor titlerows :initarg :titlerows :initform nil)
+   (titlecols :accessor titlecols :initarg :titlecols :initform nil)
+   (data :accessor data :initarg :data :initform nil)
+   ))
+
+
+(defmethod initialize-instance :after ((st scrolled-table) &key)
+  (setf (hscroll st) (make-scrollbar st :orientation "horizontal"))
+  (setf (vscroll st) (make-scrollbar st))
+
+  (setf (table st) (make-instance 'table :master st :xscroll (hscroll st) :yscroll (vscroll st) :rows (rows st) :cols (cols st)
+				  :data (data st) :titlerows (titlerows st)
+				  :titlecols (titlecols st)))
+  (grid (table st) 0 0 :sticky :news)
+  (grid (hscroll st) 1 0 :sticky :we)
+  (grid (vscroll st) 0 1 :sticky :ns)
+  (grid-columnconfigure st 0 :weight 1)
+  (grid-columnconfigure st 1 :weight 0)
+  (grid-rowconfigure st 0 :weight 1)
+  (grid-rowconfigure st 1 :weight 0)
+ 
+  (configure (hscroll st) "command" (concatenate 'string (widget-path (table st)) " xview"))
+  (configure (vscroll st) "command" (concatenate 'string (widget-path (table st)) " yview"))
+  (configure (table st) "xscrollcommand" (concatenate 'string (widget-path (hscroll st)) " set"))
+  (configure (table st) "yscrollcommand" (concatenate 'string (widget-path (vscroll st)) " set"))
+  )
+
+
+(defun tabletest ()
+  (with-ltk ()
+    (let ((table (make-instance 'scrolled-table
+				:titlerows 1
+				:titlecols 1
+				:data
+				(cons (cons "*" (loop for c from 1 to 40 collect
+						   c))
+				      (loop for r from 1 to 200
+					 collect
+					   (cons r
+						 (loop for c from 1 to 40 collect
+						      (* r c))))))))
+      (pack table :side :top :fill :both :expand t))))
 
 
 ;; text entry widget
