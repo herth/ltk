@@ -1874,14 +1874,13 @@ methods, e.g. 'configure'."))
 (defargs table ()
   anchor relief rows cols borderwidth titlecols titlerows)
 
-(defwidget table (widget) ; tkvariable)
+(defwidget table (widget)
   ((rows :accessor rows :initarg :rows :initform nil)
    (cols :accessor cols :initarg :cols :initform nil)
    (data :accessor data :initarg :data :initform nil)
    (cache :accessor cache :initarg :cache :initform 1)
    (xscroll :accessor xscroll :initarg :xscroll :initform nil)
    (yscroll :accessor yscroll :initarg :yscroll :initform nil)
-   
    )
   "table"
   (configure widget :cache (cache widget))
@@ -1896,12 +1895,12 @@ methods, e.g. 'configure'."))
       (set-row widget r row)
       (incf r))))
 
-(defmethod value ((v table))
+#+nil(defmethod value ((v table))
   (format-wish "global ~a; senddata $~a" (name v) (name v))
   (read-data))
 
-(defgeneric (setf value) (widget val))
-(defmethod (setf value) (val (v table))
+#+nil(defgeneric (setf value) (widget val))
+#+nil(defmethod (setf value) (val (v table))
   (format-wish "global ~a; set ~a {~a}" (name v) (name v) val)
   val)
 
@@ -1961,7 +1960,7 @@ methods, e.g. 'configure'."))
 
 (defun tabletest ()
   (with-ltk ()
-    (let ((table (make-instance 'scrolled-table
+    (let ((sctable (make-instance 'scrolled-table
 				:titlerows 1
 				:titlecols 1
 				:data
@@ -1972,7 +1971,9 @@ methods, e.g. 'configure'."))
 					   (cons r
 						 (loop for c from 1 to 40 collect
 						      (* r c))))))))
-      (pack table :side :top :fill :both :expand t))))
+      (pack sctable :side :top :fill :both :expand t)
+      (format t "7 * 8 is ~a~%" (car (subvals (table sctable) 7 8)))
+      (finish-output))))
 
 
 ;; text entry widget
