@@ -775,7 +775,7 @@ fconfigure stdin -encoding utf-8 -translation binary
 (defun flush-wish ()
   (let ((buffer (nreverse (wish-output-buffer *wish*))))
     (when buffer
-      (let ((len (loop for s in buffer summing (length s)))
+      (let ((len (loop for s in buffer summing (length (brace-tkescape s))))
             (*print-pretty* nil)
             (stream (wish-stream *wish*)))
         (declare (stream stream))
@@ -794,8 +794,8 @@ fconfigure stdin -encoding utf-8 -translation binary
              (format stream "buffer_text {~D }~%" len)
              (dbg "buffer_text {~D }~%" len)
              (dolist (string buffer)
-               (format stream "buffer_text {~A~%}~%" string)
-               (dbg "buffer_text {~A}~%" string))
+               (format stream "buffer_text {~A~%}~%" (brace-tkescape string))
+               (dbg "buffer_text {~A}~%" (brace-tkescape string)))
 
              (format stream "process_buffer~%")
              (dbg "process_buffer~%")))
@@ -968,8 +968,6 @@ event to read and blocking is set to nil"
                                 (string-downcase string))
                       :keyword)))))
 
-;;; sanitizing strings: lisp -> tcl (format (wish-stream *wish*) "{~a}" string)
-;;; in string escaped : {} mit \{ bzw \}  und \ mit \\
 
 (defun make-adjustable-string (&optional (string ""))
   (make-array (length string) :element-type 'character
@@ -986,6 +984,22 @@ event to read and blocking is set to nil"
          (vector-push-extend #\\ result))
        (vector-push-extend c result)
      finally (return result)))
+
+;;; sanitizing strings: lisp -> tcl (format (wish-stream *wish*) "{~a}" string)
+;;; in string escaped : {} mit \{ bzw \}  und \ mit \\
+
+(defun brace-tkescape (text)
+  text)
+#|
+  (unless (stringp text)
+    (setf text (format nil "~a" text)))
+  (loop with result = (make-adjustable-string)
+     for c across text do
+       (when (member c '(#\\ #\{ #\}))
+         (vector-push-extend #\\ result))
+       (vector-push-extend c result)
+     finally (return result)))
+  |#
 
 ;; basic tk object
 (defclass tkobject ()
@@ -4232,5 +4246,12 @@ When an error is signalled, there are four things LTk can do:
 
 
 
+(defun etest ()
+  (with-ltk ()
+    (let ((b (make-instance 'button :text " a button :)")))
+      (pack b)
+;      (send-wish (format nil "~a configure -text \" a } button\"" (widget-path b)))
+;      (send-wish "button }\"")
+      (flush-wish))))
 
 (pushnew :ltk *features*)
