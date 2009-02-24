@@ -531,6 +531,8 @@ toplevel             x
   ;(send-wish "proc esc {s} {puts \"\\\"[regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]\\\"\"} ")
   ;(send-wish "proc escape {s} {return [regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]} ")
   (send-wish "package require Tk")
+  (flush-wish)
+  
 ;;  (send-wish "catch {package require Ttk}")
   (send-wish "if {[catch {package require Ttk} err]} {tk_messageBox -icon error -type ok -message \"$err\"}")
   (send-wish "proc escape {s} {regsub -all {\\\\} $s {\\\\\\\\} s1;regsub -all {\"} $s1 {\\\"} s2;return $s2}")
@@ -773,7 +775,7 @@ fconfigure stdin -encoding utf-8 -translation binary
 (defun flush-wish ()
   (let ((buffer (nreverse (wish-output-buffer *wish*))))
     (when buffer
-      (let ((len (loop for s in buffer summing (length (brace-tkescape s))))
+      (let ((len (loop for s in buffer summing (length s)))
             (*print-pretty* nil)
             (stream (wish-stream *wish*)))
         (declare (stream stream))
@@ -792,8 +794,8 @@ fconfigure stdin -encoding utf-8 -translation binary
              (format stream "buffer_text {~D }~%" len)
              (dbg "buffer_text {~D }~%" len)
              (dolist (string buffer)
-               (format stream "buffer_text {~A~%}~%" (brace-tkescape string))
-               (dbg "buffer_text {~A}~%" (brace-tkescape string)))
+               (format stream "buffer_text \"~A~%\"~%" (tkescape2 string))
+               (dbg "buffer_text \"~A\"~%" (tkescape2 string)))
 
              (format stream "process_buffer~%")
              (dbg "process_buffer~%")))
@@ -979,6 +981,16 @@ event to read and blocking is set to nil"
   (loop with result = (make-adjustable-string)
      for c across text do
        (when (member c '(#\\ #\$ #\[ #\] #\{ #\} #\"))
+         (vector-push-extend #\\ result))
+       (vector-push-extend c result)
+     finally (return result)))
+
+(defun tkescape2 (text)
+  (unless (stringp text)
+    (setf text (format nil "~a" text)))
+  (loop with result = (make-adjustable-string)
+     for c across text do
+       (when (member c '(#\\ #\$ #\[ #\] #\"))
          (vector-push-extend #\\ result))
        (vector-push-extend c result)
      finally (return result)))
@@ -1701,7 +1713,7 @@ can be passed to AFTER-CANCEL"
 (defgeneric (setf text) (val variable))
 
 (defmethod (setf text) (val (v tktextvariable))
-  (format-wish "global text_~a ; set text_~a \"~a\""  (name v)  (name v) (tkescape val))
+  (format-wish "global text_~a ; set text_~a \"~a\""  (name v)  (name v) (tkescape2 val))
   val)
 
 ;;; window menu bar
@@ -4141,8 +4153,9 @@ When an error is signalled, there are four things LTk can do:
   (with-ltk ()
     (let ((b (make-instance 'button :text " a button :)")))
       (pack b)
-;      (send-wish (format nil "~a configure -text \" a } button\"" (widget-path b)))
-;      (send-wish "button }\"")
+      ;;(send-wish (format nil "~a configure -text \" a } button\"" (widget-path b)))
+      (setf (text b) " )} xasdf ")
+      ;(send-wish "button }\"")
       (flush-wish))))
 
 (pushnew :ltk *features*)
