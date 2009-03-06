@@ -358,7 +358,7 @@ toplevel             x
            #:withdraw
            #:wm-title
            #:wm-state
-
+           #:with-hourglass
 	   ;#+:tktable
 	   ))
 
@@ -2100,11 +2100,11 @@ a list of numbers may be given"
 
 (defgeneric see (txt pos))
 (defmethod see ((txt scrolled-text) pos)
-  (format-wish "~a see ~a" (widget-path (textbox txt)) pos)
+  (format-wish "~a see ~(~a~)" (widget-path (textbox txt)) pos)
   txt)
 
 (defmethod see ((lb listbox) pos)
-  (format-wish "~a see ~a" (widget-path lb) pos)
+  (format-wish "~a see ~(~a~)" (widget-path lb) pos)
   lb)
 
 ;;; scale widget
@@ -2702,7 +2702,7 @@ set y [winfo y ~a]
   txt)
 
 (defmethod see((txt text) pos)
-  (format-wish "~a see ~a" (widget-path txt) pos)
+  (format-wish "~a see ~(~a~)" (widget-path txt) pos)
   txt)
 
 (defmethod search-all-text ((txt text) pattern)
@@ -4157,5 +4157,16 @@ When an error is signalled, there are four things LTk can do:
       (setf (text b) " )} xasdf ")
       ;(send-wish "button }\"")
       (flush-wish))))
+
+(defmacro with-hourglass (widgets &rest body)
+  `(unwind-protect
+    (progn
+      ,@(mapcar (lambda (w)
+		  `(configure ,w :cursor :watch))
+		widgets)
+      ,@body)
+    ,@(mapcar (lambda (w)
+		  `(configure ,w :cursor ""))
+		widgets)))
 
 (pushnew :ltk *features*)
