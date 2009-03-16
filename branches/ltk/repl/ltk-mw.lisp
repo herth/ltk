@@ -72,6 +72,7 @@ o tooltip
    #:list-select-display
    #:selected-elements
    #:ltk-mw-demo
+   #:searchable-listbox
    ))
 
 (in-package :ltk-mw)
@@ -564,6 +565,7 @@ o tooltip
      (pack tree :side :left :expand t :fill :both)
      (format t "data: ~s~%" (data tree)) (force-output)
      )))
+
 	    
 ;;; list-select box widget
 
@@ -591,6 +593,94 @@ o tooltip
                                    (list-select-display select item))
                                  (data select))))
 
+
+;;; seachable-list-box
+
+(defclass searchable-listbox (frame)
+  ((scrolled-listbox :accessor scrolled-listbox :initform nil :initarg :scrolled-listbox)
+   (listbox          :accessor listbox          :initform nil :initarg :listbox)
+   (entry             :accessor entry             :initform nil :initarg :entry)
+   (data              :accessor data              :initform nil :initarg :data)
+   (key               :accessor key               :initform #'identity :initarg :key)
+   (shrink-to-search  :accessor shrink-to-search  :initform nil :initarg :shrink-to-search)
+   (displayed         :accessor displayed         :initform nil :initarg :displayed)
+   
+   ))
+
+(defmethod get-searchable-listbox-data ((lb searchable-listbox))
+  (mapcar (key lb) (data lb)))
+
+(defmethod selection ((lb searchable-listbox))
+  (cond
+    ((shrink-to-search lb)
+     )
+    (t
+     )))
+
+(defmethod update-search ((lb searchable-listbox) searchstring)
+  (let ((data (get-searchable-listbox-data lb))
+        (listbox (listbox lb)))
+    (cond
+      ((= (length searchstring) 0)
+       (cond
+         ((shrink-to-search lb)
+          (listbox-clear listbox)
+          (listbox-append listbox data))
+         (t
+          (listbox-select listbox nil))))
+      (t
+       (let ((results (remove-if-not (lambda (item)
+                                       (search searchstring item))
+                                     (data lb))))
+         (cond
+           ((shrink-to-search lb)
+            (listbox-clear listbox)
+            (when results
+              (listbox-append listbox results)))
+           (t
+            (let ((indexes (mapcar (lambda (item)
+                                     (position item (data lb) :test #'string=))
+                                   results)))
+              (listbox-select listbox nil)
+              (dolist (index indexes)
+                (when index
+                  (listbox-select listbox index)))
+              (when (car indexes)
+                (see listbox (car indexes)))))))))))
+
+
+(defmethod initialize-instance :after ((lb searchable-listbox) &key)
+  (let* ((scrolled (make-instance 'scrolled-listbox :master lb))
+         (listbox (listbox scrolled))
+         (fsearch (make-instance 'frame :master lb))
+         (label (make-instance 'label :master fsearch :text "Search:"))
+         (entry (make-instance 'entry :master fsearch)))
+    (pack scrolled :side :top :fill :both :expand t)
+    (pack fsearch :side :top :fill :x)
+    (pack label :side :left)
+    (pack entry :side :left :fill :x)
+    (setf (scrolled-listbox lb) scrolled
+          (listbox lb) listbox
+          (entry lb) entry)
+    (listbox-append listbox (data lb))
+    (bind entry "<KeyPress>" (lambda (event)
+                               (declare (ignore event))
+                               (update-search lb (text entry))))
+  ))
+
+(defun searchable-listbox-demo ()
+  (with-ltk ()
+    (pack (make-instance 'searchable-listbox
+                         :data (loop for i from 1 to 100
+                                     collect (format nil "Nummer: ~d" i)))
+          :fill :both :expand t)
+    (pack (make-instance 'searchable-listbox
+                         :data (loop for i from 1 to 100
+                                     collect (format nil "Nummer: ~d" i))
+                         :shrink-to-search t)
+          :fill :both :expand t)))
+
+ 
 
 ;;; demo
 
@@ -628,6 +718,10 @@ o tooltip
   (with-ltk ()
     (let ((f (make-list-select-demo)))
       (pack f :side :top :expand t :fill :both))))
+
+
+;;;
+
 
 
 (defun ltk-mw-demo ()
