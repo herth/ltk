@@ -11,14 +11,24 @@
 
            ))
 
-  (send-wish "if {[catch {package require Tktable} err]} {tk_messageBox -icon error -type ok -message \"$err\"}")
+(in-package :tktable)
+
+
+(eval-when (:load-toplevel)
+  (setf *init-wish-hook* (append *init-wish-hook*
+				 (list (lambda ()
+					 (send-wish "if {[catch {package require Tktable} err]} {tk_messageBox -icon error -type ok -message \"$err\"}")
+				       )))))
+
+
+  
 
 ;;; tktable widget
 
-(defargs table ()
+(ltk::defargs table ()
   anchor relief rows cols borderwidth titlecols titlerows)
 
-(defwidget table (widget)
+(ltk::defwidget table (widget)
   ((rows :accessor rows :initarg :rows :initform nil)
    (cols :accessor cols :initarg :cols :initform nil)
    (data :accessor data :initarg :data :initform nil)
@@ -28,7 +38,7 @@
    )
   "table"
   (configure widget :cache (cache widget))
-  (format-wish "~a configure -variable ~a" (widget-path widget) (name widget))
+  (format-wish "~a configure -variable ~a" (widget-path widget) (ltk::name widget))
   (when (and (data widget)
 	       (not (rows widget))
 	       (not (cols widget)))
@@ -57,13 +67,13 @@
 
 (defmethod vals ((table table))
   (format-wish "senddatastrings [~a get 0,0 end]" (widget-path table))
-  (read-data))
+  (ltk::read-data))
 
 (defgeneric subvals (table row col &optional to-row to-col))
 (defmethod subvals ((table table) row col &optional to-row to-col)
   (format-wish "senddatastrings [~a get ~a,~a ~a,~a]" (widget-path table)
 	       row col (or to-row row) (or to-col col))
-  (read-data))
+  (ltk::read-data))
 
 (defgeneric set-row (table row value-list))
 (defmethod set-row ((table table) row value-list)
