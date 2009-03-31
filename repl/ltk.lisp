@@ -618,11 +618,7 @@ toplevel             x
 
 
 (defun init-tcl (&key debug-tcl)
- (let ((translation #+(and mswindows lispworks)
-                   "crlf"
-                   #-(and mswindows lispworks)
-                   "binary"))
-   (format (wish-stream *wish*) "set buffer \"\"
+  (format (wish-stream *wish*) "set buffer \"\"
 set server stdout
 
 set tclside_ltkdebug ~:[0~;1~]
@@ -692,9 +688,9 @@ proc buffer_text {txt} {
     ltkdebug \"buffer=$buffer\\n\" 
 }
 
-fconfigure stdin -encoding utf-8 -translation ~a
+fconfigure stdin -encoding utf-8 -translation auto
 #fileevent stdin readable sread
-" debug-tcl translation)))
+" debug-tcl))
 
 ;;; start wish and set (wish-stream *wish*)
 (defun start-wish (&rest keys &key handle-errors handle-warnings (debugger t) remotep
