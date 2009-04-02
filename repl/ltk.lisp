@@ -175,7 +175,7 @@ toplevel             x
            #:clipboard-append
            #:clipboard-clear
            #:clipboard-get
-           ;;#+:tk85
+           #-:tk84
 	   #:combobox
            #:command
            #:coords
@@ -283,6 +283,8 @@ toplevel             x
            #:move
            #:move-all
            #:normalize
+	   #-:tk84
+	   #:notebook
            #:on-close
            #:on-focus
            #:pack
@@ -370,7 +372,7 @@ toplevel             x
 ;;; this ist the only function to adapted to other lisps
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (pushnew :tk85 *features*)
+  ;;(pushnew :tk85 *features*)
   ;;(pushnew :tktable *features*)
   )
 
@@ -532,8 +534,10 @@ toplevel             x
   ;(send-wish "proc escape {s} {return [regsub -all {\"} [regsub -all {\\\\} $s {\\\\\\\\}] {\\\"}]} ")
   (send-wish "package require Tk")
   (flush-wish)
-  
-;;  (send-wish "catch {package require Ttk}")
+
+  #+:tk84
+  (send-wish "catch {package require Ttk}")
+  #-:tk84
   (send-wish "if {[catch {package require Ttk} err]} {tk_messageBox -icon error -type ok -message \"$err\"}")
   (send-wish "proc escape {s} {regsub -all {\\\\} $s {\\\\\\\\} s1;regsub -all {\"} $s1 {\\\"} s2;return $s2}")
   ;;; proc senddata {s} {puts "(data \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
@@ -1420,25 +1424,60 @@ can be passed to AFTER-CANCEL"
 ;(defargs button (widget) anchor)
 ;(defargs text (widget button) :delete anchor color)
 
+#-:tk84
+(defargs button (widget) 
+ class command compound default image state takefocus textvariable underline width)
+
+#+:tk84
 (defargs button (widget) 
   activebackground activeforeground anchor bitmap command compound default disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image justify overrelief padx pady repeatdelay repeatinterval state takefocus textvariable underline width wraplength)
 
 (defargs canvas ()
   background borderwidth closeenough confine cursor height highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth offset relief scrollregion selectbackground selectborderwidth selectforeground state takefocus width xscrollcommand xscrollincrement yscrollcommand yscrollincrement)
 
+#-:tk84
+(defargs check-button ()
+  cbcommand class compound cursor image offvalue onvalue state takefocus textvariable underline variable width)
+
+#+:tk84
 (defargs check-button ()
   activebackground activeforeground anchor background bitmap borderwidth cbcommand compound cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify offrelief offvalue onvalue overrelief padx pady relief selectcolor selectimage state takefocus textvariable underline variable width wraplength)
 
-(defargs entry () background borderwidth cursor disabledbackground disabledforeground exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth invalidcommand justify readonlybackground relief selectbackground selectborderwidth selectforeground show state takefocus textvariable validate validatecommand width xscrollcommand )
+#-:tk84
+(defargs combobox ()
+  class cursor exportselection justify height postcommand state style takefocus textvariable values width)
 
+#+:tk84
+(defargs entry ()
+  background borderwidth cursor disabledbackground disabledforeground exportselection font foreground highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth invalidcommand justify readonlybackground relief selectbackground selectborderwidth selectforeground show state takefocus textvariable validate validatecommand width xscrollcommand )
+
+#-:tk84
+(defargs entry ()
+  class cursor exportselection invalidcommand justify show state style takefocus textvariable validate validatecommand width xscrollcommand)
+
+#+:tk84
 (defargs frame ()
   borderwidth class relief background colormap container cursor height highlightbackground highlightcolor highlightthickness padx pady takefocus visual width)
 
+#-:tk84
+(defargs frame ()
+  borderwidth class relief cursor height padding takefocus width)
+
+#+:tk84
 (defargs label ()
   activebackground activeforeground anchor background bitmap borderwidth compound cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image justify padx pady relief state takefocus textvariable underline width wraplength )
 
+#-:tk84
+(defargs label ()
+  anchor background class compound cursor font foreground image justify padding relief style takefocus textvariable underline width wraplength)
+
+#+:tk84
 (defargs labelframe ()
   borderwidth class font foreground labelanchor labelwidget relief text background colormap container cursor height highlightbackground highlightcolor highlightthickness padx pady takefocus visual width)
+
+#-:tk84
+(defargs labelframe ()
+  class labelanchor labelwidget text cursor height padding style takefocus width)
 
 (defargs listbox ()
   activestyle background borderwidth cursor disabledforeground exportselection font foreground height highlightbackground highlightcolor highlightthickness relief selectbackground selectborderwidth selectforeground selectmode setgrid state takefocus width xscrollcommand yscrollcommand listvariable)
@@ -1451,6 +1490,10 @@ can be passed to AFTER-CANCEL"
 
 (defargs message ()
   anchor aspect background borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness justify padx pady relief takefocus textvariable width)
+
+#-:tk84
+(defargs notebook ()
+  class cursor style takefocus height padding width)
 
 (defargs paned-window ()
   background borderwidth cursor handlepad handlesize height opaqueresize orient relief sashcursor sashpad sashrelief sashwidth showhandle width)
@@ -1472,10 +1515,6 @@ can be passed to AFTER-CANCEL"
 
 (defargs toplevel ()
   borderwidth class menu relief screen use background colormap container cursor height highlightbackground highlightcolor highlightthickness padx pady takefocus visual width)
-
-(defargs combobox ()
-  cursor style takefocus exportselection justify height postcommand state textvariable values width)
-
 
 (defmacro defwidget (class parents slots cmd &rest code)
   (let ((args (sort (copy-list (rest (assoc class *class-args*)))
@@ -1842,7 +1881,11 @@ methods, e.g. 'configure'."))
 
 ;;; standard button widget
 
+#+:tk84
 (defwidget button (tktextvariable widget) () "button")
+
+#-:tk84
+(defwidget button (tktextvariable widget) () "ttk::button")
 
 (defmethod (setf command) (val (button button))
   (add-callback (name button) val)
@@ -1851,7 +1894,11 @@ methods, e.g. 'configure'."))
 
 ;;; check button widget
 
+#+:tk84
 (defwidget check-button (tktextvariable widget tkvariable) () "checkbutton")
+
+#-:tk84
+(defwidget check-button (tktextvariable widget tkvariable) () "ttk::checkbutton")
 
 (defmethod (setf command) (val (check-button check-button))
   (add-callback (name check-button) val)
@@ -1887,18 +1934,24 @@ methods, e.g. 'configure'."))
 
 ;; ttk combo box
 
-;;#+:tk85
+#-:tk84
 (defwidget combobox (tktextvariable widget) () "ttk::combobox")
 
-;;#+:tk85
+#-:tk84
 (defgeneric (setf options) (value widget))
+
+#-:tk84
 (defmethod (setf options) (values (combobox combobox))
   (format-wish "~a configure -values {~{ \{~a\}~}}" (widget-path combobox) values))
 
 
 ;; text entry widget
 
+#+:tk84
 (defwidget entry (tktextvariable widget) () "entry")
+
+#-:tk84
+(defwidget entry (tktextvariable widget) () "ttk::entry")
 
 (defun entry-select (e from to)
   (format-wish "~a selection range ~a ~a" (widget-path e) from to)
@@ -1929,14 +1982,22 @@ methods, e.g. 'configure'."))
 
 ;;; frame widget 
 
+#+:tk84
 (defwidget frame (widget) () "frame")
+
+#-:tk84
+(defwidget frame (widget) () "ttk::frame")
 
 ;(defun make-frame (master)
 ;  (make-instance 'frame :master master))
 
 ;;; labelframe widget 
 
+#+:tk84
 (defwidget labelframe (widget) () "labelframe")
+
+#-:tk84
+(defwidget labelframe (widget) () "ttk::labelframe")
 
 (defmethod (setf text) :after (val (l labelframe))
   (format-wish "~a configure -text {~a}" (widget-path l) val)
@@ -2056,6 +2117,75 @@ a list of numbers may be given"
   (listbox-select (listbox l) val)
   l)
 
+;;; notebook
+;#-:tk84
+(defwidget notebook (widget) () "ttk::notebook")
+
+(defgeneric notebook-add (nb widget &rest options))
+(defmethod notebook-add ((nb notebook) (w widget) &rest options)
+  (format-wish "~a add ~a ~{-~(~a~) {~a}~}" (widget-path nb) (widget-path w) options))
+
+(defgeneric notebook-tab (nb widget option value))
+(defmethod notebook-tab ((nb notebook) (w widget) option value)
+  (format-wish "~a tab ~a -~(~a~) {~a}" (widget-path nb)
+	       (widget-path w) option value))
+
+(defgeneric notebook-forget (nb widget))
+(defmethod notebook-forget ((nb notebook) (w widget))
+  (format-wish "~a forget ~a" (widget-path nb) (widget-path w)))
+
+(defgeneric notebook-index (nb widget))
+(defmethod notebook-index ((nb notebook) (w widget))
+  (format-wish "senddata [~a index ~a]" (widget-path nb) (widget-path w))
+  (read-data))
+
+(defun nbtest ()
+  (with-ltk ()
+    (let* ((nb (make-instance 'notebook))
+	   (f1 (make-instance 'frame :master nb))
+	   (f2 (make-instance 'frame :master nb))
+	   (t1 (make-instance 'text :master f1 :width 40 :height 10))
+	   (b1 (make-instance 'button :master f1 :text "Press me"
+			      :command (lambda ()
+					 (format t "the index is:~a~%" (notebook-index nb f1))
+					 (finish-output))))
+	   (b2 (make-instance 'button :master f2 :text "A button"
+			      :command (lambda ()
+					 (format t "the index is:~a~%" (notebook-index nb f2))
+					 (finish-output)))))
+      (pack nb :fill :both :expand t)  
+      (pack t1 :fill :both :expand t)
+      (pack b1 :side :top)
+      (pack b2 :side :top)
+      (notebook-add nb f1 :text "Frame 1")
+      (notebook-add nb f2 :text "Frame 2")
+      (append-text t1 "Foo Bar Baz")
+      )))
+
+(defmw nbw self (frame)
+  ()
+  ((nb notebook :pack (:fill :both :expand t)
+       (f1 frame
+	   (t1 text :width 60 :height 20 :pack (:side :top))
+	   (b1 button :text "Press Me" :pack (:side :top)
+	       :command (lambda ()
+			  (format t "the index is:~a~%" (notebook-index nb f1))
+			  (finish-output))))
+       (f2 frame
+	   (b2 button :text "A button" :pack (:side :top)
+	       :command (lambda ()
+			  (format t "the index is:~a~%" (notebook-index nb f2))
+			  (finish-output))))))
+  (notebook-add nb f1 :text "Frame 1")
+  (notebook-add nb f2 :text "Frame 2")
+  (append-text t1 "Foo Bar Baz")
+  )
+
+(defun nbt2 ()
+  (with-ltk ()
+    (let ((w (make-instance 'nbw)))
+      (pack w :side :top :fill :both :expand t))))
+
 ;;; scrolled-text
 
 (defclass scrolled-text (frame)
@@ -2143,7 +2273,11 @@ a list of numbers may be given"
 
 ;;; label widget
 
+#+:tk84
 (defwidget label (tktextvariable widget) () "label")
+
+#-:tk84
+(defwidget label (tktextvariable widget) () "ttk::label")
 
 ;(defun make-label (master text)
 ;  (make-instance 'label :master master  :text text))
@@ -2343,6 +2477,7 @@ set y [winfo y ~a]
   (format-wish "senddata \"([~a bbox ~a])\"" (widget-path canvas) handle)
   (read-data))
 
+(defgeneric calc-scroll-region (canvas))
 (defmethod calc-scroll-region ((canvas canvas))
   (format-wish "~a configure -scrollregion [~a bbox all]" (widget-path canvas) (widget-path canvas))
   canvas)
@@ -2705,10 +2840,12 @@ set y [winfo y ~a]
   (format-wish "~a see ~(~a~)" (widget-path txt) pos)
   txt)
 
+(defgeneric search-all-text (text pattern))
 (defmethod search-all-text ((txt text) pattern)
   (format-wish "searchall ~a ~a" (widget-path txt) pattern)
   txt)
 
+(defgeneric search-next-text (text pattern))
 (defmethod search-next-text ((txt text) pattern)
   (format-wish "searchnext ~a ~a" (widget-path txt) pattern)
   txt)
@@ -3046,6 +3183,7 @@ set y [winfo y ~a]
   (format-wish "senddatastring [wm geometry ~a]" (widget-path tl))
   (read-data))
 
+(defgeneric (setf geometry) (geometry widget))
 (defmethod (setf geometry) (geometry (tl widget))
   (format-wish "wm geometry ~a ~a" (widget-path tl) geometry)
   geometry)
@@ -3157,6 +3295,17 @@ set y [winfo y ~a]
   (read-data))
 
 ;;; misc functions
+
+#-:tk84
+(defun use-theme(name)
+  (format-wish "ttk::style theme use ~a" name))
+
+#-:tk84
+(defun theme-names ()
+  (send-wish "senddatastrings [ttk::style theme names]")
+  (ltk::read-data))
+
+
 
 (defun focus (widget)
   (format-wish "focus ~a" (widget-path widget))
@@ -3735,6 +3884,7 @@ When an error is signalled, there are four things LTk can do:
 ;;; with-widget stuff
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
+
   (defun process-layout (line parent)
     (let ((class-name (first line))
 	  (instance-name (second line)))
@@ -3761,22 +3911,230 @@ When an error is signalled, there are four things LTk can do:
 	   (widgets (mapcar #'car defs)))
       `(let* ,defs
 	 (declare (ignorable ,@widgets))
-	 ,@body)))
+	 ,@body)))  
+  )
 
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+;; code for defmw
+  (defun process-layout2 (line parent)
+    (let ((instance-name (first line))
+	  (class-name (second line)))
+      (multiple-value-bind (keyargs subwidgets)
+	  (do ((params (cddr line))	; all other parameters to the widget/subwidget defs
+	       (keywords+values nil)    ; keyword args for the widget
+	       (sublists nil))		; list of the subwidgets	      
+ 	      ((null params) (values (reverse keywords+values) (reverse sublists)))
+ 	    (cond ((listp (car params))
+ 		   (dolist (subwidget (process-layout2 (pop params) instance-name))
+ 		     (push subwidget sublists)))
+ 		  (t (let* ((param (pop params))
+			    (val (pop params)))
+		       (push param keywords+values)
+		       (push (if (equal param :pack)
+				 (list 'quote val)
+				 val)
+			     keywords+values)))))
+	(cons
+	 (list instance-name
+	       (append
+		(list 'make-instance (list 'quote class-name))
+		(if parent (list :master parent) nil)
+		keyargs))
+	 subwidgets))))
 
-  (defmacro defform (name parent slots widgets &rest body)
+  (defun compute-slots (names)
+    (mapcar (lambda (name)
+	      `(,name :accessor ,name :initform nil :initarg ,(intern (symbol-name name) :keyword)))
+	    names))
+
+  (defmacro defmw1 (name parent slots widgets &rest body)
+    (let* ((defs (mapcan (lambda (w)
+			   (process-layout2 w 'self)) widgets))
+	   (wnames (mapcar #'car defs))
+	   (all-slots (compute-slots (append slots wnames))))
     `(progn
        (defclass ,name ,parent
-         ,slots)
+         ,all-slots)
        (defmethod initialize-instance :after ((self ,name) &key)
-         (let (,widgets)
-           ,@body))) 
+	 (let ,wnames
+	   ,@(mapcar (lambda (def)
+		       (append (list 'setf) def)) defs)
+	   ,@(mapcar (lambda (wname)
+		       `(setf (,wname self) ,wname)) wnames)
+	   ;(declare (ignorable ,@wnames))
+	   ,@body)))))
+ )
 
-    )
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+
+  (defmacro defmw (name selfname parent slots widgetspecs &rest body)
+    (let (defs wnames events accessors methods)
+      (labels (
+
+	       (on-type (subwidget methodname)
+		 (push
+		  `(bind ,subwidget "<KeyPress>" (lambda (event)
+						   (,methodname ,selfname (event-keycode event))))
+		  events)
+		 (push
+		  `(defmethod ,methodname ((,selfname ,name) keycode)
+		     )
+		  methods)
+		 )
+
+
+	       (process-layout (line parent)
+		  (let ((instance-name (first line))
+			(class-name (second line)))
+		    (multiple-value-bind (keyargs subwidgets)
+			(do ((params (cddr line))	; all other parameters to the
+					                ; widget/subwidget defs
+			     (keywords+values nil)      ; keyword args for the widget
+			     (sublists nil))		; list of the subwidgets	      
+			    ((null params) (values (reverse keywords+values) (reverse sublists)))
+
+			  (cond ((listp (car params))
+				 (dolist (subwidget (process-layout (pop params) instance-name))
+				   (push subwidget sublists)))
+				((equal (car params) :on-type)
+				 (pop params)
+				 (on-type instance-name (pop params)))
+				(t (let* ((param (pop params))
+					  (val (pop params)))
+				     (push param keywords+values)
+				     (push (if (equal param :pack)
+					       (list 'quote val)
+					       val)
+					   keywords+values)))))
+		      (cons
+		       (list instance-name
+			     (append
+			      (list 'make-instance (list 'quote class-name))
+			      (if parent (list :master parent) nil)
+			      keyargs))
+		       subwidgets))))
+
+	       (compute-slots (names)
+		 (mapcar (lambda (name)
+			   (if (listp name)
+			       name
+			       `(,name :accessor ,name :initform nil
+				       :initarg ,(intern (symbol-name name) :keyword))))
+			 names))
+
+		(make-accessor (acname spec)
+		  (push
+		   `(defmethod ,acname ((,selfname ,name))
+		      ,spec)
+		   accessors)
+
+		  (push
+		   `(defmethod (setf ,acname) (val (,selfname ,name))
+		      (setf ,spec val))
+		   accessors))
+		   
+
+		(grab-accessors ()
+		  (loop
+		       while (equal (caar body) :accessor)
+		       do
+		       (format t "car=~a~%" (car body)) (finish-output)
+		       (destructuring-bind (unused aname aspec)
+			   (pop body)
+			 (declare (ignore unused))
+			 (make-accessor aname aspec))))
+		)
+
+	(setf defs (mapcan (lambda (w)
+			     (process-layout w selfname)) widgetspecs))
+	
+	(setf wnames (mapcar #'car defs))
+	(grab-accessors)
+	(let* ((all-slots (compute-slots (append slots wnames))))
+	  
+	  `(progn
+
+	     (defclass ,name ,parent
+	       ,all-slots)
+	     
+	     ,@(reverse accessors)
+
+	     ,@(reverse methods)
+
+	     (defmethod initialize-instance :after ((,selfname ,name) &key)
+	       (let ,wnames
+		 ,@(mapcar (lambda (def)
+			     (append (list 'setf) def)) defs)
+		 ,@(mapcar (lambda (wname)
+			     `(setf (,wname ,selfname) ,wname)) wnames)
+
+		 ,@events
+		 ,@body))
+
+	     )))))
   )
+
+;;:on-type test-widget-type
+
+
 ;; example-usage
 ;;
+
+(defmw test-widget self (frame)
+  (a b c)
+  ((bu button :text "A button" 
+       :pack (:side :top :anchor :w)
+       :command (lambda ()
+		  (format t "the content of enry is:~a~%" (text entry)) (finish-output)
+		  (setf (text entry) "")))
+   (f1 frame :pack (:side :top :fill :both :expand t) 
+       (lb label :text "A label" :pack (:side :left))
+       (entry entry :pack (:side :left :fill :x :expand t))))
+
+  ;; other code here
+  )
+
+(defmw test-widget2 self (frame)
+  ()
+  ((mw test-widget :pack (:side :top :fill :x))
+   (mw2 test-widget :pack (:side :top :fill :x))
+   (b button :text "set" :command (lambda ()
+				    (setf (text (entry mw)) "foo")
+				    (setf (text (entry mw2)) "bar"))
+      :pack (:side :top))
+   (e entry :pack (:side :top)
+      :on-type entry-typed))
+   
+   (:accessor firstline (text (entry (mw self))))
+   (:accessor secondline (text (entry (mw2 self))))
+
+
+   (bind self  "<Enter>" (lambda (event)
+			   (declare (ignore event))
+			   (format t "Entered!~%") (finish-output)))
+   )
+
+(defclass tw (test-widget2) ())
+
+(defmethod entry-typed ((self tw) keycode)
+  (format t "typed:~a~%text:~a~%" keycode (text (e self))) (finish-output))
+
+(defun defmw-test ()
+  (declare (optimize (debug 3)))
+  (with-ltk ()
+    (let ((mw (make-instance 'tw)))
+      (format t "mw is: ~a~%" mw) (finish-output)
+      ;(error "test: ~a~%" mw)
+      (pack mw :side :top :fill :both :expand t)
+      (pack (make-instance 'button :text "get first"
+			   :command (lambda ()
+				      (format t "the first is: ~a~%" (firstline mw))
+				      (finish-output))) :side :top :fill :both :expand t))))
+
+;;;
+
 
 (defun with-widgets-test ()
   (with-ltk ()
@@ -3815,8 +4173,16 @@ When an error is signalled, there are four things LTk can do:
              (r1 (make-instance 'radio-button :master fradio :text "fried" :value 1 :variable "eggs"))
              (r2 (make-instance 'radio-button :master fradio :text "stirred" :value 2 :variable "eggs"))
              (r3 (make-instance 'radio-button :master fradio :text "cooked" :value 3 :variable "eggs"))
-             ;;#+tk85
-	     (combo (make-instance 'combobox :master fradio :text "foo"))
+             #-:tk84
+	     (combo (make-instance 'combobox :master fradio :text "foo" :values '(foo bar baz)))
+
+	     (fcheck (make-instance 'frame :master bar))
+	     (lcheck (make-instance 'label :master fcheck :text "Add:"))
+	     (ch1 (make-instance 'check-button :master fcheck :text "Salt"))
+	     (ch2 (make-instance 'check-button :master fcheck :text "Pepper"))
+
+	     (fstyles (make-instance 'frame :master bar))
+	     (lstyles (make-instance 'label :master fstyles :text "Tk styles:"))
 	     (fr (make-instance 'frame :master bar))
 	     (lr (make-instance 'label :master fr :text "Rotation:"))
 	     (bstart (make-instance 'button :master fr :text "Start" :command 'start-rotation))
@@ -3883,7 +4249,8 @@ When an error is signalled, there are four things LTk can do:
 	     (mp-2 (make-menubutton mp "Option 2" (lambda () (format t "Popup 2~&") (finish-output))))
 	     (mp-3 (make-menubutton mp "Option 3" (lambda () (format t "Popup 3~&") (finish-output))))
 	     )
-	(declare (ignore mf-print mf-exit mfe-gif mfe-jpg mf-save mf-load sep1 sep2 sep3 sep4 mp-1 mp-2 mp-3 mfs-1 mfs-2 mfs-3 mfs-4)) 
+	(declare (ignore mf-print mf-exit mfe-gif mfe-jpg mf-save mf-load sep1 sep2 sep3 sep4
+			 mp-1 mp-2 mp-3 mfs-1 mfs-2 mfs-3 mfs-4)) 
 
 
 	
@@ -3894,14 +4261,33 @@ When an error is signalled, there are four things LTk can do:
 	(configure c :borderwidth 2 :relief :sunken)
 	(pack sc :side :top :fill :both :expand t)
 	(pack bar :side :bottom)
-        (pack (list fradio leggs r1 r2 r3) :side :left)
-        ;#+tk85
+	(pack fradio :side :top :fill :x)
+	(pack (list leggs r1 r2 r3) :side :left)
+	(pack fcheck :side :top :fill :x)
+	(pack (list lcheck ch1 ch2) :side :left)
+	(setf (value r1) 1)
+        #-:tk84
 	(pack combo :side :left)
         (dolist (r (list r1 r2 r3))
           (let ((button r))
             (setf (command r) (lambda (val)
                                 (declare (ignore val))
                                 (eggs button)))))
+	(pack fstyles :side :top :fill :x)
+	(pack lstyles :side :left)
+	(let ((radio nil))
+	  (dolist (theme (theme-names))
+	    (let* ((theme theme)
+		   (r (make-instance 'radio-button :master fstyles
+				    :text theme
+				    :value theme
+				    :variable "radiostyles"
+				    :command (lambda (val)
+					       (declare (ignore val))
+					       (use-theme theme)))))
+	      (pack r :side :left)
+	      (setf radio r)))
+	  (setf (value radio) "default"))
 	(scrollregion c 0 0 500 400)
 	(pack fr :side :left)
 	(pack lr :side :left)
@@ -3927,7 +4313,8 @@ When an error is signalled, there are four things LTk can do:
 	(setf *demo-line* (create-line c lines))
 	(setf *demo-canvas* c)
 	(create-text c 10 10 "Ltk Demonstration")
-	)))
+	))
+  0)
 
 (defvar *angle* 0.0f0)
 (defvar *angle2* 0.0f0)
@@ -4088,8 +4475,8 @@ When an error is signalled, there are four things LTk can do:
      (pack b))))
 
 
-;;#+tk85
-(defun combotest ()
+#-:tk84
+ (defun combotest ()
   (with-ltk ()
     (let* ((c (make-instance 'combobox :text "foo" :values '("bar" "baz" "foo bar")))
            (add (make-instance 'button :text "Add values"
