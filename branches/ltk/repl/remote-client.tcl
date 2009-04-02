@@ -21,6 +21,17 @@ set host localhost
 set port 19790
 set server ""
 
+
+if {[llength $argv] > 0} {
+    set host [lindex $argv 0]
+}
+
+if {[llength $argv] > 1} {
+    set port [lindex $argv 1]
+}
+
+
+
 label .status -text "Connecting to server $host port $port." -font 24
 pack .status 
 tkwait visibility .status

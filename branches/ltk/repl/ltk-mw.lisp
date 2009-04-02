@@ -389,22 +389,22 @@ o tooltip
       "M5"))
     ("Mercedes"
      ("A-Klasse"
-      "A 160"
-      "A 180")
+      ("A 160")
+      ("A 180"))
      ("C-Klasse"
-      "C 200"
-      "C 250")
+      ("C 200")
+      ("C 250"))
      ("S-Klasse"
-      "400 S"
-      "500 S"
-      "600 S"))
+      ("400 S")
+      ("500 S")
+      ("600 S")))
     ("VW"
      ("Golf"
       ("TDI"
-       "1.8"
-       "2.0"
-       "16 V")
-      "GTI"))))    
+       ("1.8")
+       ("2.0")
+       ("16 V"))
+      ("GTI")))))
 
 (defclass demo-tree (treelist)
   ())
@@ -412,8 +412,8 @@ o tooltip
 (defmethod treelist-name ((tree demo-tree) (node list))
   (car node))
 
-(defmethod treelist-children ((tree demo-tree) (node string))
-  nil)
+(defmethod treelist-name ((tree demo-tree) (node string))
+  node)
 
 (defmethod treelist-children ((tree demo-tree) (node list))
   (rest node))
@@ -658,7 +658,7 @@ o tooltip
     (pack scrolled :side :top :fill :both :expand t)
     (pack fsearch :side :top :fill :x)
     (pack label :side :left)
-    (pack entry :side :left :fill :x)
+    (pack entry :side :left :fill :x :expand t)
     (setf (scrolled-listbox lb) scrolled
           (listbox lb) listbox
           (entry lb) entry)
@@ -666,19 +666,18 @@ o tooltip
     (bind entry "<KeyPress>" (lambda (event)
                                (declare (ignore event))
                                (update-search lb (text entry))))
+    (focus entry)
   ))
 
 (defun searchable-listbox-demo ()
   (with-ltk ()
-    (pack (make-instance 'searchable-listbox
-                         :data (loop for i from 1 to 100
-                                     collect (format nil "Nummer: ~d" i)))
-          :fill :both :expand t)
+    
     (pack (make-instance 'searchable-listbox
                          :data (loop for i from 1 to 100
                                      collect (format nil "Nummer: ~d" i))
                          :shrink-to-search t)
-          :fill :both :expand t)))
+          :fill :both :expand t)
+    ))
 
  
 
