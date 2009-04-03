@@ -362,7 +362,15 @@ toplevel             x
            #:wm-state
            #:with-hourglass
 	   ;#+:tktable
-	   ))
+	   #:notebook-index
+	   #:notebook-add
+	   #:notebook-tab
+	   #:notebook-forget
+	   #:notebook-hide
+	   #:notebook-identify
+	   #:notebook-select
+	   #:notebook-events
+	   #:notebook-enable-traversal))
 
 (defpackage :ltk-user
   (:use :common-lisp :ltk))
@@ -2134,57 +2142,37 @@ a list of numbers may be given"
 (defmethod notebook-forget ((nb notebook) (w widget))
   (format-wish "~a forget ~a" (widget-path nb) (widget-path w)))
 
-(defgeneric notebook-index (nb widget))
-(defmethod notebook-index ((nb notebook) (w widget))
-  (format-wish "senddata [~a index ~a]" (widget-path nb) (widget-path w))
+(defgeneric notebook-hide (nb tab))
+(defmethod notebook-hide ((nb notebook) (tab widget))
+  (format-wish "~a hide ~a" (widget-path nb) (widget-path tab)))
+
+(defgeneric notebook-identify (nb x y))
+(defmethod notebook-identify ((nb notebook) x y)
+  (format-wish "senddatastring [~a identify ~a ~a]" (widget-path nb) x y)
   (read-data))
 
-(defun nbtest ()
-  (with-ltk ()
-    (let* ((nb (make-instance 'notebook))
-	   (f1 (make-instance 'frame :master nb))
-	   (f2 (make-instance 'frame :master nb))
-	   (t1 (make-instance 'text :master f1 :width 40 :height 10))
-	   (b1 (make-instance 'button :master f1 :text "Press me"
-			      :command (lambda ()
-					 (format t "the index is:~a~%" (notebook-index nb f1))
-					 (finish-output))))
-	   (b2 (make-instance 'button :master f2 :text "A button"
-			      :command (lambda ()
-					 (format t "the index is:~a~%" (notebook-index nb f2))
-					 (finish-output)))))
-      (pack nb :fill :both :expand t)  
-      (pack t1 :fill :both :expand t)
-      (pack b1 :side :top)
-      (pack b2 :side :top)
-      (notebook-add nb f1 :text "Frame 1")
-      (notebook-add nb f2 :text "Frame 2")
-      (append-text t1 "Foo Bar Baz")
-      )))
+(defgeneric notebook-index (nb tab))
+(defmethod notebook-index ((nb notebook) (tab widget))
+  (format-wish "senddata [~a index ~a]" (widget-path nb) (widget-path tab))
+  (read-data))
 
-(defmw nbw self (frame)
-  ()
-  ((nb notebook :pack (:fill :both :expand t)
-       (f1 frame
-	   (t1 text :width 60 :height 20 :pack (:side :top))
-	   (b1 button :text "Press Me" :pack (:side :top)
-	       :command (lambda ()
-			  (format t "the index is:~a~%" (notebook-index nb f1))
-			  (finish-output))))
-       (f2 frame
-	   (b2 button :text "A button" :pack (:side :top)
-	       :command (lambda ()
-			  (format t "the index is:~a~%" (notebook-index nb f2))
-			  (finish-output))))))
-  (notebook-add nb f1 :text "Frame 1")
-  (notebook-add nb f2 :text "Frame 2")
-  (append-text t1 "Foo Bar Baz")
-  )
+;; todo notebook-insert
+;;      notebook-instate
 
-(defun nbt2 ()
-  (with-ltk ()
-    (let ((w (make-instance 'nbw)))
-      (pack w :side :top :fill :both :expand t))))
+(defgeneric notebook-select (nb tab))
+(defmethod notebook-select ((nb notebook) (tab widget))
+  (format-wish "~a select ~a" (widget-path nb) (widget-path tab)))
+
+(defun notebook-events ()
+  "<<NotebookTabChanged>>")
+
+
+(defgeneric notebook-enable-traversal (nb))
+(defmethod notebook-enable-traversal ((nb notebook))
+  (format-wish "ttk::notebook::enableTraversal ~a" nb))
+
+;; notebook-state
+;; notebook-tabs
 
 ;;; scrolled-text
 
@@ -3966,7 +3954,7 @@ When an error is signalled, there are four things LTk can do:
 	   ,@body)))))
  )
 
-
+;; the better version :)
 (eval-when (:compile-toplevel :load-toplevel :execute)
 
   (defmacro defmw (name selfname parent slots widgetspecs &rest body)
@@ -3978,6 +3966,9 @@ When an error is signalled, there are four things LTk can do:
 		  `(bind ,subwidget "<KeyPress>" (lambda (event)
 						   (,methodname ,selfname (event-keycode event))))
 		  events)
+		 (push
+		  `(defgeneric ,methodname (self key))
+		  methods)
 		 (push
 		  `(defmethod ,methodname ((,selfname ,name) keycode)
 		     )
@@ -4040,7 +4031,6 @@ When an error is signalled, there are four things LTk can do:
 		  (loop
 		       while (equal (caar body) :accessor)
 		       do
-		       (format t "car=~a~%" (car body)) (finish-output)
 		       (destructuring-bind (unused aname aspec)
 			   (pop body)
 			 (declare (ignore unused))
@@ -4080,7 +4070,6 @@ When an error is signalled, there are four things LTk can do:
 
 
 ;; example-usage
-;;
 
 (defmw test-widget self (frame)
   (a b c)
@@ -4151,6 +4140,56 @@ When an error is signalled, there are four things LTk can do:
       )))
 
 ;;;; testing functions
+
+;; notebook
+(defun nbtest ()
+  (with-ltk ()
+    (let* ((nb (make-instance 'notebook))
+	   (f1 (make-instance 'frame :master nb))
+	   (f2 (make-instance 'frame :master nb))
+	   (t1 (make-instance 'text :master f1 :width 40 :height 10))
+	   (b1 (make-instance 'button :master f1 :text "Press me"
+			      :command (lambda ()
+					 (format t "the index is:~a~%" (notebook-index nb f1))
+					 (finish-output))))
+	   (b2 (make-instance 'button :master f2 :text "A button"
+			      :command (lambda ()
+					 (format t "the index is:~a~%" (notebook-index nb f2))
+					 (finish-output)))))
+      (pack nb :fill :both :expand t)  
+      (pack t1 :fill :both :expand t)
+      (pack b1 :side :top)
+      (pack b2 :side :top)
+      (notebook-add nb f1 :text "Frame 1")
+      (notebook-add nb f2 :text "Frame 2")
+      (append-text t1 "Foo Bar Baz")
+      )))
+
+(defmw nbw self (frame)
+  ()
+  ((nb notebook :pack (:fill :both :expand t)
+       (f1 frame
+	   (t1 text :width 60 :height 20 :pack (:side :top))
+	   (b1 button :text "Press Me" :pack (:side :top)
+	       :command (lambda ()
+			  (format t "the index is:~a~%" (notebook-index nb f1))
+			  (finish-output))))
+       (f2 frame
+	   (b2 button :text "A button" :pack (:side :top)
+	       :command (lambda ()
+			  (format t "the index is:~a~%" (notebook-index nb f2))
+			  (finish-output))))))
+  (notebook-add nb f1 :text "Frame 1")
+  (notebook-add nb f2 :text "Frame 2")
+  (append-text t1 "Foo Bar Baz")
+  )
+
+(defun nbt2 ()
+  (with-ltk ()
+    (let ((w (make-instance 'nbw)))
+      (pack w :side :top :fill :both :expand t))))
+
+;;; ltktest
 
 (defvar *do-rotate* nil)
 (defvar *demo-line* nil)
