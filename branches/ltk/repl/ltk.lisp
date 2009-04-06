@@ -763,22 +763,6 @@ fconfigure stdin -encoding utf-8 -translation auto
   (length #+sbcl(sb-ext:string-to-octets text :external-format :utf-8)
           #-sbcl text))
 
-;;; send a string to wish
-(defun send-wish-raw (text)
-  (declare (string text)
-           ;(optimize (speed 3))
-           )
-  ;(dbg "~D ~A~%" (slength text) text)
-  (let ((*print-pretty* nil)
-        (stream (wish-stream *wish*)))
-    (declare (stream stream))
-    (handler-bind ((stream-error (lambda (e) (handle-dead-stream e stream)))
-                   #+lispworks 
-                   (comm:socket-error (lambda (e) (handle-dead-stream e stream))))
-      ;(format stream "~d ~a~%" (slength text) text)
-      (format stream "buffer_text {~A}~%" text)
-      (finish-output stream))))
-
 (defun send-wish (text)
   (push text (wish-output-buffer *wish*))
   (unless *buffer-for-atomic-output*
@@ -3959,53 +3943,49 @@ When an error is signalled, there are four things LTk can do:
 
   (defmacro defmw (name selfname parent slots widgetspecs &rest body)
     (let (defs wnames events accessors methods)
-      (labels (
-
-	       (on-type (subwidget methodname)
+      (labels ((on-type (subwidget methodname)
+		 "Handle an :on-type form"
 		 (push
-		  `(bind ,subwidget "<KeyPress>" (lambda (event)
-						   (,methodname ,selfname (event-keycode event))))
+		  `(bind ,subwidget "<KeyPress>"
+			 (lambda (event)
+			   (,methodname ,selfname (event-keycode event))))
 		  events)
 		 (push
 		  `(defgeneric ,methodname (self key))
 		  methods)
 		 (push
-		  `(defmethod ,methodname ((,selfname ,name) keycode)
-		     )
-		  methods)
-		 )
-
+		  `(defmethod ,methodname ((,selfname ,name) keycode))
+		  methods))
 
 	       (process-layout (line parent)
-		  (let ((instance-name (first line))
-			(class-name (second line)))
-		    (multiple-value-bind (keyargs subwidgets)
-			(do ((params (cddr line))	; all other parameters to the
-					                ; widget/subwidget defs
-			     (keywords+values nil)      ; keyword args for the widget
-			     (sublists nil))		; list of the subwidgets	      
-			    ((null params) (values (reverse keywords+values) (reverse sublists)))
-
-			  (cond ((listp (car params))
-				 (dolist (subwidget (process-layout (pop params) instance-name))
-				   (push subwidget sublists)))
-				((equal (car params) :on-type)
-				 (pop params)
-				 (on-type instance-name (pop params)))
-				(t (let* ((param (pop params))
-					  (val (pop params)))
-				     (push param keywords+values)
-				     (push (if (equal param :pack)
-					       (list 'quote val)
-					       val)
-					   keywords+values)))))
-		      (cons
-		       (list instance-name
-			     (append
-			      (list 'make-instance (list 'quote class-name))
-			      (if parent (list :master parent) nil)
-			      keyargs))
-		       subwidgets))))
+		 (let ((instance-name (first line))
+		       (class-name (second line)))
+		   (multiple-value-bind (keyargs subwidgets)
+		       (do ((params (cddr line))       ; all other parameters to the
+					               ; widget/subwidget defs
+			    (keywords+values nil)      ; keyword args for the widget
+			    (sublists nil))	       ; list of the subwidgets	      
+			   ((null params) (values (reverse keywords+values) (reverse sublists)))
+			 (cond ((listp (car params))
+				(dolist (subwidget (process-layout (pop params) instance-name))
+				  (push subwidget sublists)))
+			       ((equal (car params) :on-type)
+				(pop params)
+				(on-type instance-name (pop params)))
+			       (t (let* ((param (pop params))
+					 (val (pop params)))
+				    (push param keywords+values)
+				    (push (if (equal param :pack)
+					      (list 'quote val)
+					      val)
+					  keywords+values)))))
+		     (cons
+		      (list instance-name
+			    (append
+			     (list 'make-instance (list 'quote class-name))
+			     (if parent (list :master parent) nil)
+			     keyargs))
+		      subwidgets))))
 
 	       (compute-slots (names)
 		 (mapcar (lambda (name)
@@ -4016,41 +3996,33 @@ When an error is signalled, there are four things LTk can do:
 			 names))
 
 		(make-accessor (acname spec)
+		  (push `(declaim (ftype function ,acname (setf ,acname)))
+			accessors)
 		  (push
 		   `(defmethod ,acname ((,selfname ,name))
 		      ,spec)
 		   accessors)
-
 		  (push
 		   `(defmethod (setf ,acname) (val (,selfname ,name))
 		      (setf ,spec val))
 		   accessors))
-		   
 
 		(grab-accessors ()
-		  (loop
-		       while (equal (caar body) :accessor)
-		       do
-		       (destructuring-bind (unused aname aspec)
-			   (pop body)
-			 (declare (ignore unused))
-			 (make-accessor aname aspec))))
-		)
+		  (loop while (equal (caar body) :accessor)
+			do (destructuring-bind (unused aname aspec)
+			       (pop body)
+			     (declare (ignore unused))
+			     (make-accessor aname aspec)))))
 
 	(setf defs (mapcan (lambda (w)
 			     (process-layout w selfname)) widgetspecs))
-	
 	(setf wnames (mapcar #'car defs))
 	(grab-accessors)
 	(let* ((all-slots (compute-slots (append slots wnames))))
-	  
 	  `(progn
-
 	     (defclass ,name ,parent
 	       ,all-slots)
-	     
 	     ,@(reverse accessors)
-
 	     ,@(reverse methods)
 
 	     (defmethod initialize-instance :after ((,selfname ,name) &key)
@@ -4063,8 +4035,7 @@ When an error is signalled, there are four things LTk can do:
 		 ,@events
 		 ,@body))
 
-	     )))))
-  )
+	     ))))))
 
 ;;:on-type test-widget-type
 
