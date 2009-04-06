@@ -4085,6 +4085,12 @@ When an error is signalled, there are four things LTk can do:
   ;; other code here
   )
 
+(defgeneric firstline (widget))
+(defgeneric (setf firstline) (val widget))
+(defgeneric secondline (widget))
+(defgeneric (setf secondline) (val widget))
+
+
 (defmw test-widget2 self (frame)
   ()
   ((mw test-widget :pack (:side :top :fill :x))
