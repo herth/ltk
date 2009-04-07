@@ -370,7 +370,8 @@ toplevel             x
 	   #:notebook-identify
 	   #:notebook-select
 	   #:notebook-events
-	   #:notebook-enable-traversal))
+	   #:notebook-enable-traversal
+	   #:defmw))
 
 (defpackage :ltk-user
   (:use :common-lisp :ltk))
@@ -3948,14 +3949,17 @@ When an error is signalled, there are four things LTk can do:
 		 (push
 		  `(bind ,subwidget "<KeyPress>"
 			 (lambda (event)
-			   (,methodname ,selfname (event-keycode event))))
+			   (,methodname ,selfname (event-char event))))
 		  events)
-		 (push
-		  `(defgeneric ,methodname (self key))
-		  methods)
-		 (push
-		  `(defmethod ,methodname ((,selfname ,name) keycode))
-		  methods))
+		 (push `(declaim (ftype function ,methodname))
+			methods)
+;; 		 (push
+;; 		  `(defgeneric ,methodname (self key))
+;; 		  methods)
+;; 		 (push
+;; 		  `(defmethod ,methodname ((,selfname ,name) keycode))
+;; 		  methods)
+		 )
 
 	       (process-layout (line parent)
 		 (let ((instance-name (first line))
@@ -4060,7 +4064,7 @@ When an error is signalled, there are four things LTk can do:
 (defgeneric (setf firstline) (val widget))
 (defgeneric secondline (widget))
 (defgeneric (setf secondline) (val widget))
-
+(defgeneric entry-typed (widget keycode))
 
 (defmw test-widget2 self (frame)
   ()
@@ -4573,3 +4577,5 @@ When an error is signalled, there are four things LTk can do:
 		widgets)))
 
 (pushnew :ltk *features*)
+
+

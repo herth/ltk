@@ -679,7 +679,61 @@ o tooltip
           :fill :both :expand t)
     ))
 
- 
+
+(defmw multiscroll-thingy self (frame)
+  (background legend-height)
+  ((canvas1 canvas :height (legend-height self)
+	    (topframe frame))
+   (canvas2 canvas
+	    (frame frame))
+   
+   (hscroll scrollbar :orientation "horizontal")
+   (vscroll scrollbar :orientation "vertical"))
+
+  (place topframe 0 0)
+  (place frame 0 0)
+  (grid canvas1 0 0 :sticky "news")
+  (grid canvas2 1 0 :sticky "news")
+  (grid hscroll 2 0 :sticky "we")
+  (grid vscroll 1 1 :sticky "ns")
+  (grid-columnconfigure self 0 "weight" 1)
+  (grid-columnconfigure self 1 "weight" 0)
+  (grid-rowconfigure self 0 "weight" 0)
+  (grid-rowconfigure self 1 "weight" 1)
+  (grid-rowconfigure self 2 "weight" 0)
+  (format-wish 
+   "
+~a configure -xscrollcommand [list ~a set] -yscrollcommand [list ~a set]
+~a configure -command [list ~a xview]
+~a configure -command [list ~a yview]
+~a create window 10 10 -window ~a -anchor nw -tags f
+
+after idle [list resetScroll ~a]
+
+bind ~a <Configure> [list resetScroll ~a] 
+
+"
+   (widget-path canvas2) (widget-path hscroll) (widget-path vscroll)
+   (widget-path hscroll) (widget-path canvas2)
+   (widget-path vscroll) (widget-path canvas2)
+   (widget-path canvas2) (widget-path frame)
+   (widget-path canvas2)
+   (widget-path frame) (widget-path canvas2) 
+   )
+  )
+
+(defun mst-test ()
+  (with-ltk ()
+    (let ((mst (make-instance 'multiscroll-thingy :legend-height 40)))
+      (dotimes (i 10)
+	(pack (make-instance 'button :master (topframe mst) :text (format nil "Button ~d" i)) :side :left)
+	(let ((f (make-instance 'frame :master (frame mst))))
+	  (dotimes (j 10)
+	    (pack (make-instance 'button :master f :text (format nil "Button ~d" (+ (* i 10) j))) :side :left))
+	  (pack f :side :top)))
+	      
+      (pack mst :side :top :expand t :fill :both))))
+	    
 
 ;;; demo
 
