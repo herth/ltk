@@ -786,7 +786,7 @@ fconfigure stdin -encoding utf-8 -translation auto
             ((wish-remotep *wish*)
              (let ((content (format nil "~{~a~%~}" buffer)))
                (format stream "~d ~a~%"(length content) content)
-               (dbg "~d ~a%" (length content) content)))
+               (dbg "~d ~a~%" (length content) content)))
             (t
              (format stream "buffer_text {~D }~%" len)
              (dbg "buffer_text {~D }~%" len)
@@ -3345,7 +3345,7 @@ set y [winfo y ~a]
 ;;; see make-string-output-string/get-output-stream-string
 (defun message-box (message title type icon &key parent)
   ;;; tk_messageBox function
-  (format-wish "senddatastring [tk_messageBox -message {~a } -title {~a} -type ~(~a~) -icon ~(~a~)~@[ -parent ~a~]]" message title type icon (and parent (widget-path parent)))
+  (format-wish "senddatastring [tk_messageBox -message \"~a\" -title {~a} -type ~(~a~) -icon ~(~a~)~@[ -parent ~a~]]" (tkescape2 message) title type icon (and parent (widget-path parent)))
   (read-keyword))
 
 
@@ -3888,58 +3888,7 @@ When an error is signalled, there are four things LTk can do:
   )
 
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
-;; code for defmw
-  (defun process-layout2 (line parent)
-    (let ((instance-name (first line))
-	  (class-name (second line)))
-      (multiple-value-bind (keyargs subwidgets)
-	  (do ((params (cddr line))	; all other parameters to the widget/subwidget defs
-	       (keywords+values nil)    ; keyword args for the widget
-	       (sublists nil))		; list of the subwidgets	      
- 	      ((null params) (values (reverse keywords+values) (reverse sublists)))
- 	    (cond ((listp (car params))
- 		   (dolist (subwidget (process-layout2 (pop params) instance-name))
- 		     (push subwidget sublists)))
- 		  (t (let* ((param (pop params))
-			    (val (pop params)))
-		       (push param keywords+values)
-		       (push (if (equal param :pack)
-				 (list 'quote val)
-				 val)
-			     keywords+values)))))
-	(cons
-	 (list instance-name
-	       (append
-		(list 'make-instance (list 'quote class-name))
-		(if parent (list :master parent) nil)
-		keyargs))
-	 subwidgets))))
-
-  (defun compute-slots (names)
-    (mapcar (lambda (name)
-	      `(,name :accessor ,name :initform nil :initarg ,(intern (symbol-name name) :keyword)))
-	    names))
-
-  (defmacro defmw1 (name parent slots widgets &rest body)
-    (let* ((defs (mapcan (lambda (w)
-			   (process-layout2 w 'self)) widgets))
-	   (wnames (mapcar #'car defs))
-	   (all-slots (compute-slots (append slots wnames))))
-    `(progn
-       (defclass ,name ,parent
-         ,all-slots)
-       (defmethod initialize-instance :after ((self ,name) &key)
-	 (let ,wnames
-	   ,@(mapcar (lambda (def)
-		       (append (list 'setf) def)) defs)
-	   ,@(mapcar (lambda (wname)
-		       `(setf (,wname self) ,wname)) wnames)
-	   ;(declare (ignorable ,@wnames))
-	   ,@body)))))
- )
-
-;; the better version :)
+;; defmw the better version :)
 (eval-when (:compile-toplevel :load-toplevel :execute)
 
   (defmacro defmw (name selfname parent slots widgetspecs &rest body)
