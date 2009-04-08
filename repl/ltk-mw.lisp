@@ -703,21 +703,37 @@ o tooltip
   (grid-rowconfigure self 2 "weight" 0)
   (format-wish 
    "
-~a configure -xscrollcommand [list ~a set] -yscrollcommand [list ~a set]
-~a configure -command [list ~a xview]
+proc ~axview {args} {
+  eval \"~a xview $args\"
+  eval \"~a xview $args\"
+}
+~a configure -xscrollcommand [list ~a set]
+~a configure -yscrollcommand [list ~a set]
+~a configure -command ~axview
 ~a configure -command [list ~a yview]
+~a create window 10 10 -window ~a -anchor nw -tags f
 ~a create window 10 10 -window ~a -anchor nw -tags f
 
 after idle [list resetScroll ~a]
+after idle [list resetScroll ~a]
 
+bind ~a <Configure> [list resetScroll ~a]
 bind ~a <Configure> [list resetScroll ~a] 
 
 "
-   (widget-path canvas2) (widget-path hscroll) (widget-path vscroll)
-   (widget-path hscroll) (widget-path canvas2)
+   (ltk::name self) (widget-path canvas2) (widget-path canvas1)
+
+   (widget-path canvas2) (widget-path hscroll) 
+   (widget-path canvas2) (widget-path vscroll)
+   
+   (widget-path hscroll) (ltk::name self) 
    (widget-path vscroll) (widget-path canvas2)
+   (widget-path canvas1) (widget-path topframe)
    (widget-path canvas2) (widget-path frame)
+   
+   (widget-path canvas1)
    (widget-path canvas2)
+   (widget-path topframe) (widget-path canvas1)
    (widget-path frame) (widget-path canvas2) 
    )
   )
@@ -725,11 +741,12 @@ bind ~a <Configure> [list resetScroll ~a]
 (defun mst-test ()
   (with-ltk ()
     (let ((mst (make-instance 'multiscroll-thingy :legend-height 40)))
+      (dotimes (i 20)
+        (pack (make-instance 'button :master (topframe mst) :text (format nil "Button ~d" i)) :side :left))
       (dotimes (i 10)
-	(pack (make-instance 'button :master (topframe mst) :text (format nil "Button ~d" i)) :side :left)
 	(let ((f (make-instance 'frame :master (frame mst))))
-	  (dotimes (j 10)
-	    (pack (make-instance 'button :master f :text (format nil "Button ~d" (+ (* i 10) j))) :side :left))
+	  (dotimes (j 20)
+	    (pack (make-instance 'button :master f :text (format nil "Button ~d" (+ (* i 20) j))) :side :left))
 	  (pack f :side :top)))
 	      
       (pack mst :side :top :expand t :fill :both))))
