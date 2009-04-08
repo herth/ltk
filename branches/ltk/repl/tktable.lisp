@@ -28,7 +28,7 @@
 (ltk::defargs table ()
   anchor relief rows cols borderwidth titlecols titlerows)
 
-(ltk::defwidget table (widget)
+(ltk::defwrapper table (widget)
   ((rows :accessor rows :initarg :rows :initform nil)
    (cols :accessor cols :initarg :cols :initform nil)
    (data :accessor data :initarg :data :initform nil)

@@ -371,7 +371,7 @@ toplevel             x
 	   #:notebook-select
 	   #:notebook-events
 	   #:notebook-enable-traversal
-	   #:defmw))
+	   #:defwidget))
 
 (defpackage :ltk-user
   (:use :common-lisp :ltk))
@@ -1509,7 +1509,7 @@ can be passed to AFTER-CANCEL"
 (defargs toplevel ()
   borderwidth class menu relief screen use background colormap container cursor height highlightbackground highlightcolor highlightthickness padx pady takefocus visual width)
 
-(defmacro defwidget (class parents slots cmd &rest code)
+(defmacro defwrapper (class parents slots cmd &rest code)
   (let ((args (sort (copy-list (rest (assoc class *class-args*)))
 		    (lambda (x y)
 		      (string< (symbol-name x) (symbol-name y))))))
@@ -1875,10 +1875,10 @@ methods, e.g. 'configure'."))
 ;;; standard button widget
 
 #+:tk84
-(defwidget button (tktextvariable widget) () "button")
+(defwrapper button (tktextvariable widget) () "button")
 
 #-:tk84
-(defwidget button (tktextvariable widget) () "ttk::button")
+(defwrapper button (tktextvariable widget) () "ttk::button")
 
 (defmethod (setf command) (val (button button))
   (add-callback (name button) val)
@@ -1888,10 +1888,10 @@ methods, e.g. 'configure'."))
 ;;; check button widget
 
 #+:tk84
-(defwidget check-button (tktextvariable widget tkvariable) () "checkbutton")
+(defwrapper check-button (tktextvariable widget tkvariable) () "checkbutton")
 
 #-:tk84
-(defwidget check-button (tktextvariable widget tkvariable) () "ttk::checkbutton")
+(defwrapper check-button (tktextvariable widget tkvariable) () "ttk::checkbutton")
 
 (defmethod (setf command) (val (check-button check-button))
   (add-callback (name check-button) val)
@@ -1901,7 +1901,7 @@ methods, e.g. 'configure'."))
 
 ;;; radio button widget
 
-(defwidget radio-button (tktextvariable widget) 
+(defwrapper radio-button (tktextvariable widget) 
   ((val :accessor radio-button-value :initarg :value :initform nil)
    (var :accessor radio-button-variable :initarg :variable :initform nil)) 
   "radiobutton")
@@ -1928,7 +1928,7 @@ methods, e.g. 'configure'."))
 ;; ttk combo box
 
 #-:tk84
-(defwidget combobox (tktextvariable widget) () "ttk::combobox")
+(defwrapper combobox (tktextvariable widget) () "ttk::combobox")
 
 #-:tk84
 (defgeneric (setf options) (value widget))
@@ -1941,10 +1941,10 @@ methods, e.g. 'configure'."))
 ;; text entry widget
 
 #+:tk84
-(defwidget entry (tktextvariable widget) () "entry")
+(defwrapper entry (tktextvariable widget) () "entry")
 
 #-:tk84
-(defwidget entry (tktextvariable widget) () "ttk::entry")
+(defwrapper entry (tktextvariable widget) () "ttk::entry")
 
 (defun entry-select (e from to)
   (format-wish "~a selection range ~a ~a" (widget-path e) from to)
@@ -1976,10 +1976,10 @@ methods, e.g. 'configure'."))
 ;;; frame widget 
 
 #+:tk84
-(defwidget frame (widget) () "frame")
+(defwrapper frame (widget) () "frame")
 
 #-:tk84
-(defwidget frame (widget) () "ttk::frame")
+(defwrapper frame (widget) () "ttk::frame")
 
 ;(defun make-frame (master)
 ;  (make-instance 'frame :master master))
@@ -1987,10 +1987,10 @@ methods, e.g. 'configure'."))
 ;;; labelframe widget 
 
 #+:tk84
-(defwidget labelframe (widget) () "labelframe")
+(defwrapper labelframe (widget) () "labelframe")
 
 #-:tk84
-(defwidget labelframe (widget) () "ttk::labelframe")
+(defwrapper labelframe (widget) () "ttk::labelframe")
 
 (defmethod (setf text) :after (val (l labelframe))
   (format-wish "~a configure -text {~a}" (widget-path l) val)
@@ -1999,7 +1999,7 @@ methods, e.g. 'configure'."))
 ;;; panedwindow widget
 
 
-(defwidget paned-window (widget) () "panedwindow")
+(defwrapper paned-window (widget) () "panedwindow")
 
 (defgeneric add-pane (window widget))
 (defmethod add-pane ((pw paned-window) (w widget))
@@ -2022,7 +2022,7 @@ methods, e.g. 'configure'."))
 
 ;;; listbox widget
 
-(defwidget listbox (widget)
+(defwrapper listbox (widget)
   ((xscroll :accessor xscroll :initarg :xscroll :initform nil)
    (yscroll :accessor yscroll :initarg :yscroll :initform nil)
    ) "listbox")
@@ -2112,7 +2112,7 @@ a list of numbers may be given"
 
 ;;; notebook
 ;#-:tk84
-(defwidget notebook (widget) () "ttk::notebook")
+(defwrapper notebook (widget) () "ttk::notebook")
 
 (defgeneric notebook-add (nb widget &rest options))
 (defmethod notebook-add ((nb notebook) (w widget) &rest options)
@@ -2212,7 +2212,7 @@ a list of numbers may be given"
 
 ;;; scale widget
 
-(defwidget scale (tkvariable widget) () "scale")
+(defwrapper scale (tkvariable widget) () "scale")
 
 (defmethod (setf command) (val (scale scale))
   (add-callback (name scale) val)					
@@ -2222,7 +2222,7 @@ a list of numbers may be given"
 
 ;;; spinbox widget
 
-(defwidget spinbox (tktextvariable widget) () "spinbox")
+(defwrapper spinbox (tktextvariable widget) () "spinbox")
 
 (defmethod (setf command) (val (sp spinbox))
   (add-callback (name sp) val)					
@@ -2231,7 +2231,7 @@ a list of numbers may be given"
 
 ;;; toplevel (window) widget 
 
-(defwidget toplevel (widget) 
+(defwrapper toplevel (widget) 
   ((protocol-destroy :accessor protocol-destroy :initarg :on-close :initform nil)
    (title :accessor title :initform nil :initarg :title)
    ) 
@@ -2247,21 +2247,21 @@ a list of numbers may be given"
 ;;; label widget
 
 #+:tk84
-(defwidget label (tktextvariable widget) () "label")
+(defwrapper label (tktextvariable widget) () "label")
 
 #-:tk84
-(defwidget label (tktextvariable widget) () "ttk::label")
+(defwrapper label (tktextvariable widget) () "ttk::label")
 
 ;(defun make-label (master text)
 ;  (make-instance 'label :master master  :text text))
 
 ;;; message widget
 
-(defwidget message (tktextvariable widget) () "message")
+(defwrapper message (tktextvariable widget) () "message")
 
 ;;; scrollbar
 
-(defwidget scrollbar (widget) () "scrollbar")
+(defwrapper scrollbar (widget) () "scrollbar")
 
 (defun make-scrollbar(master &key (orientation "vertical"))
   (make-instance 'scrollbar :master master :orientation orientation))
@@ -2405,7 +2405,7 @@ set y [winfo y ~a]
 
 ;;; canvas widget
 
-(defwidget canvas (widget)
+(defwrapper canvas (widget)
   ((xscroll :accessor xscroll :initarg :xscroll :initform nil)
    (yscroll :accessor yscroll :initarg :yscroll :initform nil)
    (scrollregion-x0 :accessor scrollregion-x0 :initform nil)
@@ -2779,7 +2779,7 @@ set y [winfo y ~a]
 
 ;;; text widget
 
-(defwidget text (widget)
+(defwrapper text (widget)
   ((xscroll :accessor xscroll :initarg :xscroll :initform nil)
    (yscroll :accessor yscroll :initarg :yscroll :initform nil)
   )  "text")
@@ -3888,10 +3888,10 @@ When an error is signalled, there are four things LTk can do:
   )
 
 
-;; defmw the better version :)
+;; defwidget the better version :)
 (eval-when (:compile-toplevel :load-toplevel :execute)
 
-  (defmacro defmw (name selfname parent slots widgetspecs &rest body)
+  (defmacro defwidget (name selfname parent slots widgetspecs &rest body)
     (let (defs wnames events accessors methods)
       (labels ((on-type (subwidget methodname)
 		 "Handle an :on-type form"
@@ -3995,7 +3995,7 @@ When an error is signalled, there are four things LTk can do:
 
 ;; example-usage
 
-(defmw test-widget self (frame)
+(defwidget test-widget self (frame)
   (a b c)
   ((bu button :text "A button" 
        :pack (:side :top :anchor :w)
@@ -4015,7 +4015,7 @@ When an error is signalled, there are four things LTk can do:
 (defgeneric (setf secondline) (val widget))
 (defgeneric entry-typed (widget keycode))
 
-(defmw test-widget2 self (frame)
+(defwidget test-widget2 self (frame)
   ()
   ((mw test-widget :pack (:side :top :fill :x))
    (mw2 test-widget :pack (:side :top :fill :x))
@@ -4040,7 +4040,7 @@ When an error is signalled, there are four things LTk can do:
 (defmethod entry-typed ((self tw) keycode)
   (format t "typed:~a~%text:~a~%" keycode (text (e self))) (finish-output))
 
-(defun defmw-test ()
+(defun defwidget-test ()
   (declare (optimize (debug 3)))
   (with-ltk ()
     (let ((mw (make-instance 'tw)))
@@ -4095,7 +4095,7 @@ When an error is signalled, there are four things LTk can do:
       (append-text t1 "Foo Bar Baz")
       )))
 
-(defmw nbw self (frame)
+(defwidget nbw self (frame)
   ()
   ((nb notebook :pack (:fill :both :expand t)
        (f1 frame

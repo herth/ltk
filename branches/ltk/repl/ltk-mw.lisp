@@ -682,7 +682,7 @@ o tooltip
     ))
 
 
-(defmw multiscroll-thingy self (frame)
+(defwidget multiscroll-thingy self (frame)
   (background legend-height)
   ((canvas1 canvas :height (legend-height self)
 	    (topframe frame))
