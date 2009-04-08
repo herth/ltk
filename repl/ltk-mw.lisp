@@ -607,6 +607,7 @@ o tooltip
    
    ))
 
+(defgeneric get-searchable-listbox-data (lb))
 (defmethod get-searchable-listbox-data ((lb searchable-listbox))
   (mapcar (key lb) (data lb)))
 
@@ -617,6 +618,7 @@ o tooltip
     (t
      )))
 
+(defgeneric update-search (lb string))
 (defmethod update-search ((lb searchable-listbox) searchstring)
   (let ((data (get-searchable-listbox-data lb))
         (listbox (listbox lb)))
