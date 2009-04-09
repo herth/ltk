@@ -702,6 +702,7 @@ proc buffer_text {txt} {
 }
 
 fconfigure stdin -encoding utf-8 -translation auto
+fconfigure stdout -encoding utf-8
 #fileevent stdin readable sread
 " debug-tcl))
 
@@ -2301,7 +2302,7 @@ a list of numbers may be given"
 
 (defmethod initialize-instance :after ((sf scrolled-frame) &key background)
   (let* ((canvas (make-instance 'canvas :master sf :background background))
-         (f (make-instance 'frame :master canvas :background background)))
+         (f (make-instance 'frame :master canvas #+:tk84 :background #+:tk84 background)))
                                         ;(setf (scrolled-frame-display sf) f)
     (setf (interior sf) f) ;; (make-instance 'frame :master f :background background))
     (setf (hscroll sf) (make-instance 'scrollbar :master sf :orientation "horizontal"))
