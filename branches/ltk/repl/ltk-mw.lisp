@@ -73,6 +73,14 @@ o tooltip
    #:selected-elements
    #:ltk-mw-demo
    #:searchable-listbox
+
+   #:selected-index
+   #:entry
+   #:entries
+   #:mw-listbox
+   #:callback
+   #:selected
+   #:select-index
    ))
 
 (in-package :ltk-mw)
@@ -106,7 +114,6 @@ o tooltip
 
 (defmethod redraw ((progress progress))
   (let ((width (window-width progress))
-        
 	(height (window-height progress)))
     (set-coords progress  (text-display progress) (list (truncate width 2) (truncate height 2)))
     (set-coords progress (rect progress)
@@ -264,6 +271,71 @@ o tooltip
      (pack entry :side :left)
      )))
 
+;;; extended list widget
+
+(defparameter *listbox-background* :white)
+(defparameter *listbox-foreground* :black)
+(defparameter *listbox-selected-background* :blue)
+(defparameter *listbox-selected-foreground* :white)
+
+
+
+(defclass mw-listbox (frame)
+  ((data :accessor data :initform nil :initarg :data)
+   (slistbox :accessor slistbox :initform nil :initarg :slistbox)
+   (label    :accessor label    :initform "" :initarg :label)
+   (lbl      :accessor lbl      :initform nil :initarg :lbl)
+   
+   (listbox  :accessor listbox  :initform nil :initarg :listbox)
+   (key      :accessor key      :initform #'identity :initarg :key)
+   (selected :accessor selected :initform nil :initarg :selected)
+   (selected-index :accessor selected-index :initform nil :initarg :selected-index)
+   
+   (callback :accessor callback :initform nil :initarg :callback)
+   ))
+
+
+(defmethod initialize-instance :after ((lb mw-listbox) &key)
+  (let* ((lbl (make-instance 'label :master lb :text (label lb)))
+         (slistbox (make-instance 'scrolled-listbox :master lb))
+         (listbox (listbox slistbox)))
+    (setf (lbl lb) lbl
+          (slistbox lb) slistbox
+          (listbox lb) listbox)
+    (pack lbl :side :top :anchor :w)
+    (pack slistbox :side :top :fill :both :expand t)
+    (configure listbox 
+               :background *listbox-background*
+               :foreground *listbox-foreground*
+               :selectforeground *listbox-selected-foreground*
+               :selectbackground *listbox-selected-background*)
+
+    (bind listbox "<<ListboxSelect>>"
+          (lambda (event)
+            (declare (ignore event))
+            (focus listbox)
+            (let ((sel (car (listbox-get-selection listbox))))
+              (select-index lb sel)
+              (when (callback lb)
+                (funcall (callback lb) (selected lb))))))
+    ))
+
+
+(defmethod select-index ((lb mw-listbox) index)
+  (let* ((listbox (listbox lb))
+         (oldsel (selected-index lb)))
+    (when oldsel
+      (listbox-configure listbox oldsel :background *listbox-background* :foreground *listbox-foreground*))    
+    (when index
+      (listbox-configure listbox index :background *listbox-selected-background* :foreground *listbox-selected-foreground*)
+      (see listbox index))
+    (setf (selected-index lb) index
+          (selected lb) (and index (nth index (data lb))))))
+
+
+(defmethod (setf data) :after (val (lb mw-listbox))
+  (listbox-clear (listbox lb))
+  (listbox-append (listbox lb) (mapcar (key lb) val)))
 
 ;;; tree list widget
 
@@ -288,13 +360,14 @@ o tooltip
    (parent-node :accessor parent-node :initform nil :initarg :parent-node)
    (selected-node :accessor selected-node :initform nil :initarg :selected-node)))
 
-(defmethod initialize-instance :after ((tree treelist) &key listwidth listheight (background :white))
+(defmethod initialize-instance :after ((tree treelist) &key listwidth listheight (background :white) horizontal-scrollbar)
   (setf (listbox tree) (make-array (depth tree)))
   (setf (entries tree) (make-array (depth tree) :adjustable t :fill-pointer 0))
   (dotimes (i (depth tree))
     (let ((nr i)
 	  (sb (make-instance 'scrolled-listbox :master tree :width listwidth :height listheight )))
-      (grid-forget (ltk::hscroll sb))
+      (unless horizontal-scrollbar
+        (grid-forget (ltk::hscroll sb)))
       (setf (aref (listbox tree) nr) (listbox sb))
       (configure (listbox sb) :background background :selectforeground :white :selectbackground :blue)
       (pack sb :side :left :expand t :fill :both)
@@ -334,19 +407,21 @@ o tooltip
 (defgeneric treelist-listbox-select (tree nr))
 (defmethod treelist-listbox-select ((tree treelist) nr)
   (let* ((listbox (aref (listbox tree) nr))
-	 (oldsel (selected-node (aref (entries tree) nr)))
-	 (sel (car (listbox-get-selection listbox))))
-    (when oldsel
-      (listbox-configure listbox oldsel :background :white :foreground :black))
-    (setf (selected-node (aref (entries tree) nr)) sel)
-    (when sel
-      (listbox-configure listbox sel :background :blue :foreground :white)
-      (let* ((entry (aref (entries tree) nr))
-	     (selected-node (nth sel (nodes entry))))
-        (listbox-configure listbox sel :background :blue :foreground :white)
-        (treelist-select tree selected-node)
-        (treelist-setlist tree selected-node (1+ nr))
-        ))))
+         (xxx (aref (entries tree) nr)))
+    (when xxx
+      (let* ((oldsel (selected-node xxx))
+             (sel (car (listbox-get-selection listbox))))
+        (when oldsel
+          (listbox-configure listbox oldsel :background :white :foreground :black))
+        (setf (selected-node (aref (entries tree) nr)) sel)
+        (when sel
+          (listbox-configure listbox sel :background :blue :foreground :white)
+          (let* ((entry (aref (entries tree) nr))
+                 (selected-node (nth sel (nodes entry))))
+            (listbox-configure listbox sel :background :blue :foreground :white)
+            (treelist-select tree selected-node)
+            (treelist-setlist tree selected-node (1+ nr))
+            ))))))
   
 (defgeneric treelist-select (tree node)
   (:documentation "callback for selecting a tree node"))
@@ -389,22 +464,22 @@ o tooltip
       "M5"))
     ("Mercedes"
      ("A-Klasse"
-      ("A 160")
-      ("A 180"))
+      "A 160"
+      "A 180")
      ("C-Klasse"
-      ("C 200")
-      ("C 250"))
+      "C 200"
+      "C 250")
      ("S-Klasse"
-      ("400 S")
-      ("500 S")
-      ("600 S")))
+      "400 S"
+      "500 S"
+      "600 S"))
     ("VW"
      ("Golf"
       ("TDI"
-       ("1.8")
-       ("2.0")
-       ("16 V"))
-      ("GTI")))))
+       "1.8"
+       "2.0"
+       "16 V")
+      "GTI"))))
 
 (defclass demo-tree (treelist)
   ())
@@ -412,11 +487,14 @@ o tooltip
 (defmethod treelist-name ((tree demo-tree) (node list))
   (car node))
 
+(defmethod treelist-children ((tree demo-tree) (node list))
+  (rest node))
+
 (defmethod treelist-name ((tree demo-tree) (node string))
   node)
 
-(defmethod treelist-children ((tree demo-tree) (node list))
-  (rest node))
+(defmethod treelist-children ((tree demo-tree) (node string))
+  nil)
 
 (defun treelist-test ()
   (with-ltk ()
@@ -426,7 +504,7 @@ o tooltip
 
 (defclass tooltip (toplevel)
   ((label :accessor tooltip-label :initarg :label)
-   (popup-time :accessor popup-time :initform 1000 :initarg :popup-time)
+   (popup-time :accessor popup-time :initform 200 :initarg :popup-time)
    ))
 
 (defparameter *tooltip-afterid* nil)
@@ -566,7 +644,6 @@ o tooltip
      (format t "data: ~s~%" (data tree)) (force-output)
      )))
 
-	    
 ;;; list-select box widget
 
 (defclass list-select (listbox)
