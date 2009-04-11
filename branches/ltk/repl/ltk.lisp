@@ -371,7 +371,12 @@ toplevel             x
 	   #:notebook-select
 	   #:notebook-events
 	   #:notebook-enable-traversal
-	   #:defwidget))
+	   #:defwidget
+	   #:progressbar
+	   #:length
+	   #:mode
+	   #:maximum
+	   #:phase))
 
 (defpackage :ltk-user
   (:use :common-lisp :ltk))
@@ -1489,14 +1494,33 @@ can be passed to AFTER-CANCEL"
 (defargs notebook ()
   class cursor style takefocus height padding width)
 
+#+:tk84
 (defargs paned-window ()
   background borderwidth cursor handlepad handlesize height opaqueresize orient relief sashcursor sashpad sashrelief sashwidth showhandle width)
 
+#-:tk84
+(defargs paned-window ()
+  class cursor orient style takefocus width height)
+
+#-:tk84
+(defargs progressbar ()
+  class cursor orient style takefocus length mode maximum phase value)
+
+#+:tk84
 (defargs radio-button ()
   activebackground activeforeground anchor background bitmap borderwidth command-radio-button compound cursor disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify offrelief overrelief padx pady relief selectcolor selectimage state takefocus textvariable underline value-radio-button variable-radio-button width wraplength)
 
+#-:tk84
+(defargs radio-button ()
+  command-radio-button class compound cursor image state style takefocus textvariable underline value-radio-button variable-radio-button width)
+
+#+:tk84
 (defargs scale ()
   activebackground background bigincrement borderwidth command cursor digits font foreground from highlightbackground highlightcolor highlightthickness label length orient relief repeatdelay repeatinterval resolution showvalue sliderlength sliderrelief state takefocus tickinterval to troughcolor variable width)
+
+#-:tk84
+(defargs scale ()
+  class command cursor from length orient style takefocus to variable)
 
 (defargs scrollbar ()
   activebackground activerelief background borderwidth command-scrollbar cursor elementborderwidth highlightbackground highlightcolor highlightthickness jump orient relief repeatdelay repeatinterval takefocus troughcolor width)
@@ -1902,10 +1926,17 @@ methods, e.g. 'configure'."))
 
 ;;; radio button widget
 
+#+:tk84
 (defwrapper radio-button (tktextvariable widget) 
   ((val :accessor radio-button-value :initarg :value :initform nil)
    (var :accessor radio-button-variable :initarg :variable :initform nil)) 
   "radiobutton")
+
+#-:tk84
+(defwrapper radio-button (tktextvariable widget) 
+  ((val :accessor radio-button-value :initarg :value :initform nil)
+   (var :accessor radio-button-variable :initarg :variable :initform nil)) 
+  "ttk::radiobutton")
 
 (defmethod value ((rb radio-button))
   "reads the content of the shared variable of the radio button set"
@@ -2000,7 +2031,15 @@ methods, e.g. 'configure'."))
 ;;; panedwindow widget
 
 
+#+:tk84
 (defwrapper paned-window (widget) () "panedwindow")
+
+#-:tk84
+(defwrapper paned-window (widget) () "ttk::panedwindow")
+
+#-:tk84
+(defwrapper progressbar (widget tkvariable) () "ttk::progressbar")
+
 
 (defgeneric add-pane (window widget))
 (defmethod add-pane ((pw paned-window) (w widget))
@@ -2213,7 +2252,11 @@ a list of numbers may be given"
 
 ;;; scale widget
 
+#+:tk84
 (defwrapper scale (tkvariable widget) () "scale")
+
+#-:tk84
+(defwrapper scale (tkvariable widget) () "ttk::scale")
 
 (defmethod (setf command) (val (scale scale))
   (add-callback (name scale) val)					
@@ -4146,6 +4189,27 @@ When an error is signalled, there are four things LTk can do:
              #-:tk84
 	     (combo (make-instance 'combobox :master fradio :text "foo" :values '(foo bar baz)))
 
+	     #-:tk84
+	     (fprogress (make-instance 'frame :master bar))
+	     #-:tk84
+	     (lprogress (make-instance 'label :master fprogress :text "Progress:"))
+	     #-:tk84
+	     (progress (make-instance 'progressbar :master fprogress :value 0 :length 150))
+	     #-:tk84
+	     (bprogress (make-instance 'button :text "Step" :command 
+				       (lambda ()
+					 (incf (value progress) 10)
+					 (when (> (value progress) 100)
+					     (setf (value progress) 0)))
+				       :master fprogress))
+
+
+	     #-:tk84
+	     (fscale (make-instance 'frame :master bar))
+	     #-:tk84
+	     (scale (make-instance 'scale :master fscale :from 0 :to 100  :length 150 ))
+
+	     
 	     (fcheck (make-instance 'frame :master bar))
 	     (lcheck (make-instance 'label :master fcheck :text "Add:"))
 	     (ch1 (make-instance 'check-button :master fcheck :text "Salt"))
@@ -4223,7 +4287,10 @@ When an error is signalled, there are four things LTk can do:
 			 mp-1 mp-2 mp-3 mfs-1 mfs-2 mfs-3 mfs-4)) 
 
 
-	
+	#-:tk84
+	(setf (value progress) 10)
+
+	(configure scale :orient :horizontal)
 
 	(bind *tk* "<Alt-q>" (lambda (event) (declare (ignore event)) (setf *exit-mainloop* t)))
 
@@ -4233,6 +4300,15 @@ When an error is signalled, there are four things LTk can do:
 	(pack bar :side :bottom)
 	(pack fradio :side :top :fill :x)
 	(pack (list leggs r1 r2 r3) :side :left)
+
+	(pack fprogress :side :top :fill :x)
+	(pack lprogress :side :left)
+	(pack progress :side :left :fill :x :padx 10)
+	(pack bprogress :side :left)
+
+	(pack fscale :side :top :fill :x)
+	(pack scale :side :left :fill :x :padx 20)
+	
 	(pack fcheck :side :top :fill :x)
 	(pack (list lcheck ch1 ch2) :side :left)
 	(setf (value r1) 1)
