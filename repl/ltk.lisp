@@ -376,7 +376,9 @@ toplevel             x
 	   #:length
 	   #:mode
 	   #:maximum
-	   #:phase))
+	   #:phase
+	   #:separator
+	   #:sizegrip))
 
 (defpackage :ltk-user
   (:use :common-lisp :ltk))
@@ -1411,21 +1413,26 @@ can be passed to AFTER-CANCEL"
 
 (defmacro defargs (class parents &rest defs)
   (let ((args (build-args class parents defs)))
-    (setf *class-args* (append *class-args* (list (cons class args))))
-   `(setf *class-args* (append *class-args* (list '(,class ,@args))))))
+    (setf *class-args* (append (remove class *class-args* :key #'car) (list (cons class args))))
+   `(setf *class-args* (append (remove (quote ,class) *class-args* :key #'car) (list '(,class ,@args))))))
 
 
-
+#+:tk84
 (defargs widget () 
-  relief cursor borderwidth background
-  )
+  relief cursor borderwidth background)
+
+#-:tk84
+(defargs widget () 
+  class cursor takefocus style)
+
+
 
 ;(defargs button (widget) anchor)
 ;(defargs text (widget button) :delete anchor color)
 
 #-:tk84
 (defargs button (widget) 
- class command compound default image state takefocus textvariable underline width)
+ command compound default image state textvariable underline width)
 
 #+:tk84
 (defargs button (widget) 
@@ -1484,8 +1491,14 @@ can be passed to AFTER-CANCEL"
 (defargs menu ()
   activebackground activeborderwidth activeforeground background borderwidth cursor disabledforeground font foreground postcommand relief selectcolor takefocus tearoff tearoffcommand title type)
 
+#+:tk84
 (defargs menubutton ()
   activebackground activeforeground anchor background bitmap borderwidth cursor direction disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image indicatorOn justify menu padx pady relief compound state takefocus textvariable underline width wraplength)
+
+#-:tk84
+(defargs menubutton ()
+  class compund cursor direction image menu state style takefocus textvariable underline width)
+
 
 (defargs message ()
   anchor aspect background borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness justify padx pady relief takefocus textvariable width)
@@ -1522,8 +1535,21 @@ can be passed to AFTER-CANCEL"
 (defargs scale ()
   class command cursor from length orient style takefocus to variable)
 
+#+:tk84
 (defargs scrollbar ()
   activebackground activerelief background borderwidth command-scrollbar cursor elementborderwidth highlightbackground highlightcolor highlightthickness jump orient relief repeatdelay repeatinterval takefocus troughcolor width)
+
+#-:tk84
+(defargs scrollbar ()
+  class command-scrollbar cursor orient style takefocus)
+
+#-:tk84
+(defargs separator ()
+  class cursor orient state style takefocus)
+
+#-:tk84
+(defargs sizegrip ()
+  class cursor state style takefocus)
 
 (defargs spinbox ()
   activebackground background borderwidth Button.background Button.cursor Button.relief spinbox-command cursor disabledbackground disabledforeground exportselection font foreground format from highlightbackground highlightcolor highlightthickness increment insertbackground insertborderwidth insertofftime insertontime insertwidth invalidcommand justify relief readonlybackground repeatdelay repeatinterval selectbackground selectborderwidth selectforeground state takefocus textvariable to validate validatecommand values width wrap xscrollcommand)
@@ -2305,7 +2331,11 @@ a list of numbers may be given"
 
 ;;; scrollbar
 
+#+:tk84
 (defwrapper scrollbar (widget) () "scrollbar")
+
+#-:tk84
+(defwrapper scrollbar (widget) () "ttk::scrollbar")
 
 (defun make-scrollbar(master &key (orientation "vertical"))
   (make-instance 'scrollbar :master master :orientation orientation))
@@ -2446,6 +2476,16 @@ set y [winfo y ~a]
     (format-wish "bind ~a <Configure> {ltkdebug \"~a configure\";~axv configure;~ayv configure}" (widget-path sf) (name sf)(name sf)(name sf))
     (format-wish "bind ~a <Configure> {ltkdebug \"~a iconfigure\";~axv configure;~ayv configure}" (widget-path (interior sf)) (name sf)(name sf)(name sf))
     ))
+
+;;; separator widget
+
+#-:tk84
+(defwrapper separator (widget) () "ttk::separator")
+
+;;; sizegrip widget
+
+#-:tk84
+(defwrapper sizegrip (widget) () "ttk::sizegrip")
 
 ;;; canvas widget
 
@@ -4208,7 +4248,8 @@ When an error is signalled, there are four things LTk can do:
 	     (fscale (make-instance 'frame :master bar))
 	     #-:tk84
 	     (scale (make-instance 'scale :master fscale :from 0 :to 100  :length 150 ))
-
+	     #-:tk84
+	     (separator (make-instance 'separator :master fscale))
 	     
 	     (fcheck (make-instance 'frame :master bar))
 	     (lcheck (make-instance 'label :master fcheck :text "Add:"))
@@ -4305,9 +4346,12 @@ When an error is signalled, there are four things LTk can do:
 	(pack lprogress :side :left)
 	(pack progress :side :left :fill :x :padx 10)
 	(pack bprogress :side :left)
+	
 
 	(pack fscale :side :top :fill :x)
 	(pack scale :side :left :fill :x :padx 20)
+	(pack separator :side :left)
+	(configure separator :orient :vertical)
 	
 	(pack fcheck :side :top :fill :x)
 	(pack (list lcheck ch1 ch2) :side :left)
