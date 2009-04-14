@@ -378,7 +378,13 @@ toplevel             x
 	   #:maximum
 	   #:phase
 	   #:separator
-	   #:sizegrip))
+	   #:sizegrip
+	   #:treeview
+	   #:treeview-delete
+	   #:column-configure
+	   #:children
+	   #:treeview-focus
+	   #:treeview-exists))
 
 (defpackage :ltk-user
   (:use :common-lisp :ltk))
@@ -1423,9 +1429,12 @@ can be passed to AFTER-CANCEL"
 
 #-:tk84
 (defargs widget () 
-  class cursor takefocus style)
+  class cursor style takefocus)
 
-
+#-:tk84
+(defargs treeview (widget)
+  xscrollcommand yscrollcommand columns displaycolumns height padding selectmode show)
+  
 
 ;(defargs button (widget) anchor)
 ;(defargs text (widget button) :delete anchor color)
@@ -2486,6 +2495,37 @@ set y [winfo y ~a]
 
 #-:tk84
 (defwrapper sizegrip (widget) () "ttk::sizegrip")
+
+;;; treeview widget
+
+#-:tk84
+(defwrapper treeview (tktextvariable widget) () "ttk::treeview")
+
+(defgeneric children (tree item))
+(defmethod children ((tree treeview) item)
+  (format-wish "~a children ~a" (widget-path tree) item))
+
+(defgeneric (setf children) (val tree item))
+(defmethod (setf children) (val (tree treeview) item)
+  (format-wish "~a children ~a {~{~a~^ ~}}" (widget-path tree) item val))
+
+(defgeneric column-configure (tree column option value &rest rest))
+(defmethod column-configure ((tree treeview) column option value &rest rest)
+  (format-wish "~a column ~a -~(~a~) {~a}~{ -~(~a~) {~(~a~)}~}" (widget-path tree) column
+	       option value rest))
+
+(defgeneric treeview-delete (tree items))
+(defmethod treeview-delete ((tree treeview) items)
+  (format-wish "~a delete {~{~a~^ ~}}" (widget-path tree) items))
+
+(defgeneric treeview-exists (tree item))
+(defmethod treeview-exists ((tree treeview) item)
+  (format-wish "~a exists ~a" (widget-path tree) item)
+  (equal (read-data) 1))
+
+(defgeneric treeview-focus (tree item))
+(defmethod treeview-focus ((tree treeview) item)
+  (format-wish "~a exists ~a" (widget-path tree) item))
 
 ;;; canvas widget
 
