@@ -361,7 +361,6 @@ toplevel             x
            #:wm-title
            #:wm-state
            #:with-hourglass
-	   ;#+:tktable
 	   #:notebook-index
 	   #:notebook-add
 	   #:notebook-tab
@@ -371,8 +370,8 @@ toplevel             x
 	   #:notebook-select
 	   #:notebook-events
 	   #:notebook-enable-traversal
-	   #:defwidget
-	   #:progressbar
+           #:defwidget
+           #:progressbar
 	   #:length
 	   #:mode
 	   #:maximum
@@ -384,7 +383,8 @@ toplevel             x
 	   #:column-configure
 	   #:children
 	   #:treeview-focus
-	   #:treeview-exists))
+	   #:treeview-exists
+           ))
 
 (defpackage :ltk-user
   (:use :common-lisp :ltk))
@@ -1434,7 +1434,6 @@ can be passed to AFTER-CANCEL"
 #-:tk84
 (defargs treeview (widget)
   xscrollcommand yscrollcommand columns displaycolumns height padding selectmode show)
-  
 
 ;(defargs button (widget) anchor)
 ;(defargs text (widget button) :delete anchor color)
@@ -1474,6 +1473,9 @@ can be passed to AFTER-CANCEL"
 (defargs frame ()
   borderwidth class relief background colormap container cursor height highlightbackground highlightcolor highlightthickness padx pady takefocus visual width)
 
+(defargs classic-frame ()
+  borderwidth class relief background colormap container cursor height highlightbackground highlightcolor highlightthickness padx pady takefocus visual width)
+
 #-:tk84
 (defargs frame ()
   borderwidth class relief cursor height padding takefocus width)
@@ -1507,7 +1509,6 @@ can be passed to AFTER-CANCEL"
 #-:tk84
 (defargs menubutton ()
   class compund cursor direction image menu state style takefocus textvariable underline width)
-
 
 (defargs message ()
   anchor aspect background borderwidth cursor font foreground highlightbackground highlightcolor highlightthickness justify padx pady relief takefocus textvariable width)
@@ -2045,6 +2046,8 @@ methods, e.g. 'configure'."))
 #+:tk84
 (defwrapper frame (widget) () "frame")
 
+(defwrapper classic-frame (widget) () "frame")
+
 #-:tk84
 (defwrapper frame (widget) () "ttk::frame")
 
@@ -2377,15 +2380,18 @@ a list of numbers may be given"
   )
 
 (defclass scrolled-frame (frame)
-  ((inner :accessor interior)
+  ((frame-class :accessor frame-class :initform 'frame :initarg :frame-class)
+   (inner :accessor interior)
    (hscroll :accessor hscroll)
    (vscroll :accessor vscroll)
    ))
 
 (defmethod initialize-instance :after ((sf scrolled-frame) &key background)
   (let* ((canvas (make-instance 'canvas :master sf :background background))
-         (f (make-instance 'frame :master canvas #+:tk84 :background #+:tk84 background)))
-                                        ;(setf (scrolled-frame-display sf) f)
+         (f (if background
+                (make-instance (frame-class sf) :master canvas :background background)
+                (make-instance (frame-class sf) :master canvas))))
+
     (setf (interior sf) f) ;; (make-instance 'frame :master f :background background))
     (setf (hscroll sf) (make-instance 'scrollbar :master sf :orientation "horizontal"))
     (setf (vscroll sf) (make-instance 'scrollbar :master sf :orientation "vertical"))
@@ -4382,7 +4388,7 @@ When an error is signalled, there are four things LTk can do:
 	(pack fradio :side :top :fill :x)
 	(pack (list leggs r1 r2 r3) :side :left)
 
-	(pack fprogress :side :top :fill :x)
+        (pack fprogress :side :top :fill :x)
 	(pack lprogress :side :left)
 	(pack progress :side :left :fill :x :padx 10)
 	(pack bprogress :side :left)
@@ -4392,7 +4398,7 @@ When an error is signalled, there are four things LTk can do:
 	(pack scale :side :left :fill :x :padx 20)
 	(pack separator :side :left)
 	(configure separator :orient :vertical)
-	
+
 	(pack fcheck :side :top :fill :x)
 	(pack (list lcheck ch1 ch2) :side :left)
 	(setf (value r1) 1)
