@@ -2090,13 +2090,29 @@ methods, e.g. 'configure'."))
   pw)
 
 (defgeneric sash-coord (window index))
+
+#+:tk84
 (defmethod sash-coord ((pw paned-window) index)
   (format-wish "senddata \"([~a sash coord ~a])\"" (widget-path pw) index)
   (read-data))
 
+#-:tk84
+(defmethod sash-coord ((pw paned-window) index)
+  (format-wish "senddata \"([~a sashpos ~a])\"" (widget-path pw) index)
+  (read-data))
+
+
+#+:tk84
 (defgeneric sash-place (window index x y))
+#+:tk84
 (defmethod sash-place ((pw paned-window) index x y)
   (format-wish "~a sash place ~a ~a ~a" (widget-path pw) index x y))
+ 
+#-:tk84
+(defgeneric sash-place (window index pos))
+#-:tk84
+(defmethod sash-place ((pw paned-window) index pos)
+  (format-wish "~a sashpos ~a ~a" (widget-path pw) index pos))
 
 ;;; listbox widget
 
