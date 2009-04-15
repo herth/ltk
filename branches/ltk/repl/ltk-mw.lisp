@@ -81,6 +81,8 @@ o tooltip
    #:callback
    #:selected
    #:select-index
+   #:multiscroll-thingy
+   #:topframe
    ))
 
 (in-package :ltk-mw)
@@ -760,12 +762,11 @@ o tooltip
 
 
 (defwidget multiscroll-thingy self (frame)
-  (background legend-height)
-  ((canvas1 canvas :height (legend-height self)
-	    (topframe frame))
-   (canvas2 canvas
-	    (frame frame))
-   
+  (background legend-height frame-class)
+  ((canvas1 canvas :height (legend-height self) :background (background self)
+	    (topframe ltk::classic-frame))
+   (canvas2 canvas :background (background self)
+	    (frame ltk::classic-frame))
    (hscroll scrollbar :orientation "horizontal")
    (vscroll scrollbar :orientation "vertical"))
 
