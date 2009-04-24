@@ -384,7 +384,7 @@ toplevel             x
 	   #:children
 	   #:treeview-focus
 	   #:treeview-exists
-           ))
+           #:self))
 
 (defpackage :ltk-user
   (:use :common-lisp :ltk))
@@ -4055,111 +4055,130 @@ When an error is signalled, there are four things LTk can do:
 ;; defwidget the better version :)
 (eval-when (:compile-toplevel :load-toplevel :execute)
 
-  (defmacro defwidget (name selfname parent slots widgetspecs &rest body)
-    (let (defs wnames events accessors methods)
-      (labels ((on-type (subwidget methodname)
-		 "Handle an :on-type form"
-		 (push
-		  `(bind ,subwidget "<KeyPress>"
-			 (lambda (event)
-			   (,methodname ,selfname (event-char event))))
-		  events)
-		 (push `(declaim (ftype function ,methodname))
-			methods)
-;; 		 (push
-;; 		  `(defgeneric ,methodname (self key))
-;; 		  methods)
-;; 		 (push
-;; 		  `(defmethod ,methodname ((,selfname ,name) keycode))
-;; 		  methods)
-		 )
+  (defmacro defwidget (namespec parent slots widgetspecs &rest body)
+    (let* ((name (if (listp namespec)
+		     (car namespec)
+		     namespec))
+	   (selfname (if (listp namespec)
+			 (or (second namespec) 'self)
+			 'self)))
 
-	       (process-layout (line parent)
-		 (let ((instance-name (first line))
-		       (class-name (second line)))
-		   (multiple-value-bind (keyargs subwidgets)
-		       (do ((params (cddr line))       ; all other parameters to the
-					               ; widget/subwidget defs
-			    (keywords+values nil)      ; keyword args for the widget
-			    (sublists nil))	       ; list of the subwidgets	      
-			   ((null params) (values (reverse keywords+values) (reverse sublists)))
-			 (cond ((listp (car params))
-				(dolist (subwidget (process-layout (pop params) instance-name))
-				  (push subwidget sublists)))
-			       ((equal (car params) :on-type)
-				(pop params)
-				(on-type instance-name (pop params)))
-			       (t (let* ((param (pop params))
-					 (val (pop params)))
-				    (push param keywords+values)
-				    (push (if (equal param :pack)
-					      (list 'quote val)
-					      val)
-					  keywords+values)))))
-		     (cons
-		      (list instance-name
-			    (append
-			     (list 'make-instance (list 'quote class-name))
-			     (if parent (list :master parent) nil)
-			     keyargs))
-		      subwidgets))))
+      (unless (listp parent)
+	(error "defwidget: parent class(es) specifier \"~a\" needs to be a list of symbols" parent))
 
-	       (compute-slots (names)
-		 (mapcar (lambda (name)
-			   (if (listp name)
-			       name
-			       `(,name :accessor ,name :initform nil
-				       :initarg ,(intern (symbol-name name) :keyword))))
-			 names))
+      (unless (listp slots)
+	(error "defwidget: slots \"~a\" needs to be a list of slot specifiers" slots))
 
-		(make-accessor (acname spec)
-		  (push `(declaim (ftype function ,acname (setf ,acname)))
-			accessors)
-		  (push
-		   `(defmethod ,acname ((,selfname ,name))
-		      ,spec)
-		   accessors)
-		  (push
-		   `(defmethod (setf ,acname) (val (,selfname ,name))
-		      (setf ,spec val))
-		   accessors))
+      (unless (listp widgetspecs)
+	(error "defwidget: widgets \"~a\" need to be a list of widget specifiers" widgetspecs))
 
-		(grab-accessors ()
-		  (loop while (equal (caar body) :accessor)
-			do (destructuring-bind (unused aname aspec)
-			       (pop body)
-			     (declare (ignore unused))
-			     (make-accessor aname aspec)))))
+      (when (null widgetspecs)
+	(warn "defwidget: widget list is empty."))
+      
+      (let (defs wnames events accessors methods)
+	(labels ((on-type (subwidget methodname)
+		   "Handle an :on-type form"
+		   (push
+		    `(bind ,subwidget "<KeyPress>"
+			   (lambda (event)
+			     (,methodname ,selfname (event-char event))))
+		    events)
+		   (push `(declaim (ftype function ,methodname))
+			 methods)
+		   ;; 		 (push
+		   ;; 		  `(defgeneric ,methodname (self key))
+		   ;; 		  methods)
+		   ;; 		 (push
+		   ;; 		  `(defmethod ,methodname ((,selfname ,name) keycode))
+		   ;; 		  methods)
+		   )
 
-	(setf defs (mapcan (lambda (w)
-			     (process-layout w selfname)) widgetspecs))
-	(setf wnames (mapcar #'car defs))
-	(grab-accessors)
-	(let* ((all-slots (compute-slots (append slots wnames))))
-	  `(progn
-	     (defclass ,name ,parent
-	       ,all-slots)
-	     ,@(reverse accessors)
-	     ,@(reverse methods)
+		 (process-layout (line parent)
+		   (let ((instance-name (first line))
+			 (class-name (second line)))
+		     (multiple-value-bind (keyargs subwidgets)
+			 (do ((params (cddr line))       ; all other parameters to the
+					; widget/subwidget defs
+			      (keywords+values nil)      ; keyword args for the widget
+			      (sublists nil))	       ; list of the subwidgets	      
+			     ((null params) (values (reverse keywords+values) (reverse sublists)))
+			   (cond ((listp (car params))
+				  (dolist (subwidget (process-layout (pop params) instance-name))
+				    (push subwidget sublists)))
+				 ((equal (car params) :on-type)
+				  (pop params)
+				  (on-type instance-name (pop params)))
+				 (t (let* ((param (pop params))
+					   (val (pop params)))
+				      (push param keywords+values)
+				      (push (if (equal param :pack)
+						(list 'quote val)
+						val)
+					    keywords+values)))))
+		       (cons
+			(list instance-name
+			      (append
+			       (list 'make-instance (list 'quote class-name))
+			       (if parent (list :master parent) nil)
+			       keyargs))
+			subwidgets))))
+		 
+		 (compute-slots (names)
+		   (mapcar (lambda (name)
+			     (if (listp name)
+				 name
+				 `(,name :accessor ,name :initform nil
+					 :initarg ,(intern (symbol-name name) :keyword))))
+			   names))
+		 
+		 (make-accessor (acname spec)
+		   (push `(declaim (ftype function ,acname (setf ,acname)))
+			 accessors)
+		   (push
+		    `(defmethod ,acname ((,selfname ,name))
+		       ,spec)
+		    accessors)
+		   (push
+		    `(defmethod (setf ,acname) (val (,selfname ,name))
+		       (setf ,spec val))
+		    accessors))
+		 
+		 (grab-accessors ()
+		   (loop while (equal (caar body) :accessor)
+		      do (destructuring-bind (unused aname aspec)
+			     (pop body)
+			   (declare (ignore unused))
+			   (make-accessor aname aspec)))))
+	  
+	  (setf defs (mapcan (lambda (w)
+			       (process-layout w selfname)) widgetspecs))
+	  (setf wnames (mapcar #'car defs))
+	  (grab-accessors)
+	  (let* ((all-slots (compute-slots (append slots wnames))))
+	    `(progn
+	       (defclass ,name ,parent
+		 ,all-slots)
+	       ,@(reverse accessors)
+	       ,@(reverse methods)
 
-	     (defmethod initialize-instance :after ((,selfname ,name) &key)
-	       (let ,wnames
-		 ,@(mapcar (lambda (def)
-			     (append (list 'setf) def)) defs)
-		 ,@(mapcar (lambda (wname)
-			     `(setf (,wname ,selfname) ,wname)) wnames)
+	       (defmethod initialize-instance :after ((,selfname ,name) &key)
+		 (let ,wnames
+		   ,@(mapcar (lambda (def)
+			       (append (list 'setf) def)) defs)
+		   ,@(mapcar (lambda (wname)
+			       `(setf (,wname ,selfname) ,wname)) wnames)
 
-		 ,@events
-		 ,@body))
+		   ,@events
+		   ,@body))
 
-	     ))))))
+	       )))))))
 
 ;;:on-type test-widget-type
 
 
 ;; example-usage
 
-(defwidget test-widget self (frame)
+(defwidget test-widget (frame) 
   (a b c)
   ((bu button :text "A button" 
        :pack (:side :top :anchor :w)
@@ -4168,7 +4187,7 @@ When an error is signalled, there are four things LTk can do:
 		  (setf (text entry) "")))
    (f1 frame :pack (:side :top :fill :both :expand t) 
        (lb label :text "A label" :pack (:side :left))
-       (entry entry :pack (:side :left :fill :x :expand t))))
+       (entry entry :pack (:side :left :fill :x :expand t) :text "")))
 
   ;; other code here
   )
@@ -4179,7 +4198,7 @@ When an error is signalled, there are four things LTk can do:
 (defgeneric (setf secondline) (val widget))
 (defgeneric entry-typed (widget keycode))
 
-(defwidget test-widget2 self (frame)
+(defwidget (test-widget2 this) (frame)
   ()
   ((mw test-widget :pack (:side :top :fill :x))
    (mw2 test-widget :pack (:side :top :fill :x))
@@ -4187,16 +4206,16 @@ When an error is signalled, there are four things LTk can do:
 				    (setf (text (entry mw)) "foo")
 				    (setf (text (entry mw2)) "bar"))
       :pack (:side :top))
-   (e entry :pack (:side :top)
+   (e entry :pack (:side :top) :text ""
       :on-type entry-typed))
    
-   (:accessor firstline (text (entry (mw self))))
-   (:accessor secondline (text (entry (mw2 self))))
+   (:accessor firstline (text (entry (mw this))))
+   (:accessor secondline (text (entry (mw2 this))))
 
 
-   (bind self  "<Enter>" (lambda (event)
-			   (declare (ignore event))
-			   (format t "Entered!~%") (finish-output)))
+   (bind this "<Enter>" (lambda (event)
+			  (declare (ignore event))
+			  (format t "Entered!~%") (finish-output)))
    )
 
 (defclass tw (test-widget2) ())
@@ -4224,7 +4243,7 @@ When an error is signalled, there are four things LTk can do:
     (with-widgets
 	(toplevel top-frame :title "with-widgets-test"
 		  (label lb1 :text "Test, Test!" :pack '(:side :top))
-		  (entry en1 :pack '(:side :top))
+		  (entry en1 :pack '(:side :top) :text "")
 		  (frame fr1 :pack '(:side :bottom)
 			 (button bt1 :text "OK" :pack '(:side :right)
 				 :command (lambda () (format t "Pressed OK~%")))
@@ -4259,7 +4278,7 @@ When an error is signalled, there are four things LTk can do:
       (append-text t1 "Foo Bar Baz")
       )))
 
-(defwidget nbw self (frame)
+(defwidget nbw (frame)
   ()
   ((nb notebook :pack (:fill :both :expand t)
        (f1 frame
