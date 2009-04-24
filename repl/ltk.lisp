@@ -763,7 +763,9 @@ fconfigure stdout -encoding utf-8
       (when stream
         (remove-input-handler)
         (when (open-stream-p stream)
-          (ignore-errors (send-wish "exit")))
+          (ignore-errors
+            (send-wish "exit")
+            (flush-wish)))
         (close-process-stream stream))
       (setf (wish-stream *wish*) nil)
       #+:allegro (system:reap-os-subprocess)
@@ -771,7 +773,7 @@ fconfigure stdout -encoding utf-8
   #+:lispworks
   (when (wish-remotep *wish*)
     (throw 'exit-with-remote-ltk nil))
-  nil)
+  (throw *wish* nil))
 
 
 (defun slength (text)
@@ -959,14 +961,25 @@ event to read and blocking is set to nil"
   (loop
      for data = (read-wish)
      when (listp data) do
-       (cond ((eq (first data) :data)
-	      (dbg "read-data: ~s~%" data)
-	      (return (second data)))
-	     (t
-	      (verify-event data)
-	      (dbg "postponing event: ~s~%" data)
-	      (setf (wish-event-queue *wish*)
-		    (append (wish-event-queue *wish*) (list data)))))
+       (cond
+         ((null data)
+          ;; exit wish
+          (exit-wish)
+          (return nil))
+         ((eq (first data) :data)
+          (dbg "read-data: ~s~%" data)
+          (return (second data)))
+         ((or (eq (first data) :event)
+              (eq (first data) :callback))
+          (dbg "postponing event: ~s~%" data)
+          (setf (wish-event-queue *wish*)
+                (append (wish-event-queue *wish*) (list data))))
+         ((eq (first data) :error)
+          (error 'tk-error :message (second data)))
+         (t
+          
+          (format t "read-data problem: ~a~%" data) (finish-output)
+          ))
        else do
        (dbg "read-data error: ~a~%" data)))
 
@@ -2107,7 +2120,7 @@ methods, e.g. 'configure'."))
 #+:tk84
 (defmethod sash-place ((pw paned-window) index x y)
   (format-wish "~a sash place ~a ~a ~a" (widget-path pw) index x y))
- 
+
 #-:tk84
 (defgeneric sash-place (window index pos))
 #-:tk84
@@ -2807,7 +2820,11 @@ set y [winfo y ~a]
         ((eq itemtype :rectangle)
          (format stream "~a create rectangle ~a ~a ~a ~a " cpath (number) (number) (number) (number))
          (args))
-      
+
+        ((eq itemtype :polygon)
+         (format stream "~a create polygon ~a" cpath (process-coords (pop item)))
+         (args))
+
         ((eq itemtype :arc)
          (format stream "~a create arc ~a ~a ~a ~a " cpath (number) (number) (number) (number))
          (args))
@@ -3852,7 +3869,7 @@ tk input to terminate"
 				   (lambda (e)
 				     (when (eql (stream-error-stream e) fd-stream)
 				       (return-from call-main nil)))))
-		     (main-iteration :blocking nil))))
+		     (catch wish (main-iteration :blocking nil)))))
 	       (ltk-input-handler (fd)
 		 (declare (ignore fd))
 		 (let ((*wish* wish)) ; use the wish we were given as an argument
@@ -3990,15 +4007,16 @@ When an error is signalled, there are four things LTk can do:
                           (debug-setting-keys debug))))
          (mainloop () (apply #'mainloop (filter-keys '(:serve-event) keys))))
     (let ((*wish* (make-ltk-connection :remotep remotep)))
-      (unwind-protect
-           (progn
-             (start-wish)
-             (multiple-value-prog1
-                 (with-ltk-handlers ()
-		   (with-atomic (funcall thunk)))
-               (mainloop)))
-        (unless serve-event
-          (exit-wish))))))
+      (catch *wish*
+        (unwind-protect
+             (progn
+               (start-wish)
+               (multiple-value-prog1
+                   (with-ltk-handlers ()
+                     (with-atomic (funcall thunk)))
+                 (mainloop)))
+          (unless serve-event
+            (exit-wish)))))))
        
 ;;; with-widget stuff
 
