@@ -644,7 +644,10 @@ toplevel             x
 
 
 (defun init-tcl (&key debug-tcl)
-  (format (wish-stream *wish*) "set buffer \"\"
+  (let ((translation "lf"))
+    #+(and :lispworks :windows) (setf translation "crlf")
+
+    (format (wish-stream *wish*) "set buffer \"\"
 set server stdout
 
 set tclside_ltkdebug ~:[0~;1~]
@@ -714,10 +717,10 @@ proc buffer_text {txt} {
     ltkdebug \"buffer=$buffer\\n\" 
 }
 
-fconfigure stdin -encoding utf-8 -translation auto
+fconfigure stdin -encoding utf-8 -translation ~a
 fconfigure stdout -encoding utf-8
 #fileevent stdin readable sread
-" debug-tcl))
+" debug-tcl translation)))
 
 ;;; start wish and set (wish-stream *wish*)
 (defun start-wish (&rest keys &key handle-errors handle-warnings (debugger t) remotep
@@ -774,11 +777,6 @@ fconfigure stdout -encoding utf-8
   (when (wish-remotep *wish*)
     (throw 'exit-with-remote-ltk nil))
   (throw *wish* nil))
-
-
-(defun slength (text)
-  (length #+sbcl(sb-ext:string-to-octets text :external-format :utf-8)
-          #-sbcl text))
 
 (defun send-wish (text)
   (push text (wish-output-buffer *wish*))
@@ -2561,6 +2559,22 @@ set y [winfo y ~a]
 (defgeneric treeview-focus (tree item))
 (defmethod treeview-focus ((tree treeview) item)
   (format-wish "~a exists ~a" (widget-path tree) item))
+
+
+(defclass treeitem (tkobject)
+  ((tree :accessor tree :initform nil :initarg :tree)
+   (text :accessor text :initform nil :initarg :text)
+   (master :accessor master :initarg :master :initform nil)
+   ))
+
+(defmethod initialize-instance :after ((item treeitem) &key)
+  (setf (name item) (create-name))
+  (format-wish "~a insert ~a end -id ~a -text \"~a\"" (widget-path (tree item)) (if (master item)
+										(name (master item))
+										"{}")
+	       (name item) (text item)))
+
+  )
 
 ;;; canvas widget
 
@@ -4733,6 +4747,22 @@ When an error is signalled, there are four things LTk can do:
       (setf (text b) " )} xasdf ")
       ;(send-wish "button }\"")
       (flush-wish))))
+
+
+;;; treview tests
+
+(defwidget treeviewtest (frame)
+  ()
+  ((tree treeview :pack (:side :top :expand t :fill :both)
+	 )
+   )
+  (let* ((first (make-instance 'treeitem :tree tree :text "Hallo"))
+	 (second (make-instance 'treeitem :tree tree :master first :text "Welt")))
+  ))
+
+(defun treeview-test ()
+  (with-ltk ()
+    (pack (make-instance 'treeviewtest) :fill :both :expand t)))
 
 (defmacro with-hourglass (widgets &rest body)
   `(unwind-protect
