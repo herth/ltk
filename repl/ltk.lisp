@@ -2574,7 +2574,7 @@ set y [winfo y ~a]
 										"{}")
 	       (name item) (text item)))
 
-  )
+  
 
 ;;; canvas widget
 
@@ -4071,12 +4071,14 @@ When an error is signalled, there are four things LTk can do:
 
   (defmacro defwidget (namespec parent slots widgetspecs &rest body)
     (let* ((name (if (listp namespec)
-		     (car namespec)
+		     (second namespec)
 		     namespec))
 	   (selfname (if (listp namespec)
-			 (or (second namespec) 'self)
+			 (first namespec)
 			 'self)))
-
+      (unless name
+	(error "defwidget: no name given"))
+      
       (unless (listp parent)
 	(error "defwidget: parent class(es) specifier \"~a\" needs to be a list of symbols" parent))
 
@@ -4212,7 +4214,7 @@ When an error is signalled, there are four things LTk can do:
 (defgeneric (setf secondline) (val widget))
 (defgeneric entry-typed (widget keycode))
 
-(defwidget (test-widget2 this) (frame)
+(defwidget (this test-widget2) (frame)
   ()
   ((mw test-widget :pack (:side :top :fill :x))
    (mw2 test-widget :pack (:side :top :fill :x))
@@ -4232,9 +4234,9 @@ When an error is signalled, there are four things LTk can do:
 			  (format t "Entered!~%") (finish-output)))
    )
 
-(defclass tw (test-widget2) ())
+;(defclass tw (test-widget2) ())
 
-(defmethod entry-typed ((self tw) keycode)
+(defmethod entry-typed ((self test-widget2) keycode)
   (format t "typed:~a~%text:~a~%" keycode (text (e self))) (finish-output))
 
 (defun defwidget-test ()
@@ -4758,6 +4760,7 @@ When an error is signalled, there are four things LTk can do:
    )
   (let* ((first (make-instance 'treeitem :tree tree :text "Hallo"))
 	 (second (make-instance 'treeitem :tree tree :master first :text "Welt")))
+    (declare (ignorable second))
   ))
 
 (defun treeview-test ()
