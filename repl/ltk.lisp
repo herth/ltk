@@ -1345,10 +1345,13 @@ can be passed to AFTER-CANCEL"
       (tearoffcommand tearoffcommand "~@[ -tearoffcommand ~(~a~)~]" tearoffcommand "")
       (text text "~@[ -text \"~a\"~]" (tkescape text) "")
       ;;(textvariable textvariable "~@[ -textvariable text_~a~]" (and textvariable (name widget)) "")
-      (textvariable text "~@[ -textvariable text_~a~]" (progn
-                                                         (when text
-                                                           (format-wish "global text_~a ; set text_~a \"~a\"" (name widget) (name widget) (tkescape text)))
-                                                         (name widget)) "")
+      (textvariable text "~@[ -textvariable text_~a~]"
+       (progn
+         (format-wish "global text_~a ; set text_~a \"~a\"" (name widget) (name widget)
+                      (if text
+                          (tkescape text)
+                          "" ))
+         (name widget)) "")
 
       (tickinterval tickinterval "~@[ -tickinterval ~(~a~)~]" tickinterval "")
       (title title "~@[ -title ~(~a~)~]" title "")
@@ -1786,7 +1789,7 @@ can be passed to AFTER-CANCEL"
 
 (defmethod initialize-instance :around ((v tkvariable) &key)
   (call-next-method)
-  (format-wish "~a configure -variable ~a" (widget-path v) (name v)))
+  (format-wish "~a configure -variable ~a ; global ~a ; set ~a {}" (widget-path v) (name v) (name v) (name v)))
 
 (defmethod value ((v tkvariable))
   (format-wish "global ~a; senddata $~a" (name v) (name v))
@@ -1804,11 +1807,6 @@ can be passed to AFTER-CANCEL"
   (:documentation "reads the value of the textvariable associated with the widget")
   )
 
-#+nil
-(defmethod initialize-instance :around ((v tktextvariable) &key)
-  (call-next-method)
-  ;;(format-wish "~a configure -textvariable text_~a" (widget-path v) (name v))
-  )
 
 (defmethod text ((v tktextvariable))
   (format-wish "global text_~a ; senddatastring $text_~a" (name v) (name v))
@@ -2841,6 +2839,10 @@ set y [winfo y ~a]
 
         ((eq itemtype :arc)
          (format stream "~a create arc ~a ~a ~a ~a " cpath (number) (number) (number) (number))
+         (args))
+      
+        ((eq itemtype :oval)
+         (format stream "~a create oval ~a ~a ~a ~a " cpath (number) (number) (number) (number))
          (args))
       
         ((eq itemtype :line)
@@ -4078,7 +4080,7 @@ When an error is signalled, there are four things LTk can do:
 			 'self)))
       (unless name
 	(error "defwidget: no name given"))
-      
+
       (unless (listp parent)
 	(error "defwidget: parent class(es) specifier \"~a\" needs to be a list of symbols" parent))
 
@@ -4234,7 +4236,6 @@ When an error is signalled, there are four things LTk can do:
 			  (format t "Entered!~%") (finish-output)))
    )
 
-;(defclass tw (test-widget2) ())
 
 (defmethod entry-typed ((self test-widget2) keycode)
   (format t "typed:~a~%text:~a~%" keycode (text (e self))) (finish-output))

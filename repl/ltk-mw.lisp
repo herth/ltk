@@ -297,6 +297,7 @@ o tooltip
    ))
 
 
+(defgeneric select-index (lb index))
 (defmethod initialize-instance :after ((lb mw-listbox) &key)
   (let* ((lbl (make-instance 'label :master lb :text (label lb)))
          (slistbox (make-instance 'scrolled-listbox :master lb))
@@ -761,7 +762,7 @@ o tooltip
     ))
 
 
-(defwidget multiscroll-thingy self (frame)
+(defwidget multiscroll-thingy (frame)
   (background legend-height frame-class)
   ((canvas1 canvas :height (legend-height self) :background (background self)
 	    (topframe ltk::classic-frame))
