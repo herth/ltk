@@ -1339,6 +1339,7 @@ can be passed to AFTER-CANCEL"
       (spacing2 spacing2 "~@[ -spacing2 ~(~a~)~]" spacing2 "")
       (spacing3 spacing3 "~@[ -spacing3 ~(~a~)~]" spacing3 "")
       (state state "~@[ -state ~(~a~)~]" state "")
+      (style style "~@[ -style ~s~]" style "")
       (tabs tabs "~@[ -tabs ~(~a~)~]" tabs "")
       (takefocus takefocus "~@[ -takefocus ~(~a~)~]" takefocus "if true, the widget can take the focus")
       (tearoff tearoff "~@[ -tearoff ~(~a~)~]" tearoff "if true, the menu can be torn off")
@@ -1464,8 +1465,8 @@ can be passed to AFTER-CANCEL"
   background borderwidth closeenough confine cursor height highlightbackground highlightcolor highlightthickness insertbackground insertborderwidth insertofftime insertontime insertwidth offset relief scrollregion selectbackground selectborderwidth selectforeground state takefocus width xscrollcommand xscrollincrement yscrollcommand yscrollincrement)
 
 #-:tk84
-(defargs check-button ()
-  cbcommand class compound cursor image offvalue onvalue state takefocus textvariable underline variable width)
+(defargs check-button (widget)
+  cbcommand compound image offvalue onvalue state textvariable underline variable width)
 
 #+:tk84
 (defargs check-button ()
