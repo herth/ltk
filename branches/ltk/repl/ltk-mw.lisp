@@ -873,6 +873,133 @@ bind ~a <Configure> [list resetScroll ~a]
 
 ;;;
 
+(defclass card (canvas)
+  ((collapsed :accessor collapsed :initform nil :initarg :collapsed)
+   (up        :accessor up        :initform nil :initarg :up)
+   (next      :accessor next      :initform nil :initarg :next)
+   
+
+   ))
+
+
+(defclass business-card (card)
+  ((cname :accessor cname :initform nil :initarg :cname)
+   (title :accessor title :initform nil :initarg :title)
+   (phone :accessor phone :initform nil :initarg :phone)
+   (location :accessor location :initform nil :initarg :location)
+   ))
+
+(defmethod initialize-instance :after ((self card) &key)
+  (create-items
+   self
+   (nconc
+    (list
+     
+     (list :line 8 2 292 2 :width 2 :fill :gray)
+     (list :line 295 5 295 92 :width 2 :fill :gray)
+     (list :line 292 95 8 95  :width 2 :fill :gray)
+     (list :line 5 91 5 5     :width 2 :fill :gray)
+     
+     (list :arc 4 1 20 15  :start 90 :extent 90 :style :arc :width 2 :outline :gray)
+     (list :arc 4 80 20 95  :start 180 :extent 90 :style :arc :width 2 :outline :gray)     
+     (list :arc 284 80 295 95  :start 270 :extent 90 :style :arc :width 2 :outline :gray)
+     (list :arc 285 1 295 15  :start 0 :extent 90 :style :arc :width 2 :outline :gray))
+    
+    (when (up self)
+      (list
+       (list :line 5 0 5 10 :width 2 :fill :gray)
+       (list :line 295 0 295 10 :width 2 :fill :gray)
+       ))
+    ))
+  (configure self :background :white :width 300 :height (if (collapsed self) 25 100)
+             :highlightthickness 0)
+  (bind self "<1>" (lambda (e) (declare (ignore e))
+                     (setf (collapsed self) (not (collapsed self)))
+                     (configure self :height (if (collapsed self) 25 100))))
+
+  )
+
+(defmethod expand-card ((self card))
+  (setf (collapsed self) nil)
+  (configure self :height (if (collapsed self) 25 100)))
+
+(defmethod collapse-card ((self card))
+  (setf (collapsed self) t)
+  (configure self :height (if (collapsed self) 25 100)))
+
+(defmethod initialize-instance :after ((self business-card) &key)
+  (create-items
+   self
+   (list
+    (list :text 10 8 (cname self)  :font "Arial 12")
+    (list :text 15 25 (title self) :font "Arial 10" :fill "gray")
+    (list :text 15 40 (phone self) :font "Arial 10" :fill "gray")
+    (list :text 15 55 (location self) :font "Arial 10" :fill "gray"))))
+
+
+(defwidget cardstack (frame)
+  (cards shown-cards inner
+   (cardclass :accessor cardclass :initform 'card :initarg :cardclass)
+   canvas)
+  ((sc scrolled-frame :pack (:side :top :fill :both :expand t)))
+
+  (setf (canvas self) (canvas sc))
+  (configure (canvas self) :background :white; :height 600
+             )
+  (setf (inner self) (interior sc))
+  ;(scrollregion (canvas self) 0 0 300 2000)
+  )
+  
+
+(defmethod add-card ((self cardstack) (card card))
+  (setf (cards self) (append (cards self) (list card)))
+  (unless (> (length (shown-cards self)) 50)
+    (setf (shown-cards self) (append (shown-cards self) (list card)))
+    
+    (pack card :side :top))
+  card)
+
+(defmethod show-cards ((self cardstack) cards)
+  (dolist (card (shown-cards self))
+    (pack-forget card))
+  (dolist (card cards)
+    (pack card :side :top))
+  (setf (shown-cards self) cards))
+  
+
+
+
+
+(defun show-items (stack tag)
+  (lambda (event)
+    (declare (ignore event))
+    (show-cards stack
+                (loop for card in (cards stack)
+                      when (or (equal tag :all)
+                               (equal (tag card) tag))
+                        collect card))))
+
+
+(defun expand-items (stack)
+  (lambda (event)
+    (declare (ignore event))
+    (dolist (card (shown-cards stack))
+      (expand-card card))))
+
+
+(defun collapse-items (stack)
+  (lambda (event)
+    (declare (ignore event))
+    (dolist (card (shown-cards stack))
+      (collapse-card card))))
+      
+
+             
+
+
+
+;;;
+
 
 
 (defun ltk-mw-demo ()
