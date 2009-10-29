@@ -245,6 +245,7 @@ toplevel             x
            #:listbox
            #:listbox-append
            #:listbox-clear
+	   #:listbox-delete
            #:listbox-configure
            #:listbox-get-selection
            #:listbox-nearest
@@ -2163,15 +2164,19 @@ a list of numbers may be given"
   l)
 
 (defgeneric listbox-clear (l))
-
 (defmethod listbox-clear ((l listbox))
   (format-wish "~a delete 0 end" (widget-path l))
+  l)
+
+(defgeneric listbox-delete (l start &optional end))
+(defmethod listbox-delete ((l listbox) start &optional end)
+  (format-wish "~a delete ~a ~@[~(~a~)~]" (widget-path l) start end)
   l)
 
 
 (defgeneric listbox-configure (l i &rest options))
 (defmethod listbox-configure ((l listbox) index &rest options)
-  (format-wish "~a itemconfigure ~a ~{ -~(~a~) {~(~a~)}~}" (widget-path l) index options)
+  (format-wish "~a itemconfigure ~a ~{ -~(~a~) {~/ltk::down~/}~}" (widget-path l) index options)
   l)
 
 (defgeneric listbox-nearest (listbox y))
@@ -2824,7 +2829,7 @@ set y [winfo y ~a]
              (loop
                 while item
                 do
-                (format stream " -~(~a~) {~(~a~)}" (pop item) (pop item)))))
+                (format stream " -~(~a~) {~/ltk::down/}" (pop item) (pop item)))))
     (let ((itemtype (pop item))
           (cpath (widget-path canvas)))
       (when (consp itemtype)
@@ -2848,6 +2853,10 @@ set y [winfo y ~a]
       
         ((eq itemtype :line)
          (format stream "~a create line ~a ~a ~a ~a " cpath (number) (number) (number) (number))
+         (args))
+
+	((eq itemtype :image)
+         (format stream "~a create image ~a ~a " cpath (number) (number))
          (args))
 
         ((eq itemtype :text)
