@@ -3056,18 +3056,17 @@ set y [winfo y ~a]
 
 (defclass photo-image(tkobject)
   ((data :accessor data :initform nil :initarg :data)
-   )
-  )
+   (file :accessor file :initform nil :initarg :file)))
 
 (defmethod widget-path ((photo photo-image))
   (name photo))
 
 (defmethod initialize-instance :after ((p photo-image)
-                                       &key width height format grayscale data)
+                                       &key width height format grayscale data file)
   (check-type data (or null string))
   (setf (name p) (create-name))
-  (format-wish "image create photo ~A~@[ -width ~a~]~@[ -height ~a~]~@[ -format \"~a\"~]~@[ -grayscale~*~]~@[ -data ~s~]"
-               (name p) width height format grayscale data))
+  (format-wish "image create photo ~A~@[ -width ~a~]~@[ -height ~a~]~@[ -format \"~a\"~]~@[ -grayscale~*~]~@[ -data ~s~]~@[ -file ~s~]"
+               (name p) width height format grayscale data (and file (tkescape2 file))))
 
 (defun make-image ()
   (let* ((name (create-name))
@@ -3525,7 +3524,7 @@ set y [winfo y ~a]
 
 (defun choose-directory (&key (initialdir (namestring *default-pathname-defaults*))
 			      parent title mustexist)
-  (format-wish "senddatastring [tk_chooseDirectory ~@[ -initialdir {~a }~]~@[ -parent ~a ~]~@[ -title {~a}~]~@[ -mustexist ~a~]]" initialdir (and parent (widget-path parent)) title (and mustexist 1))
+  (format-wish "senddatastring [tk_chooseDirectory ~@[ -initialdir \"~a\"~]~@[ -parent ~a ~]~@[ -title {~a}~]~@[ -mustexist ~a~]]" (tkescape2 initialdir) (and parent (widget-path parent)) title (and mustexist 1))
   (read-data))
 
 (defvar *mb-icons* (list "error" "info" "question" "warning")
@@ -3619,20 +3618,20 @@ set y [winfo y ~a]
                          "yesno"
                          "ok")
                      icon)
-    (:yes (continue))
-    ((:ok :no) (abort))))
+    ((:yes :YES) (continue))
+    ((:ok :no :OK :NO) (abort))))
 
 (defun debug-popup (condition title)
   (ecase (message-box (format nil "~A~%~%Do you wish to invoke the debugger?"
 			      condition)
 		      title "yesno" "question")
-    (:yes (cond (*debugger-hook*
-                 (let ((hook *debugger-hook*)
-                       (*debugger-hook* nil))
-                   (funcall hook condition hook)))
-                (t
-                 (invoke-debugger condition))))
-    (:no (abort))))
+    ((:yes :YES) (cond (*debugger-hook*
+			(let ((hook *debugger-hook*)
+			      (*debugger-hook* nil))
+			  (funcall hook condition hook)))
+		       (t
+			(invoke-debugger condition))))
+    ((:no :NO) (abort))))
 
 (defun show-error (error)
   (error-popup (format nil "~A~@[~%~%~A?~]" error (find-restart 'continue))
