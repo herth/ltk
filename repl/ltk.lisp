@@ -1235,14 +1235,19 @@ can be passed to AFTER-CANCEL"
                                                                       (add-callback (name widget) command)
                                                                       (list (name widget) (name widget))))
        "function to call when the action of the widget is executed")
+      (scalecommand command "~@[ -command {callbackval ~a }~]" (and command 
+                                                                    (progn
+                                                                      (add-callback (name widget) command)
+                                                                      (name widget)))
+       "function to call when the action of the widget is executed")
       (spinbox-command command "~@[ -command {callbackstring ~a %s}~]" (and command 
                                                                            (progn
                                                                              (add-callback (name widget) command)
                                                                              (name widget))))
       (command-radio-button command "~@[ -command {callbackval ~{~a $~a~}}~]" (and command 
-                        						       (progn
-										 (add-callback (name widget) command)
-										 (list (name widget) (radio-button-variable widget))))
+                                                                               (progn
+                                                                                 (add-callback (name widget) command)
+                                                                                 (list (name widget) (radio-button-variable widget))))
        "function to call when the action of the widget is executed")
       
       (command-scrollbar command "~@[ -command {callback ~a}~]" (and command 
@@ -1555,11 +1560,11 @@ can be passed to AFTER-CANCEL"
 
 #+:tk84
 (defargs scale ()
-  activebackground background bigincrement borderwidth command cursor digits font foreground from highlightbackground highlightcolor highlightthickness label length orient relief repeatdelay repeatinterval resolution showvalue sliderlength sliderrelief state takefocus tickinterval to troughcolor variable width)
+  activebackground background bigincrement borderwidth scalecommand cursor digits font foreground from highlightbackground highlightcolor highlightthickness label length orient relief repeatdelay repeatinterval resolution showvalue sliderlength sliderrelief state takefocus tickinterval to troughcolor variable width)
 
 #-:tk84
 (defargs scale ()
-  class command cursor from length orient style takefocus to variable)
+  class scalecommand cursor from length orient style takefocus to variable)
 
 #+:tk84
 (defargs scrollbar ()
