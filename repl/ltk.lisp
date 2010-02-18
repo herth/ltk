@@ -136,6 +136,8 @@ toplevel             x
            #:*tk*
            #:*wish*
            #:wish-stream
+           #:wish-variable
+           #:wish-variables
            #:*wish-args*
            #:*wish-pathname*
            #:*default-ltk-debugger*
@@ -338,6 +340,7 @@ toplevel             x
            #:text
            #:textbox
            #:tkobject
+           #:title
            #:toplevel
            #:value
            #:options
@@ -359,6 +362,10 @@ toplevel             x
            #:with-remote-ltk
            #:with-widgets
            #:withdraw
+           #-:tk84
+           #:wm-forget
+           #-:tk84
+           #:wm-manage
            #:wm-title
            #:wm-state
            #:with-hourglass
@@ -385,7 +392,12 @@ toplevel             x
 	   #:children
 	   #:treeview-focus
 	   #:treeview-exists
-           #:self))
+           #:self
+           #:reset-scroll
+           #:scroll-to-top
+           #:tagbind
+           #:pane-configure
+           #:handle))
 
 (defpackage :ltk-user
   (:use :common-lisp :ltk))
@@ -485,7 +497,15 @@ toplevel             x
   (input-handler nil)
   (remotep nil)
   (output-buffer nil)
+  (variables (make-hash-table :test #'equal))
   )
+
+(defmethod wish-variable (name (wish ltk-connection))
+  (gethash name (wish-variables wish)))
+
+(defmethod (setf wish-variable) (val name (wish ltk-connection))
+  (setf (gethash name (wish-variables wish)) val))
+
 
 (defmacro with-ltk-handlers (() &body body)
   `(funcall (wish-call-with-condition-handlers-function *wish*)
@@ -620,10 +640,16 @@ toplevel             x
                      $widget see insert
                  }
              }")
-
+ 
   (send-wish "proc resetScroll {c} {
-    $c configure -scrollregion [$c bbox all] 
-}")
+      $c configure -scrollregion [$c bbox all]
+}
+
+proc moveToStart {sb} {
+   set range [$sb get]
+   $sb set 0 [expr [lindex $range 1] - [lindex $range 0]]
+ }
+")
 
   ;;; proc sendevent {s} {puts "(event \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
   ;(send-wish "proc sendevent {s x y keycode char width height root_x root_y} {puts \"(:event \\\"$s\\\" $x $y $keycode $char $width $height $root_x $root_y)\"} ")
@@ -637,8 +663,10 @@ toplevel             x
   (send-wish "proc callback {s} {global server; puts $server \"(:callback \\\"$s\\\")\";flush $server} ")
   (send-wish "proc callbackval {s val} {global server; puts $server \"(:callback \\\"$s\\\" $val)\"} ")
   (send-wish "proc callbackstring {s val} {global server; puts $server \"(:callback \\\"$s\\\" \\\"[escape $val]\\\")\"} ")
-
-
+  (send-wish "proc keepalive {} {global server; puts $server \"(:keepalive  \\\"[clock format [clock seconds] -format \"%d/%m/%y %T\"]\\\")\"; flush $server}")
+  ;(send-wish "global serverlist;set serverlist {{foo 10} {bar 20} {baz 40}}")
+  ;(send-wish "global host; set host bar")
+  ;(send-wish "global hping; set hping 42")
   
   (dolist (fun *init-wish-hook*)	; run init hook funktions 
     (funcall fun))))
@@ -697,7 +725,7 @@ proc process_buffer {} {
 
     while {($count > 0) && ([string length $tmp_buf] >= $count)} {
         set cmd [string range $tmp_buf 0 $count]
-        ltkdebug \"count=$count have=[string length $tmp_buf] bufl=[string length $buffer] cmd=$cmd<=\"
+        #ltkdebug \"count=$count have=[string length $tmp_buf] bufl=[string length $buffer] cmd=$cmd<=\"
 
         set buffer [string range $tmp_buf [expr $count+1] end]
         
@@ -737,7 +765,11 @@ fconfigure stdout -encoding utf-8
         (with-ltk-handlers ()
           (unless remotep
             (init-tcl :debug-tcl debug-tcl))
-          (init-wish)))
+          (when remotep
+            (send-wish "fconfigure $server -blocking 0 -translation lf -encoding utf-8")
+            (flush-wish))
+          (prog1 (init-wish)
+            (ensure-timer))))
       ;; By default, we don't automatically create a new connection, because the
       ;; user may have simply been careless and doesn't want to push the old
       ;; connection aside.  The NEW-WISH restart makes it easy to start another.
@@ -783,6 +815,14 @@ fconfigure stdout -encoding utf-8
   (push text (wish-output-buffer *wish*))
   (unless *buffer-for-atomic-output*
     (flush-wish)))
+
+(defun check-for-errors ()
+  (let ((wstream (wish-stream *wish*)))
+    (when (can-read wstream)
+      (let ((event (verify-event (read-preserving-whitespace wstream nil nil))))
+        (setf (wish-event-queue *wish*)
+              (append (wish-event-queue *wish*) (list event))))))
+  nil)
 
 (defun flush-wish ()
   (let ((buffer (nreverse (wish-output-buffer *wish*))))
@@ -944,6 +984,28 @@ fconfigure stdout -encoding utf-8
      (error 'tk-error :message (second event)))
     (t event)))
 
+(defvar *in-read-event* ()
+  "A list of ltk-connection objects that are currently waiting to read an event.")
+
+(defun ping-all-wishes ()
+  (dolist (*wish* *in-read-event*)
+    (format-wish "keepalive")))
+
+(defvar *ltk-ping-timer* nil)
+(defvar *ping-interval-seconds* 300)
+
+(defun ensure-timer ()
+  (unless *ltk-ping-timer*
+    #+sbcl
+    (let ((timer (make-timer (lambda () (ping-all-wishes))
+                             :name "Ltk ping timer")))
+      (schedule-timer timer *ping-interval-seconds*
+                      :repeat-interval *ping-interval-seconds*
+                      :absolute-p nil)
+      (setf *ltk-ping-timer* timer))
+    #+(not sbcl)
+    nil))
+
 (defun read-event (&key (blocking t) (no-event-value nil))
   "read the next event from wish, return the event or nil, if there is no
 event to read and blocking is set to nil"
@@ -951,8 +1013,10 @@ event to read and blocking is set to nil"
       (let ((wstream (wish-stream *wish*)))
 	(flush-wish)
         (if (or blocking (can-read wstream))
-            (verify-event (read-preserving-whitespace wstream nil nil))
-          no-event-value))))
+            (verify-event
+             (let ((*in-read-event* (cons *wish* *in-read-event*)))
+               (read-preserving-whitespace wstream nil nil)))
+            no-event-value))))
 
 (defun read-data ()
   "Read data from wish. Non-data events are postponed, bogus messages (eg.
@@ -968,8 +1032,7 @@ event to read and blocking is set to nil"
          ((eq (first data) :data)
           (dbg "read-data: ~s~%" data)
           (return (second data)))
-         ((or (eq (first data) :event)
-              (eq (first data) :callback))
+         ((find (first data) #(:event :callback :keepalive))
           (dbg "postponing event: ~s~%" data)
           (setf (wish-event-queue *wish*)
                 (append (wish-event-queue *wish*) (list data))))
@@ -1245,9 +1308,9 @@ can be passed to AFTER-CANCEL"
                                                                              (add-callback (name widget) command)
                                                                              (name widget))))
       (command-radio-button command "~@[ -command {callbackval ~{~a $~a~}}~]" (and command 
-                                                                               (progn
-                                                                                 (add-callback (name widget) command)
-                                                                                 (list (name widget) (radio-button-variable widget))))
+                        						       (progn
+										 (add-callback (name widget) command)
+										 (list (name widget) (radio-button-variable widget))))
        "function to call when the action of the widget is executed")
       
       (command-scrollbar command "~@[ -command {callback ~a}~]" (and command 
@@ -1944,9 +2007,9 @@ methods, e.g. 'configure'."))
                (tk-number x) (tk-number y))
   menu)
 
-(defgeneric menu-delete (menu index))
-(defmethod menu-delete ((menu menu) index)
-  (format-wish "~A delete ~A" (widget-path menu) index)
+(defgeneric menu-delete (menu index &optional end))
+(defmethod menu-delete ((menu menu) index &optional (end :end))
+  (format-wish "~A delete ~A ~@[ ~(~A~)~]" (widget-path menu) index end)
   menu)
 
 ;;; standard button widget
@@ -2095,15 +2158,22 @@ methods, e.g. 'configure'."))
 (defwrapper progressbar (widget tkvariable) () "ttk::progressbar")
 
 
-(defgeneric add-pane (window widget))
-(defmethod add-pane ((pw paned-window) (w widget))
-  (format-wish "~a add ~a" (widget-path pw) (widget-path w))
+(defgeneric add-pane (window widget &rest options))
+(defmethod add-pane ((pw paned-window) (w widget) &rest options)
+  (format-wish "~a add ~a ~{ -~(~a~) {~/ltk::down/}~}" (widget-path pw) (widget-path w) options)
   pw)
 
 (defgeneric forget-pane (window widget))
 (defmethod forget-pane ((pw paned-window) (w widget))
   (format-wish "~a forget ~a" (widget-path pw) (widget-path w))
   pw)
+
+
+(defgeneric pane-configure (l i &rest options))
+(defmethod pane-configure ((p paned-window) (w widget)  &rest options)
+  (format-wish "~a paneconfigure ~a ~{ -~(~a~) {~/ltk::down/}~}" (widget-path p) (widget-path w)  options)
+  p)
+
 
 (defgeneric sash-coord (window index))
 
@@ -2181,7 +2251,7 @@ a list of numbers may be given"
 
 (defgeneric listbox-configure (l i &rest options))
 (defmethod listbox-configure ((l listbox) index &rest options)
-  (format-wish "~a itemconfigure ~a ~{ -~(~a~) {~/ltk::down~/}~}" (widget-path l) index options)
+  (format-wish "~a itemconfigure ~a ~{ -~(~a~) {~/ltk::down/}~}" (widget-path l) index options)
   l)
 
 (defgeneric listbox-nearest (listbox y))
@@ -2417,17 +2487,28 @@ a list of numbers may be given"
 
 (defclass scrolled-frame (frame)
   ((frame-class :accessor frame-class :initform 'frame :initarg :frame-class)
+   (canvas      :accessor canvas      :initform nil    :initarg :canvas)
    (inner :accessor interior)
    (hscroll :accessor hscroll)
    (vscroll :accessor vscroll)
    ))
+
+(defmethod reset-scroll ((sf scrolled-frame))
+  (format-wish "after idle {resetScroll ~a}" (widget-path (canvas sf))))
+
+(defmethod scroll-to-top ((sf scrolled-frame))
+  (format-wish "~a yview moveto 0" (widget-path (canvas sf)))
+  )
+
+;  (flush-wish))
+
 
 (defmethod initialize-instance :after ((sf scrolled-frame) &key background)
   (let* ((canvas (make-instance 'canvas :master sf :background background))
          (f (if background
                 (make-instance (frame-class sf) :master canvas :background background)
                 (make-instance (frame-class sf) :master canvas))))
-
+    (setf (canvas sf) canvas)
     (setf (interior sf) f) ;; (make-instance 'frame :master f :background background))
     (setf (hscroll sf) (make-instance 'scrollbar :master sf :orientation "horizontal"))
     (setf (vscroll sf) (make-instance 'scrollbar :master sf :orientation "vertical"))
@@ -2454,8 +2535,8 @@ bind ~a <Configure> [list resetScroll ~a]
      (widget-path (hscroll sf)) (widget-path canvas)
      (widget-path (vscroll sf)) (widget-path canvas)
      (widget-path canvas) (widget-path f)
-     (widget-path canvas)
-     (widget-path f) (widget-path canvas) 
+     (widget-path canvas) 
+     (widget-path f) (widget-path canvas)
      )
     ))
 
@@ -2604,6 +2685,12 @@ set y [winfo y ~a]
    (handle :accessor handle :initarg :handle))
   )
 
+(defmethod print-object ((self canvas-item) stream)
+  (print-unreadable-object (self stream :type t :identity nil)
+    (when (slot-boundp self 'handle)
+      (format stream "~a" (handle self)))))
+
+
 (defmethod canvas ((canvas canvas)) canvas)
 
 (defun make-canvas (master &key (width nil) (height nil) (xscroll nil) (yscroll nil))
@@ -2658,7 +2745,7 @@ set y [winfo y ~a]
 (defmethod coords ((item canvas-item))
      (list 0 0)				; not implemented yet
      )
- 
+
 (defun format-number (stream number)
   (cond
    ((complexp number)
@@ -2702,9 +2789,23 @@ set y [winfo y ~a]
     (format-wish "~a bind ~a ~a {sendevent ~A %x %y %k %K %w %h %X %Y %b}" (widget-path canvas) item event name))
   canvas)
 
+(defmethod tagbind ((canvas canvas) tag event fun &key exclusive)
+  "bind fun to event of the widget w"
+  (let ((name (create-name)))
+    (add-callback name fun)
+    (format-wish "~a bind ~(~a~) ~a {sendevent ~A %x %y %k %K %w %h %X %Y %b ~:[~;;break~]}" (widget-path canvas) tag event name exclusive))
+  canvas)
+
+
 (defmethod bind ((w canvas-item) event fun &key append exclusive)
   (declare (ignore append exclusive))
   (itembind (canvas w) (handle w) event fun))
+
+(defmethod tcl-bind ((w canvas-item) event code &key append exclusive)
+  (declare (ignore append exclusive))
+  (format-wish "~a bind ~a ~a {~a}"
+               (widget-path (canvas w)) (handle w) event code))
+  
 
 (defgeneric scrollregion (canvas x0 y0 x1 y1))
 (defmethod scrollregion ((c canvas) x0 y0 x1 y1)
@@ -2851,7 +2952,7 @@ set y [winfo y ~a]
         ((eq itemtype :arc)
          (format stream "~a create arc ~a ~a ~a ~a " cpath (number) (number) (number) (number))
          (args))
-      
+
         ((eq itemtype :oval)
          (format stream "~a create oval ~a ~a ~a ~a " cpath (number) (number) (number) (number))
          (args))
@@ -3017,13 +3118,13 @@ set y [winfo y ~a]
   (format-wish "searchnext ~a ~a" (widget-path txt) pattern)
   txt)
 
-(defgeneric tag-configure (txt tag option value))
-(defmethod tag-configure ((txt text) tag option value)
-  (format-wish "~a tag configure ~a -~(~a~) {~(~a~)}" (widget-path txt)
+(defgeneric tag-configure (txt tag option value &rest others))
+(defmethod tag-configure ((txt text) tag option value &rest others)
+  (format-wish "~a tag configure ~a~{ -~(~a~) {~/ltk::down/}~}" (widget-path txt)
 	       (if (stringp tag)
 		   tag
 		 (format nil "~(~a~)" tag))
-	       option value)
+	       (list* option value others))
   txt)
 
 (defgeneric tag-bind (txt tag event fun))
@@ -3203,6 +3304,14 @@ set y [winfo y ~a]
                (list* option value others))
   item)
 
+(defmethod tag-configure ((c canvas) tag option value &rest others)
+  (format-wish "~a itemconfigure ~a~{ -~(~a~) {~/ltk::down/}~}" (widget-path c)
+	       (if (stringp tag)
+		   tag
+		 (format nil "~(~a~)" tag))
+	       (list* option value others))
+  c)
+
 ;;; for tkobjects, the name of the widget is taken
 (defmethod configure (widget option (value tkobject) &rest others)
   (format-wish "~A configure -~(~A~) {~A} ~{ -~(~a~) {~(~a~)}~}" (widget-path widget) option (widget-path value) others)
@@ -3303,6 +3412,21 @@ set y [winfo y ~a]
   (format-wish "wm title ~a {~a}" (widget-path w) title)
   w)
 
+#-:tk84
+(defgeneric wm-manage (widget))
+#-:tk84
+(defmethod wm-manage ((w widget))
+  (format-wish "wm manage ~a" (widget-path w))
+  w)
+
+#-:tk84
+(defgeneric wm-forget (widget))
+#-:tk84
+(defmethod wm-forget ((w widget))
+  (format-wish "wm forget ~a" (widget-path w))
+  w)
+  
+
 (defgeneric wm-state (widget))
 (defmethod wm-state ((w widget))
   (format-wish "senddatastring [wm state ~a]" (widget-path w))
@@ -3347,7 +3471,22 @@ set y [winfo y ~a]
 (defgeneric geometry (toplevel))
 (defmethod geometry ((tl widget))
   (format-wish "senddatastring [wm geometry ~a]" (widget-path tl))
-  (read-data))
+  (let ((str (read-data)))
+    (multiple-value-bind (width letterx) (parse-integer str :junk-allowed t)
+      (assert (char= (char str letterx) #\x))
+      (multiple-value-bind (height letter+)
+          (parse-integer str :start (1+ letterx) :junk-allowed t)
+        (assert (or (char= (char str letter+) #\+)
+                    (char= (char str letter+) #\-)))
+        (multiple-value-bind (x letter+)
+            (parse-integer str :start (1+ letter+) :junk-allowed t)
+          (assert (or (char= (char str letter+) #\+)
+                      (char= (char str letter+) #\-)))
+          (let ((y (parse-integer str :start (1+ letter+))))
+            (when (char= (char str letter+) #\-)
+              (let ((sh (screen-height tl)))
+                (setf y (- sh y))))
+            (list width height x y)))))))
 
 (defgeneric (setf geometry) (geometry widget))
 (defmethod (setf geometry) (geometry (tl widget))
@@ -3357,7 +3496,7 @@ set y [winfo y ~a]
 (defgeneric set-geometry (toplevel width height x y))
 (defmethod set-geometry ((tl widget) width height x y)
   ;;(format-wish "wm geometry ~a ~ax~a+~a+~a" (widget-path tl) width height x y)
-  (format-wish "wm geometry ~a ~ax~a~@D~@D" (widget-path tl)
+  (format-wish "wm geometry ~a ~ax~a+~D+~D" (widget-path tl)
                (tk-number width) (tk-number height) (tk-number x) (tk-number y))
   tl)
 
@@ -3369,7 +3508,7 @@ set y [winfo y ~a]
 
 (defgeneric set-geometry-xy (toplevel x y))
 (defmethod set-geometry-xy ((tl widget) x y)
-  (format-wish "wm geometry ~a ~@D~@D" (widget-path tl) (tk-number x) (tk-number y))
+  (format-wish "wm geometry ~a +~D+~D" (widget-path tl) (tk-number x) (tk-number y))
   tl)
  
 (defgeneric on-close (toplevel fun))
@@ -3542,11 +3681,11 @@ set y [winfo y ~a]
   (read-keyword))
 
 
-(defun ask-yesno(message &optional (title ""))
-  (equal (message-box message title "yesno" "question") :yes))
+(defun ask-yesno(message &optional (title "") &key parent)
+  (equal (message-box message title "yesno" "question" :parent parent) :yes))
 
-(defun ask-okcancel(message &optional (title ""))
-  (equal (message-box message title "okcancel" "question") :ok))
+(defun ask-okcancel(message &optional (title "") &key parent)
+  (equal (message-box message title "okcancel" "question" :parent parent) :ok))
 
 (defun do-msg(message  &optional (title "") parent)
   (message-box message title "ok" "info" :parent parent))
@@ -3797,6 +3936,9 @@ set y [winfo y ~a]
              (evp (rest params))
              (event (construct-tk-event evp)))
         (callback callback (list event))))
+      ((eq (first event) :keepalive)
+       (format *trace-output* "Ping from wish: ~{~A~^~}~%" (rest event))
+       (finish-output *trace-output*))
      (t
       (handle-output
        (first event) (rest event))))))
@@ -4084,7 +4226,7 @@ When an error is signalled, there are four things LTk can do:
 
 ;; defwidget the better version :)
 (eval-when (:compile-toplevel :load-toplevel :execute)
-
+  
   (defmacro defwidget (namespec parent slots widgetspecs &rest body)
     (let* ((name (if (listp namespec)
 		     (second namespec)
@@ -4093,19 +4235,20 @@ When an error is signalled, there are four things LTk can do:
 			 (first namespec)
 			 'self)))
       (unless name
-	(error "defwidget: no name given"))
-
+        (error "defwidget: no name given"))
+      
       (unless (listp parent)
 	(error "defwidget: parent class(es) specifier \"~a\" needs to be a list of symbols" parent))
-
+      
       (unless (listp slots)
 	(error "defwidget: slots \"~a\" needs to be a list of slot specifiers" slots))
-
+      
       (unless (listp widgetspecs)
 	(error "defwidget: widgets \"~a\" need to be a list of widget specifiers" widgetspecs))
-
+      
       (when (null widgetspecs)
-	(warn "defwidget: widget list is empty."))
+	;; (warn "defwidget: widget list is empty.")
+        )
       
       (let (defs wnames events accessors methods)
 	(labels ((on-type (subwidget methodname)
@@ -4788,6 +4931,7 @@ When an error is signalled, there are four things LTk can do:
       ,@(mapcar (lambda (w)
 		  `(configure ,w :cursor :watch))
 		widgets)
+      (flush-wish)
       ,@body)
     ,@(mapcar (lambda (w)
 		  `(configure ,w :cursor ""))
