@@ -1,8 +1,9 @@
 #|
 
- This software is Copyright (c) 2003-2008  Peter Herth <herth@peter-herth.de>
- Portions Copyright (c) 2005-2008 Thomas F. Burdick
- Portions Copyright (c) 2006-2008 Cadence Design Systems
+ This software is Copyright (c) 2003-2010  Peter Herth <herth@peter-herth.de>
+ Portions Copyright (c) 2005-2010 Thomas F. Burdick
+ Portions Copyright (c) 2006-2010 Cadence Design Systems
+ Portions Copyright (c) 2010 Daniel Herring
 
  The authors grant you the rights to distribute
  and use this software as governed by the terms
@@ -122,8 +123,8 @@ toplevel             x
 (defpackage :ltk
   (:use :common-lisp
         #+(or :cmu :scl) :ext
-	#+:sbcl :sb-ext
-	)
+        #+:sbcl :sb-ext
+        )
   (:export #:ltktest                           
            #:*ltk-version*
            #:*cursors*
@@ -178,7 +179,7 @@ toplevel             x
            #:clipboard-clear
            #:clipboard-get
            #-:tk84
-	   #:combobox
+           #:combobox
            #:command
            #:coords
            #:configure
@@ -247,7 +248,7 @@ toplevel             x
            #:listbox
            #:listbox-append
            #:listbox-clear
-	   #:listbox-delete
+           #:listbox-delete
            #:listbox-configure
            #:listbox-get-selection
            #:listbox-nearest
@@ -286,8 +287,8 @@ toplevel             x
            #:move
            #:move-all
            #:normalize
-	   #-:tk84
-	   #:notebook
+           #-:tk84
+           #:notebook
            #:on-close
            #:on-focus
            #:pack
@@ -369,29 +370,35 @@ toplevel             x
            #:wm-title
            #:wm-state
            #:with-hourglass
-	   #:notebook-index
-	   #:notebook-add
-	   #:notebook-tab
-	   #:notebook-forget
-	   #:notebook-hide
-	   #:notebook-identify
-	   #:notebook-select
-	   #:notebook-events
-	   #:notebook-enable-traversal
+           #:notebook-index
+           #:notebook-add
+           #:notebook-tab
+           #:notebook-forget
+           #:notebook-hide
+           #:notebook-identify
+           #:notebook-select
+           #:notebook-events
+           #:notebook-enable-traversal
            #:defwidget
            #:progressbar
-	   #:length
-	   #:mode
-	   #:maximum
-	   #:phase
-	   #:separator
-	   #:sizegrip
-	   #:treeview
-	   #:treeview-delete
-	   #:column-configure
-	   #:children
-	   #:treeview-focus
-	   #:treeview-exists
+           #:length
+           #:mode
+           #:maximum
+           #:phase
+           #:separator
+           #:sizegrip
+           #:treeview
+           #:treeview-delete
+           #:column-configure
+           #:children
+           #:treeview-focus
+           #:treeview-exists
+           #:dictionary-plist
+           #:treeview-insert
+           #:treeview-item
+           #:treeview-column
+           #:treeview-heading
+           #:treeview-move
            #:self
            #:reset-scroll
            #:scroll-to-top
@@ -758,9 +765,10 @@ fconfigure stdout -encoding utf-8
   ;; open subprocess
   (if (null (wish-stream *wish*))
       (progn
-	(setf (wish-stream *wish*) (or stream (do-execute *wish-pathname* *wish-args*))
-	      (wish-call-with-condition-handlers-function *wish*)
-	      (apply #'make-condition-handler-function keys))
+        (setf (wish-stream *wish*) (or stream (do-execute *wish-pathname* *wish-args*)))
+        #+mswindows (sleep 1)
+        (setf (wish-call-with-condition-handlers-function *wish*)
+              (apply #'make-condition-handler-function keys))
 	;; perform tcl initialisations
         (with-ltk-handlers ()
           (unless remotep
@@ -774,11 +782,11 @@ fconfigure stdout -encoding utf-8
       ;; user may have simply been careless and doesn't want to push the old
       ;; connection aside.  The NEW-WISH restart makes it easy to start another.
       (restart-case (ltk-error "There is already an inferior wish.")
-	(new-wish ()
-	  :report "Create an additional inferior wish."
-	  (push *wish* *wish-connections*)
-	  (setf *wish* (make-ltk-connection :remotep remotep))
-	  (apply #'start-wish keys)))))
+        (new-wish ()
+          :report "Create an additional inferior wish."
+          (push *wish* *wish-connections*)
+          (setf *wish* (make-ltk-connection :remotep remotep))
+          (apply #'start-wish keys)))))
 
 ;;; CMUCL, SCL, and SBCL, use a two-way-stream and the constituent
 ;;; streams need to be closed.
@@ -2646,10 +2654,107 @@ set y [winfo y ~a]
   (format-wish "~a exists ~a" (widget-path tree) item)
   (equal (read-data) 1))
 
-(defgeneric treeview-focus (tree item))
-(defmethod treeview-focus ((tree treeview) item)
-  (format-wish "~a exists ~a" (widget-path tree) item))
+(defgeneric treeview-focus (tree))
+(defmethod treeview-focus ((tree treeview))
+  (format-wish "senddatastring [~a focus]" (widget-path tree))
+  (read-data))
 
+(defgeneric (setf treeview-focus) (item tree))
+(defmethod (setf treeview-focus) (item tree)
+  (format-wish "~a focus ~a" (widget-path tree) item))
+
+(defun dictionary-plist (string)
+  "return a plist representing the TCL dictionary"
+  ;; crude but rather effective
+  (do* ((*package* (find-package :keyword))
+        (length (length string))
+        (plist nil)
+        (key (position #\- string)
+             (position #\- string :start (1+ val)))
+        (val (position #\Space string :start (if key (1+ key) length))
+             (position #\Space string :start (if key (1+ key) length))))
+       ((null val)
+        (reverse plist))
+    (push (read-from-string string t t :start (1+ key)) plist)
+    (push (read-from-string string t t :start (1+ val)) plist)))
+
+(defun tk-princ (stream arg colon at)
+  "Like princ (format ~a), but convert a lisp list to a Tk list."
+  (declare (ignore colon at))
+  (cond ((or (null arg)
+             (and (stringp arg)
+                  (string= arg "")))
+         (format stream "{}"))
+        ((listp arg)
+         (format stream "{~{~/ltk::tk-princ/~^ ~}}" arg))
+        (t
+         (format stream "~a" arg))))
+
+(defun treeview-insert (tree &rest options
+                        &key (parent "{}") (index "end") (id (create-name)) &allow-other-keys)
+  "Creates a new item.  Returns its id.  See also the treeitem class."
+  ;; Remove the keys that aren't optional in Tcl.
+  (remf options :parent)
+  (remf options :index)
+  (format-wish "~a insert ~a ~a~{ -~(~a~) ~/ltk::tk-princ/~}"
+               (widget-path tree)
+               parent
+               index
+               options)
+  #| Note:
+  It is tempting to use senddata/read-data and let Tk allocate an id.
+  BAD IDEA!  Process swapping causes a massive slowdown (observed 100x longer).
+  |#
+  id)
+
+(defun treeview-item (tree column &rest options)
+  "Query or modify the options for the specified item."
+  (cond
+    ((second options) ;; modify
+     (format-wish "~a item ~a~{ -~(~a~) ~/ltk::tk-princ/~}"
+                  (widget-path tree) column options))
+    (t ;; query
+     (format-wish "senddatastring [~a item ~a ~@[ -~(~a~)~]]"
+                  (widget-path tree) column (car options))
+     (read-data))))
+
+(defun treeview-column (tree column &rest options)
+  "Query or modify the options for the specified column."
+  (cond
+    ((second options) ;; modify
+     (format-wish "~a column ~a~{ -~(~a~) ~/ltk::tk-princ/~}"
+                  (widget-path tree) column options))
+    (t ;; query
+     (format-wish "senddatastring [~a column ~a ~@[ -~(~a~)~]]"
+                  (widget-path tree) column (car options))
+     (read-data))))
+
+(defun treeview-heading (tree column &rest options
+                         &key command &allow-other-keys
+                         &aux (path (widget-path tree)))
+  "Query or modify the heading options for the specified column."
+  (cond
+    ((second options) ;; modify
+     (when command
+       ;; register the callback
+       (let ((cbname (format nil "~a:~a" path column)))
+         (add-callback cbname command)
+         (setf (getf options :command)
+               (concatenate 'string "{callback " cbname "}"))))
+     (format-wish "~a heading ~a~{ -~(~a~) ~/ltk::tk-princ/~}"
+                  path column options))
+    (t ;; query
+     (format-wish "senddatastring [~a heading ~a ~@[ -~(~a~)~]]"
+                  path column (car options))
+     (read-data))))
+
+(defun treeview-move (tree item &optional parent index)
+  "Moves item to position index in parent's list of children."
+  (format-wish "~a move ~a ~a ~a"
+               (widget-path tree)
+               item
+               (or parent "{}")
+               (or index "end")))
 
 (defclass treeitem (tkobject)
   ((tree :accessor tree :initform nil :initarg :tree)
@@ -2660,11 +2765,9 @@ set y [winfo y ~a]
 (defmethod initialize-instance :after ((item treeitem) &key)
   (setf (name item) (create-name))
   (format-wish "~a insert ~a end -id ~a -text \"~a\"" (widget-path (tree item)) (if (master item)
-										(name (master item))
-										"{}")
-	       (name item) (text item)))
-
-  
+                                                                                    (name (master item))
+                                                                                    "{}")
+               (name item) (text item)))
 
 ;;; canvas widget
 
