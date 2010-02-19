@@ -832,6 +832,7 @@ fconfigure stdout -encoding utf-8
               (append (wish-event-queue *wish*) (list event))))))
   nil)
 
+(defparameter *max-line-length* 1000)
 (defun flush-wish ()
   (let ((buffer (nreverse (wish-output-buffer *wish*))))
     (when buffer
@@ -850,6 +851,22 @@ fconfigure stdout -encoding utf-8
              (let ((content (format nil "~{~a~%~}" buffer)))
                (format stream "~d ~a~%"(length content) content)
                (dbg "~d ~a~%" (length content) content)))
+            (*max-line-length*
+             (format stream "buffer_text {~D }~%" len)
+             (dbg "buffer_text {~D }~%" len)             
+             (dolist (string buffer)
+               (loop while (> (length string) *max-line-length*)
+                     do
+                  (let ((sub (subseq string 0 *max-line-length*)))
+                    (setf string (subseq string *max-line-length*))
+                    (format stream "buffer_text \"~A\"~%" (tkescape2 sub))
+                    (dbg "buffer_text \"~A\"~%" (tkescape2 sub))))
+               (format stream "buffer_text \"~A~%\"~%" (tkescape2 string))
+               (dbg "buffer_text \"~A\"~%" (tkescape2 string))
+               )
+             (format stream "process_buffer~%")
+             (dbg "process_buffer~%")
+             )
             (t
              (format stream "buffer_text {~D }~%" len)
              (dbg "buffer_text {~D }~%" len)
@@ -858,7 +875,9 @@ fconfigure stdout -encoding utf-8
                (dbg "buffer_text \"~A\"~%" (tkescape2 string)))
 
              (format stream "process_buffer~%")
-             (dbg "process_buffer~%")))
+             (dbg "process_buffer~%")
+             ))
+          
           (finish-output stream)
 
           #+nil(loop for string in buffer
