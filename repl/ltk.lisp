@@ -3889,9 +3889,13 @@ set y [winfo y ~a]
 		    (min 3 (max 0 (ceiling debug-setting)))
 		    debug-setting))
 	 (cons (assoc (list debug) *debug-settings-table* :test #'intersection)))
-    (if cons
-	(cdr cons)
-	(error "Unknown debug setting ~S" debug))))
+    (cond
+      ((or (typep debug 'class)
+           (and (symbolp debug-setting)
+                (find-class debug)))
+       debug)
+      (cons (cdr cons))
+      (t (error "Unknown debug setting ~S" debug)))))
 
 (defun make-call-with-condition-handlers-function (handler-class)
   "Return a function that will call a thunk with the appropriate condition handlers in place."
@@ -4781,9 +4785,10 @@ tk input to terminate"
     - Throw to ltk:modal-toplevel, which will leave the condition unhandled."))
 
 (defclass ltk-condition-handler (frame)
-  ((prototype? :initform nil :initarg :prototype
+  ((prototypep :initform nil :initarg :prototype
                :documentation
-               "When set, do not actually create a Tk widget, this instance exists for purposes of generic-function dispatch only.")))
+               "When set, do not actually create a Tk widget, this instance exists for purposes of generic-function dispatch only.")
+   (condition :initform nil :initarg :condition :accessor handler-condition)))
 
 (defmethod initialize-instance :around ((handler ltk-condition-handler) &key prototype
                                         &allow-other-keys)
@@ -4796,8 +4801,7 @@ tk input to terminate"
 ;;; subclassed and adapted.
 
 (defclass graphical-condition-handler (ltk-condition-handler)
-  ((condition :initform nil :initarg :condition :accessor handler-condition)
-   (debugp :initform t :initarg :debugp :accessor debugp)
+  ((debugp :initform t :initarg :debugp :accessor debugp)
    (details-pane :accessor details-pane
 		 :documentation "The scrolled-text where we display the stacktrace.")))
 
