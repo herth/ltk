@@ -484,7 +484,7 @@ toplevel             x
 		  (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* "0.911")
+(defvar *ltk-version* "0.911-repl")
 
 ;;; global var for holding the communication stream
 (defstruct (ltk-connection (:constructor make-ltk-connection (&key remotep))
@@ -3892,7 +3892,7 @@ set y [winfo y ~a]
     (cond
       ((or (typep debug 'class)
            (and (symbolp debug-setting)
-                (find-class debug)))
+                (ignore-errors (find-class debug))))
        debug)
       (cons (cdr cons))
       (t (error "Unknown debug setting ~S" debug)))))
@@ -4719,17 +4719,21 @@ tk input to terminate"
 (defmacro with-modal-toplevel ((var &rest toplevel-initargs) &body body)
   `(let* ((,var (make-instance 'toplevel ,@toplevel-initargs))
           (*exit-mainloop* nil)
-          (*buffer-for-atomic-output* nil))
+          ;(*buffer-for-atomic-output* nil)
+          )
+     (send-wish "update idletasks")
+     (flush-wish)
     (unwind-protect
          (catch 'modal-toplevel
 	   (block nil
+             (on-close ,var (lambda () (return)))
 	     (grab ,var)
-	     (on-close ,var (lambda () (return)))
 	     (multiple-value-prog1
 		 (progn ,@body)
 	       (mainloop))))
       (grab-release ,var)
-      (withdraw ,var))))
+      (withdraw ,var)
+      (flush-wish))))
 
 ;;; Basic graphical error/warning/etc handling
 
@@ -4831,7 +4835,7 @@ tk input to terminate"
       (t "An internal error has occured."))))
 
 (defmethod compute-buttons ((handler graphical-condition-handler) master)
-  (let ((ok (make-instance 'button :master master :text "OK"))
+  (let ((ok (make-instance 'button :master master :text "Dismiss"))
 	(yes (make-instance 'button :master master :text "Yes"))
 	(no (make-instance 'button :master master :text "No"))
 	(show (make-instance 'button :master master :text "Show Details"))
