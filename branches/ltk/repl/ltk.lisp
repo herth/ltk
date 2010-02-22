@@ -681,7 +681,7 @@ proc moveToStart {sb} {
 
 (defun init-tcl (&key debug-tcl)
   (let ((translation "lf"))
-    #+(and :lispworks :windows) (setf translation "crlf")
+    #+(and (or windows win32) (not sbcl)) (setf translation "crlf")
 
     (format (wish-stream *wish*) "set buffer \"\"
 set server stdout
@@ -764,7 +764,7 @@ fconfigure stdout -encoding utf-8
   (if (null (wish-stream *wish*))
       (progn
         (setf (wish-stream *wish*) (or stream (do-execute *wish-pathname* *wish-args*)))
-        #+mswindows (sleep 1)
+        #+(or mswindows windows win32) (sleep 1)
         (setf (wish-call-with-condition-handlers-function *wish*)
 	      (make-call-with-condition-handlers-function debugger-class))
 	;; perform tcl initialisations
