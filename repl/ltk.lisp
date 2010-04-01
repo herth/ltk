@@ -1017,19 +1017,20 @@ fconfigure stdout -encoding utf-8
     (format-wish "keepalive")))
 
 (defvar *ltk-ping-timer* nil)
-(defvar *ping-interval-seconds* 300)
+(defvar *ping-interval-seconds* nil)
 
 (defun ensure-timer ()
   (unless *ltk-ping-timer*
-    #+sbcl
-    (let ((timer (make-timer (lambda () (ping-all-wishes))
-                             :name "Ltk ping timer")))
-      (schedule-timer timer *ping-interval-seconds*
-                      :repeat-interval *ping-interval-seconds*
-                      :absolute-p nil)
-      (setf *ltk-ping-timer* timer))
-    #+(not sbcl)
-    nil))
+    (when *ping-interval-seconds*
+      #+sbcl
+      (let ((timer (make-timer (lambda () (ping-all-wishes))
+                               :name "Ltk ping timer")))
+        (schedule-timer timer *ping-interval-seconds*
+                        :repeat-interval *ping-interval-seconds*
+                        :absolute-p nil)
+        (setf *ltk-ping-timer* timer))
+      #+(not sbcl)
+      nil)))
 
 (defun read-event (&key (blocking t) (no-event-value nil))
   "read the next event from wish, return the event or nil, if there is no
@@ -3899,14 +3900,19 @@ set y [winfo y ~a]
 
 (defun make-call-with-condition-handlers-function (handler-class)
   "Return a function that will call a thunk with the appropriate condition handlers in place."
-  (let ((warning-handler (make-condition-handler-function :class handler-class :title "Warning"))
-	(error-handler (make-condition-handler-function :class handler-class :title "Error"))
-	(generic-handler (make-condition-handler-function :class handler-class :title "Attention")))
-    (lambda (thunk)
-      (handler-bind ((condition generic-handler)
-		     (warning warning-handler)
-		     (error error-handler))
-	(funcall thunk)))))
+  (if handler-class
+      (let ((warning-handler (make-condition-handler-function
+                              :class handler-class :title "Warning"))
+            (error-handler (make-condition-handler-function
+                            :class handler-class :title "Error"))
+            (generic-handler (make-condition-handler-function
+                              :class handler-class :title "Attention")))
+        (lambda (thunk)
+          (handler-bind ((condition generic-handler)
+                         (warning warning-handler)
+                         (error error-handler))
+            (funcall thunk))))
+      #'funcall))
 
 ;;;; main event loop, runs until stream is closed by wish (wish exited) or
 ;;;; the variable *exit-mainloop* is set
@@ -4722,7 +4728,6 @@ tk input to terminate"
           ;(*buffer-for-atomic-output* nil)
           )
      (send-wish "update idletasks")
-     (flush-wish)
     (unwind-protect
          (catch 'modal-toplevel
 	   (block nil
@@ -4730,6 +4735,7 @@ tk input to terminate"
 	     (grab ,var)
 	     (multiple-value-prog1
 		 (progn ,@body)
+               (flush-wish)
 	       (mainloop))))
       (grab-release ,var)
       (withdraw ,var)
@@ -4738,22 +4744,24 @@ tk input to terminate"
 ;;; Basic graphical error/warning/etc handling
 
 (defun make-condition-handler-function (&key (class 'graphical-condition-handler)
-			       (title "Error"))
+                                        (title "Error"))
   "Create a function appropriate for use in a handler-bind."
   (declare (optimize (debug 3)))
-  (let ((prototype (make-instance class :prototype t)))
-    (lambda (condition)
-      (when (handle-condition-p prototype condition)
-	(restart-case
-	    (with-modal-toplevel (tl :title title)
-	      (let ((debugger (make-instance class :master tl :condition condition)))
-		(on-close tl (lambda ()
-			       (abort-condition-handler debugger)
-			       (return)))
-		(pack debugger)))
-	  (send-to-debugger (condition)
-	    :report "Send condition to the debugger"
-	    (invoke-debugger condition)))))))
+  (if class
+      (let ((prototype (make-instance class :prototype t)))
+        (lambda (condition)
+          (when (handle-condition-p prototype condition)
+            (restart-case
+                (with-modal-toplevel (tl :title title :height 40 :width 300)
+                  (let ((debugger (make-instance class :master tl :condition condition)))
+                    (on-close tl (lambda ()
+                                   (abort-condition-handler debugger)
+                                   (return)))
+                    (pack debugger)))
+              (send-to-debugger (condition)
+                :report "Send condition to the debugger"
+                (invoke-debugger condition))))))
+      (constantly nil)))
 
 ;;; The protocol for graphical condition handlers. This, and they must
 ;;; take :master, :condition and :prototype initargs.
