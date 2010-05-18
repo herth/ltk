@@ -353,6 +353,7 @@ toplevel             x
            #:window-width
            #:window-x
            #:window-y
+           #:window-transient
            #:make-ltk-connection
            #:widget-class-name
            #:with-atomic
@@ -3719,6 +3720,12 @@ set y [winfo y ~a]
   "give the y position of the toplevel in pixels"
   (format-wish "senddata [winfo rooty ~a];flush $server" (widget-path tl))
   (read-data))
+
+(defun window-transient (tl win)
+  "set the transient property of tl to be transient to win or nil"
+  (format-wish "wm transient ~a ~a" (widget-path tl) (if win
+                                                         (widget-path win)
+                                                         "{}")))
 
 ;;; misc functions
 
