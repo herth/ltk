@@ -296,6 +296,7 @@ toplevel             x
            #:pack-propagate
            #:paned-window
            #:photo-image
+           #:*ping-interval-seconds*
            #:place
            #:place-forget
            #:popup
