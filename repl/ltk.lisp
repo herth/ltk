@@ -214,6 +214,10 @@ toplevel             x
            #:event-width
            #:event-height
            #:focus
+           #:font-configure
+           #:font-create
+           #:font-delete
+           #:font-metrics
            #:force-focus
            #:forget-pane
            #:format-wish
@@ -3509,14 +3513,30 @@ set y [winfo y ~a]
 
 
 ;;; font functions
+;; use {~/ltk::down/} on the font name to match itemconfigure
+ 
+;;(defun font-actual ...)
 
-(defun font-create (name)
-  (format-wish "senddatastring [font create {~a}]" name)
-  (read-data))
+(defun font-configure (name &key family size weight slant underline overstrike)
+  (format-wish "font configure {~/ltk::down/}~@[ -family ~a~]~@[ -size ~a~]~@[ -weight ~(~a~)~]~@[ -slant ~(~a~)~]~@[ -underline ~a~]~@[ -overstrike ~a~]"
+               name family size weight slant underline overstrike))
 
-(defun font-metrics (font)
-  (format-wish "sendpropertylist [font metrics {~a}]" font)
-  (read-data))
+(defun font-create (name &key family size weight slant underline overstrike)
+  (format-wish "senddatastring [font create {~/ltk::down/}~@[ -family ~a~]~@[ -size ~a~]~@[ -weight ~(~a~)~]~@[ -slant ~(~a~)~]~@[ -underline ~a~]~@[ -overstrike ~a~]]"
+               name family size weight slant underline overstrike)
+   (read-data))
+ 
+(defun font-delete (&rest names)
+  (format-wish "font delete~{ {~/ltk::down/}~}" names))
+
+;;(defun font-families ...)
+;;(defun font-measure ...)
+
+ (defun font-metrics (font)
+   (format-wish "sendpropertylist [font metrics {~/ltk::down/}]" font)
+   (read-data))
+ 
+;;(defun font-names ...)
 
 ;;; wm functions
 
