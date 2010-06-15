@@ -595,6 +595,14 @@ toplevel             x
   (send-wish "catch {package require Ttk}")
   #-:tk84
   (send-wish "if {[catch {package require Ttk} err]} {tk_messageBox -icon error -type ok -message \"$err\"}")
+
+
+  (send-wish "proc debug { msg } {
+       global server
+       puts $server \"(:debug \\\"[escape $msg]\\\")\"
+       flush $server
+    } ")
+
   (send-wish "proc escape {s} {regsub -all {\\\\} $s {\\\\\\\\} s1;regsub -all {\"} $s1 {\\\"} s2;return $s2}")
   ;;; proc senddata {s} {puts "(data \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
   (send-wish "proc senddata {s} {global server; puts $server \"(:data [escape $s])\";flush $server}")
@@ -1038,6 +1046,10 @@ fconfigure stdout -encoding utf-8
       #+(not sbcl)
       nil)))
 
+(defun tcldebug (something)
+  (format t "tcl debug: ~a~%" something)
+  (finish-output))
+
 (defun read-event (&key (blocking t) (no-event-value nil))
   "read the next event from wish, return the event or nil, if there is no
 event to read and blocking is set to nil"
@@ -1064,6 +1076,8 @@ event to read and blocking is set to nil"
          ((eq (first data) :data)
           (dbg "read-data: ~s~%" data)
           (return (second data)))
+         ((eq (first data) :debug)
+          (tcldebug (second data)))
          ((find (first data) #(:event :callback :keepalive))
           (dbg "postponing event: ~s~%" data)
           (setf (wish-event-queue *wish*)
@@ -3979,6 +3993,8 @@ set y [winfo y ~a]
       ((eq (first event) :keepalive)
        (format *trace-output* "Ping from wish: ~{~A~^~}~%" (rest event))
        (finish-output *trace-output*))
+      ((eq (first event) :debug)
+       (tcldebug (second event)))
      (t
       (handle-output
        (first event) (rest event))))))
