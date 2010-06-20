@@ -19,7 +19,7 @@
 |#
 
 #|
-All tk commads as of version 8.4 with support information. "-" means not
+All tk commands as of version 8.4 with support information. "-" means not
 supported by purpose (look comment), "x" means supported, though some
 options may not be supported. 
 
