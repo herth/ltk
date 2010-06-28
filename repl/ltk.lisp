@@ -2975,6 +2975,9 @@ set y [winfo y ~a]
 (defmethod itemmove ((canvas canvas) (item canvas-item) dx dy)
   (itemmove (canvas item) (handle item) (tk-number dx) (tk-number dy)))
 
+(defmethod itemmove ((canvas canvas) item dx dy)
+  (format-wish "~a move {~/ltk::down/} ~a ~a" (widget-path canvas) item (tk-number dx) (tk-number dy)))
+
 (defgeneric itemdelete (canvas item))
 (defmethod itemdelete ((canvas canvas) (item integer))
   (format-wish "~a delete ~a" (widget-path canvas) item)
