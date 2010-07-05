@@ -2752,10 +2752,10 @@ set y [winfo y ~a]
   (cond
     ((second options) ;; modify
      (format-wish "~a item ~a~{ -~(~a~) ~/ltk::tk-princ/~}"
-                  (widget-path tree) column options))
+                  (widget-path tree) item options))
     (t ;; query
      (format-wish "senddatastring [~a item ~a ~@[ -~(~a~)~]]"
-                  (widget-path tree) column (car options))
+                  (widget-path tree) item (car options))
      (read-data))))
 
 (defun treeview-column (tree column &rest options)
@@ -2763,10 +2763,10 @@ set y [winfo y ~a]
   (cond
     ((second options) ;; modify
      (format-wish "~a column ~a~{ -~(~a~) ~/ltk::tk-princ/~}"
-                  (widget-path tree) item options))
+                  (widget-path tree) column options))
     (t ;; query
      (format-wish "senddatastring [~a column ~a ~@[ -~(~a~)~]]"
-                  (widget-path tree) item (car options))
+                  (widget-path tree) column (car options))
      (read-data))))
 
 (defun treeview-heading (tree column &rest options
