@@ -2684,13 +2684,15 @@ set y [winfo y ~a]
 	       option value rest))
 
 (defgeneric treeview-delete (tree items))
-(defmethod treeview-delete ((tree treeview) items)
-  (format-wish "~a delete {~{~a~^ ~}}" (widget-path tree) items))
+(defmethod treeview-delete ((tree treeview) item)
+  (format-wish "~a delete {~a}" (widget-path tree) item))
+(defmethod treeview-delete ((tree treeview) (items cons))
+   (format-wish "~a delete {~{~a~^ ~}}" (widget-path tree) items))
 
 (defgeneric treeview-exists (tree item))
 (defmethod treeview-exists ((tree treeview) item)
-  (format-wish "~a exists ~a" (widget-path tree) item)
-  (equal (read-data) 1))
+  (format-wish "senddata [~a exists ~a]" (widget-path tree) item)
+  (= (read-data) 1))
 
 (defgeneric treeview-focus (tree))
 (defmethod treeview-focus ((tree treeview))
@@ -2745,7 +2747,7 @@ set y [winfo y ~a]
   |#
   id)
 
-(defun treeview-item (tree column &rest options)
+(defun treeview-item (tree item &rest options)
   "Query or modify the options for the specified item."
   (cond
     ((second options) ;; modify
@@ -2761,10 +2763,10 @@ set y [winfo y ~a]
   (cond
     ((second options) ;; modify
      (format-wish "~a column ~a~{ -~(~a~) ~/ltk::tk-princ/~}"
-                  (widget-path tree) column options))
+                  (widget-path tree) item options))
     (t ;; query
      (format-wish "senddatastring [~a column ~a ~@[ -~(~a~)~]]"
-                  (widget-path tree) column (car options))
+                  (widget-path tree) item (car options))
      (read-data))))
 
 (defun treeview-heading (tree column &rest options
