@@ -1916,6 +1916,16 @@ can be passed to AFTER-CANCEL"
   (format-wish "global ~a; set ~a {~a}" (name v) (name v) val)
   val)
 
+(defmethod (setf value) (val (v check-button))
+  (format-wish "global ~a; set ~a {~a}" (name v) (name v) (if val 1 0))
+  val)
+
+(defmethod value ((v check-button))
+  (format-wish "global ~a; senddata $~a" (name v) (name v))
+  (if (= 1 (read-data))
+      t
+      nil))
+
 (defclass tktextvariable ()
   ())
 
