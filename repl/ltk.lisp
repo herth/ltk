@@ -2085,26 +2085,17 @@ methods, e.g. 'configure'."))
 	       (name check-button) (name check-button))
   val)
 
-#+sbcl
-(progn
-  (declaim (ftype (function (check-button) (values (member t nil) &optional))
-                  %cb-value))
-  
-  (sb-c:defknown value (t) t)
-  (sb-c:deftransform value ((obj)
-                            (check-button) *)
-    '(%cb-value cb)))
-
-(defun %cb-value (cb)
-  (format-wish "global ~a; senddata $~a" (name cb) (name cb))
+(defmethod value ((v check-button))
+  (format-wish "global ~a; senddata $~a" (name v) (name v))
   (if (= 1 (read-data))
       t
       nil))
 
-(defmethod value ((v check-button))
-  (%cb-value v))
-
 (defmethod (setf value) (val (v check-button))
+  (when (or (equal val 1)
+            (equal val 0))
+    (warn "Use of 1 and 0 for check-button values is deprecated, use T or NIL. Treating ~A as t"
+          val))
   (format-wish "global ~a; set ~a {~a}" (name v) (name v) (if val 1 0))
   val)
 
@@ -3872,13 +3863,13 @@ set y [winfo y ~a]
   (read-keyword))
 
 
-(defun ask-yesno(message &optional (title "") &key parent)
+(defun ask-yesno(message &key (title "") parent)
   (equal (message-box message title "yesno" "question" :parent parent) :yes))
 
-(defun ask-okcancel(message &optional (title "") &key parent)
+(defun ask-okcancel(message &key (title "") parent)
   (equal (message-box message title "okcancel" "question" :parent parent) :ok))
 
-(defun do-msg(message  &optional (title "") parent)
+(defun do-msg(message &key (title "") parent)
   (message-box message title "ok" "info" :parent parent))
 
 #|
@@ -5052,19 +5043,19 @@ tk input to terminate"
 		  :command (lambda ()
                              (cerror "Keep going with this computation"
                                      "This is an error.")
-                             (do-msg "You chose to continue!" "Congratulations")))
+                             (do-msg "You chose to continue!" :title "Congratulations")))
 		(make-instance 'button
 		  :text "Warning"
 		  :command (lambda ()
                              (warn "This is a warning.")
                              (do-msg "After a warning was raised, computation continued."
-                               "And then...")))
+                               :title "And then...")))
 		(make-instance 'button
 		  :text "Signal"
 		  :command (lambda ()
                              (signal 'condition)
                              (do-msg "After a condition was signalled, computation continued."
-                               "And then...")))))))
+                               :title "And then...")))))))
 
 (defun input-box (prompt &key (title "Input"))
   (let* ((*exit-mainloop* nil)
