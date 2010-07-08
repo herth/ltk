@@ -2085,15 +2085,28 @@ methods, e.g. 'configure'."))
 	       (name check-button) (name check-button))
   val)
 
-(defmethod (setf value) (val (v check-button))
-  (format-wish "global ~a; set ~a {~a}" (name v) (name v) (if val 1 0))
-  val)
+#+sbcl
+(progn
+  (declaim (ftype (function (check-button) (values (member t nil) &optional))
+                  %cb-value))
+  
+  (sb-c:defknown value (t) t)
+  (sb-c:deftransform value ((obj)
+                            (check-button) *)
+    '(%cb-value cb)))
 
-(defmethod value ((v check-button))
-  (format-wish "global ~a; senddata $~a" (name v) (name v))
+(defun %cb-value (cb)
+  (format-wish "global ~a; senddata $~a" (name cb) (name cb))
   (if (= 1 (read-data))
       t
       nil))
+
+(defmethod value ((v check-button))
+  (%cb-value v))
+
+(defmethod (setf value) (val (v check-button))
+  (format-wish "global ~a; set ~a {~a}" (name v) (name v) (if val 1 0))
+  val)
 
 ;;; radio button widget
 
