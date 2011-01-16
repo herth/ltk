@@ -66,23 +66,17 @@ o tooltip
    #:register-tooltip
    #:schedule-tooltip
 
-   ;; list-select widget
-   #:list-select
-   #:data
-   #:list-select-display
-   #:selected-elements
-   #:ltk-mw-demo
-   #:searchable-listbox
-
+   #:combo
    #:selected-index
    #:entry
    #:entries
+   
+
    #:mw-listbox
+   #:data
    #:callback
    #:selected
    #:select-index
-   #:multiscroll-thingy
-   #:topframe
    ))
 
 (in-package :ltk-mw)
@@ -273,6 +267,7 @@ o tooltip
      (pack entry :side :left)
      )))
 
+
 ;;; extended list widget
 
 (defparameter *listbox-background* :white)
@@ -297,7 +292,6 @@ o tooltip
    ))
 
 
-(defgeneric select-index (lb index))
 (defmethod initialize-instance :after ((lb mw-listbox) &key)
   (let* ((lbl (make-instance 'label :master lb :text (label lb)))
          (slistbox (make-instance 'scrolled-listbox :master lb))
@@ -339,6 +333,7 @@ o tooltip
 (defmethod (setf data) :after (val (lb mw-listbox))
   (listbox-clear (listbox lb))
   (listbox-append (listbox lb) (mapcar (key lb) val)))
+
 
 ;;; tree list widget
 
@@ -482,7 +477,7 @@ o tooltip
        "1.8"
        "2.0"
        "16 V")
-      "GTI"))))
+      "GTI"))))    
 
 (defclass demo-tree (treelist)
   ())
@@ -490,14 +485,11 @@ o tooltip
 (defmethod treelist-name ((tree demo-tree) (node list))
   (car node))
 
-(defmethod treelist-children ((tree demo-tree) (node list))
-  (rest node))
-
-(defmethod treelist-name ((tree demo-tree) (node string))
-  node)
-
 (defmethod treelist-children ((tree demo-tree) (node string))
   nil)
+
+(defmethod treelist-children ((tree demo-tree) (node list))
+  (rest node))
 
 (defun treelist-test ()
   (with-ltk ()
@@ -646,363 +638,122 @@ o tooltip
      (pack tree :side :left :expand t :fill :both)
      (format t "data: ~s~%" (data tree)) (force-output)
      )))
+	    
+;;; combo widget
 
-;;; list-select box widget
-
-(defclass list-select (listbox)
-  ((data :accessor data :initarg :data :initform nil)
-   ))
-
-(defgeneric list-select-display (select item))
-
-(defmethod list-select-display ((select list-select) item)
-  (format nil "~a" item))
-
-(defgeneric selected-elements (select))
-
-(defmethod selected-elements ((select list-select))
-  (let ((selection (listbox-get-selection select)))
-    (when selection
-      (mapcar (lambda (index)
-                (nth index (data select)))
-              selection))))
-
-(defmethod (setf data) :after (val (select list-select))
-  (listbox-clear select)
-  (listbox-append select (mapcar (lambda (item)
-                                   (list-select-display select item))
-                                 (data select))))
-
-
-;;; seachable-list-box
-
-(defclass searchable-listbox (frame)
-  ((scrolled-listbox :accessor scrolled-listbox :initform nil :initarg :scrolled-listbox)
-   (listbox          :accessor listbox          :initform nil :initarg :listbox)
-   (entry             :accessor entry             :initform nil :initarg :entry)
-   (data              :accessor data              :initform nil :initarg :data)
-   (key               :accessor key               :initform #'identity :initarg :key)
-   (shrink-to-search  :accessor shrink-to-search  :initform nil :initarg :shrink-to-search)
-   (displayed         :accessor displayed         :initform nil :initarg :displayed)
+(defclass combo (frame)
+  ((entry :accessor entry :initform nil :initarg :entry)
+   (popdown :accessor popdown :initform nil :initarg :popdown)
+   (listbox :accessor listbox :initform nil :initarg :listbox)
+   (entries :accessor entries :initform nil :initarg :entries)
+   (bpopdown :accessor bpopdown :initform nil :initarg :bpopdown)
+   (popdown-visible :accessor popdown-visible :initform nil :initarg :popdown-visible)
+   (enable-edit     :accessor enable-edit     :initform nil :initarg :enable-edit)
+   (selected-index  :accessor selected-index  :initform nil :initarg :selected-index)
    
+   (command         :accessor command         :initform nil :initarg :command)
    ))
 
-(defgeneric get-searchable-listbox-data (lb))
-(defmethod get-searchable-listbox-data ((lb searchable-listbox))
-  (mapcar (key lb) (data lb)))
+(defmethod value ((combo combo))
+  (text (entry combo)))
 
-(defmethod selection ((lb searchable-listbox))
+(defmethod (setf entries) :after (val (combo combo))
+  (listbox-clear (listbox combo))
+  (listbox-append (listbox combo) val))
+  
+
+(defmethod bpopdown ((c combo))
   (cond
-    ((shrink-to-search lb)
+    ((popdown-visible c)
+     (grab-release c)
+     (withdraw (popdown c))
+     (setf (popdown-visible c) nil)
      )
     (t
-     )))
-
-(defgeneric update-search (lb string))
-(defmethod update-search ((lb searchable-listbox) searchstring)
-  (let ((data (get-searchable-listbox-data lb))
-        (listbox (listbox lb)))
-    (cond
-      ((= (length searchstring) 0)
-       (cond
-         ((shrink-to-search lb)
-          (listbox-clear listbox)
-          (listbox-append listbox data))
-         (t
-          (listbox-select listbox nil))))
-      (t
-       (let ((results (remove-if-not (lambda (item)
-                                       (search searchstring item))
-                                     (data lb))))
-         (cond
-           ((shrink-to-search lb)
-            (listbox-clear listbox)
-            (when results
-              (listbox-append listbox results)))
-           (t
-            (let ((indexes (mapcar (lambda (item)
-                                     (position item (data lb) :test #'string=))
-                                   results)))
-              (listbox-select listbox nil)
-              (dolist (index indexes)
-                (when index
-                  (listbox-select listbox index)))
-              (when (car indexes)
-                (see listbox (car indexes)))))))))))
-
-
-(defmethod initialize-instance :after ((lb searchable-listbox) &key)
-  (let* ((scrolled (make-instance 'scrolled-listbox :master lb))
-         (listbox (listbox scrolled))
-         (fsearch (make-instance 'frame :master lb))
-         (label (make-instance 'label :master fsearch :text "Search:"))
-         (entry (make-instance 'entry :master fsearch)))
-    (pack scrolled :side :top :fill :both :expand t)
-    (pack fsearch :side :top :fill :x)
-    (pack label :side :left)
-    (pack entry :side :left :fill :x :expand t)
-    (setf (scrolled-listbox lb) scrolled
-          (listbox lb) listbox
-          (entry lb) entry)
-    (listbox-append listbox (data lb))
-    (bind entry "<KeyPress>" (lambda (event)
-                               (declare (ignore event))
-                               (update-search lb (text entry))))
-    (focus entry)
-  ))
-
-(defun searchable-listbox-demo ()
-  (with-ltk ()
-    
-    (pack (make-instance 'searchable-listbox
-                         :data (loop for i from 1 to 100
-                                     collect (format nil "Nummer: ~d" i))
-                         :shrink-to-search t)
-          :fill :both :expand t)
+     (let ((x (window-x c))
+           (y (window-y c))
+           (w (window-width c))
+           (h (window-height c)))
+       (normalize (popdown c))
+       (raise (popdown c))
+       (set-geometry (popdown c) w 150 x (+ y h))
+       (grab c :global t)
+       (setf (popdown-visible c) t)))
     ))
 
+(defmethod initialize-instance :after ((c combo) &key)
+  (format-wish
+   "set arrow_data \"
+      #define arrow_width 8
+      #define arrow_height 5
+      static unsigned char * arrow_bits[] = { ~{0x~x~^, ~} };\"
+      image create bitmap arrow -data $arrow_data"
+   '(#b11111111
+     #b11111111 
+     #b01111110 
+     #b00111100 
+     #b00011000
+     ))
+  (let* ((entry (make-instance 'entry :master c))
+         (bpopdown (make-instance 'button  :master c :width 16 
+                                  :command (lambda ()
+                                             (bpopdown c))))
+         (tl (make-instance 'toplevel :master c))
+         (slb (make-instance 'scrolled-listbox :master tl))
+         (lb (listbox slb)))
 
-(defwidget multiscroll-thingy (frame)
-  (background legend-height frame-class)
-  ((canvas1 canvas :height (legend-height self) :background (background self)
-	    (topframe ltk::classic-frame))
-   (canvas2 canvas :background (background self)
-	    (frame ltk::classic-frame))
-   (hscroll scrollbar :orientation "horizontal")
-   (vscroll scrollbar :orientation "vertical"))
-
-  (place topframe 0 0)
-  (place frame 0 0)
-  (grid canvas1 0 0 :sticky "news")
-  (grid canvas2 1 0 :sticky "news")
-  (grid hscroll 2 0 :sticky "we")
-  (grid vscroll 1 1 :sticky "ns")
-  (grid-columnconfigure self 0 "weight" 1)
-  (grid-columnconfigure self 1 "weight" 0)
-  (grid-rowconfigure self 0 "weight" 0)
-  (grid-rowconfigure self 1 "weight" 1)
-  (grid-rowconfigure self 2 "weight" 0)
-  (format-wish 
-   "
-proc ~axview {args} {
-  eval \"~a xview $args\"
-  eval \"~a xview $args\"
-}
-~a configure -xscrollcommand [list ~a set]
-~a configure -yscrollcommand [list ~a set]
-~a configure -command ~axview
-~a configure -command [list ~a yview]
-~a create window 10 10 -window ~a -anchor nw -tags f
-~a create window 10 10 -window ~a -anchor nw -tags f
-
-after idle [list resetScroll ~a]
-after idle [list resetScroll ~a]
-
-bind ~a <Configure> [list resetScroll ~a]
-bind ~a <Configure> [list resetScroll ~a] 
-
-"
-   (ltk::name self) (widget-path canvas2) (widget-path canvas1)
-
-   (widget-path canvas2) (widget-path hscroll) 
-   (widget-path canvas2) (widget-path vscroll)
-   
-   (widget-path hscroll) (ltk::name self) 
-   (widget-path vscroll) (widget-path canvas2)
-   (widget-path canvas1) (widget-path topframe)
-   (widget-path canvas2) (widget-path frame)
-   
-   (widget-path canvas1)
-   (widget-path canvas2)
-   (widget-path topframe) (widget-path canvas1)
-   (widget-path frame) (widget-path canvas2) 
-   )
-  )
-
-(defun mst-test ()
-  (with-ltk ()
-    (let ((mst (make-instance 'multiscroll-thingy :legend-height 40)))
-      (dotimes (i 20)
-        (pack (make-instance 'button :master (topframe mst) :text (format nil "Button ~d" i)) :side :left))
-      (dotimes (i 10)
-	(let ((f (make-instance 'frame :master (frame mst))))
-	  (dotimes (j 20)
-	    (pack (make-instance 'button :master f :text (format nil "Button ~d" (+ (* i 20) j))) :side :left))
-	  (pack f :side :top)))
-	      
-      (pack mst :side :top :expand t :fill :both))))
-	    
-
-;;; demo
-
-(defclass list-select-demo-entry ()
-  ((file :accessor file :initarg :file :initform nil)
-   (size :accessor size :initarg :size :initform 0)))
-
-(defmethod list-select-display ((ls list-select) (entry list-select-demo-entry))
-  (format nil "~a ~d Bytes" (namestring (file entry)) (size entry)))
-
-(defun make-list-select-demo (&optional (master nil))
-  (let* ((f (make-instance 'frame :master master))
-         (ls (make-instance 'list-select :master f :selectmode :multiple))
-         (f2 (make-instance 'frame :master f))
-         (lsize (make-instance 'label :master f2 :text "Total Size:"))
-         (bsize (make-instance 'button :text "Calc" :master f2
-                               :command (lambda ()
-                                          (setf (text lsize)
-                                                (format nil "Total Size: ~a" (loop for e in (selected-elements ls)
-                                                                                  summing (size e))))))))
-    (pack ls :side :top :expand t :fill :both)
-    (pack f2 :side :top :fill :x)
-    (pack bsize :side :left)
-    (pack lsize :side :left)
-    (setf (data ls)
-          (mapcar (lambda (p)
-                    (make-instance 'list-select-demo-entry
-                                   :file p
-                                   :size (with-open-file (s p)
-                                           (file-length s))))
-                  (directory (make-pathname :name :wild :type :wild))))
-    f))
-
-(defun list-select-demo ()
-  (with-ltk ()
-    (let ((f (make-list-select-demo)))
-      (pack f :side :top :expand t :fill :both))))
-
-
-;;;
-
-(defclass card (canvas)
-  ((collapsed :accessor collapsed :initform nil :initarg :collapsed)
-   (up        :accessor up        :initform nil :initarg :up)
-   (next      :accessor next      :initform nil :initarg :next)
-   
-
-   ))
-
-
-(defclass business-card (card)
-  ((cname :accessor cname :initform nil :initarg :cname)
-   (title :accessor title :initform nil :initarg :title)
-   (phone :accessor phone :initform nil :initarg :phone)
-   (location :accessor location :initform nil :initarg :location)
-   ))
-
-(defmethod initialize-instance :after ((self card) &key)
-  (create-items
-   self
-   (nconc
-    (list
+    (configure bpopdown :image "arrow")
+    (configure c :relief :sunken :borderwidth 2)
+    (configure entry :relief :flat :borderwidth 0 :background :white)
+    (unless (enable-edit c)
+      (configure entry  :state :disabled))
+    (withdraw tl)
+    (set-wm-overrideredirect tl 1)
+    (pack slb :side :top :fill :both :expand t :padx 2 :pady 2)
+    (grid-forget (ltk::hscroll slb))
+    (when (entries c)
+      (listbox-append lb (entries c)))
+    (pack entry :side :left :expand t :fill :both)
+    (pack bpopdown :side :right :expand t :fill :both)
+    
+    (bind c "<ButtonRelease>" (lambda (event)
+                                 (declare (ignore event))
+                                 (when (popdown-visible c)
+                                   (bpopdown c))))
+    (bind lb "<<ListboxSelect>>" (lambda (event)
+                                   (declare (ignore event))
+                                   (let ((sel (first (listbox-get-selection lb))))
+                                     
+                                     (cond
+                                       (sel
+                                        (setf (text entry) (nth sel (entries c)))
+                                        (setf (selected-index c) sel)
+                                        (when (command c)
+                                          (funcall (command c) (nth sel (entries c)))))
+                                       (t
+                                        (setf (selected-index c) nil))
+                                       ))))
+    (bind lb "<ButtonRelease>" (lambda (event)
+                                 (declare (ignore event))
+                                 (when (popdown-visible c)
+                                   (bpopdown c))))
      
-     (list :line 8 2 292 2 :width 2 :fill :gray)
-     (list :line 295 5 295 92 :width 2 :fill :gray)
-     (list :line 292 95 8 95  :width 2 :fill :gray)
-     (list :line 5 91 5 5     :width 2 :fill :gray)
-     
-     (list :arc 4 1 20 15  :start 90 :extent 90 :style :arc :width 2 :outline :gray)
-     (list :arc 4 80 20 95  :start 180 :extent 90 :style :arc :width 2 :outline :gray)     
-     (list :arc 284 80 295 95  :start 270 :extent 90 :style :arc :width 2 :outline :gray)
-     (list :arc 285 1 295 15  :start 0 :extent 90 :style :arc :width 2 :outline :gray))
+    (setf (popdown c) tl
+          (entry c) entry
+          (listbox c) lb)
     
-    (when (up self)
-      (list
-       (list :line 5 0 5 10 :width 2 :fill :gray)
-       (list :line 295 0 295 10 :width 2 :fill :gray)
-       ))
     ))
-  (configure self :background :white :width 300 :height (if (collapsed self) 25 100)
-             :highlightthickness 0)
-  (bind self "<1>" (lambda (e) (declare (ignore e))
-                     (setf (collapsed self) (not (collapsed self)))
-                     (configure self :height (if (collapsed self) 25 100))))
 
-  )
-
-(defmethod expand-card ((self card))
-  (setf (collapsed self) nil)
-  (configure self :height (if (collapsed self) 25 100)))
-
-(defmethod collapse-card ((self card))
-  (setf (collapsed self) t)
-  (configure self :height (if (collapsed self) 25 100)))
-
-(defmethod initialize-instance :after ((self business-card) &key)
-  (create-items
-   self
-   (list
-    (list :text 10 8 (cname self)  :font "Arial 12")
-    (list :text 15 25 (title self) :font "Arial 10" :fill "gray")
-    (list :text 15 40 (phone self) :font "Arial 10" :fill "gray")
-    (list :text 15 55 (location self) :font "Arial 10" :fill "gray"))))
-
-
-(defwidget cardstack (frame)
-  (cards shown-cards inner
-   (cardclass :accessor cardclass :initform 'card :initarg :cardclass)
-   canvas)
-  ((sc scrolled-frame :pack (:side :top :fill :both :expand t)))
-
-  (setf (canvas self) (canvas sc))
-  (configure (canvas self) :background :white; :height 600
-             )
-  (setf (inner self) (interior sc))
-  ;(scrollregion (canvas self) 0 0 300 2000)
-  )
-  
-
-(defmethod add-card ((self cardstack) (card card))
-  (setf (cards self) (append (cards self) (list card)))
-  (unless (> (length (shown-cards self)) 50)
-    (setf (shown-cards self) (append (shown-cards self) (list card)))
-    
-    (pack card :side :top))
-  card)
-
-(defmethod show-cards ((self cardstack) cards)
-  (dolist (card (shown-cards self))
-    (pack-forget card))
-  (dolist (card cards)
-    (pack card :side :top))
-  (setf (shown-cards self) cards))
-  
-
-
-
-
-(defun show-items (stack tag)
-  (lambda (event)
-    (declare (ignore event))
-    (show-cards stack
-                (loop for card in (cards stack)
-                      when (or (equal tag :all)
-                               (equal (tag card) tag))
-                        collect card))))
-
-
-(defun expand-items (stack)
-  (lambda (event)
-    (declare (ignore event))
-    (dolist (card (shown-cards stack))
-      (expand-card card))))
-
-
-(defun collapse-items (stack)
-  (lambda (event)
-    (declare (ignore event))
-    (dolist (card (shown-cards stack))
-      (collapse-card card))))
-      
-
-             
-
-
-
-;;;
-
-
-
-(defun ltk-mw-demo ()
+(defun combo-test ()
   (with-ltk ()
-    (pack (make-list-select-demo) :side :top :expand t :fill :both)
-    ))
+    (let ((c (make-instance 'combo
+                            :enable-edit nil
+                            :entries '("foo1" "bar1" "baz1"
+                                       "foo2" "bar2" "baz2"
+                                       "foo3" "bar3" "baz3"
+                                       "foo4" "bar4" "baz4")
+                            :command (lambda (val)
+                                       (format t "~a selected.~%" val)))))
+      (pack c :side :top )
+      )))
+

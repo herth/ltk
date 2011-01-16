@@ -55,7 +55,7 @@
    (let* ((inspector (make-instance 'ginspector))	   
 	  (f (make-instance 'frame))
 	  (lbl (make-instance 'label :text "  "))
-	  (pane (make-instance 'paned-window :orient "vertical"))
+	  (pane (make-instance 'paned-window :orientation "vertical"))
 	  (f2 (make-instance 'frame :master pane))
 	  (desc (make-instance 'text :master f2 :width 60 :height 4))
 	  (dscroll (make-instance 'scrollbar :master f2 :orientation "vertical"))
