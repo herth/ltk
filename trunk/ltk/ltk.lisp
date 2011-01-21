@@ -2087,7 +2087,7 @@ methods, e.g. 'configure'."))
 
 (defmethod value ((v check-button))
   (format-wish "global ~a; senddata $~a" (name v) (name v))
-  (if (= 1 (read-data))
+  (if (equal 1 (read-data))
       t
       nil))
 
