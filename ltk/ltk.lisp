@@ -167,6 +167,7 @@ toplevel             x
            #:canvas-item
            #:canvas-arc
            #:canvas-bbox
+           #:canvas-window
            #:canvasx
            #:canvasy
            #:cget
@@ -3211,6 +3212,12 @@ set y [winfo y ~a]
 (defmethod initialize-instance :after ((c canvas-arc) &key canvas x0 y0 x1 y1 (start 0) (extent 180) (style "pieslice"))
   (setf (handle c) (create-arc canvas x0 y0 x1 y1 :start start :extent extent :style style)))
 
+
+(defclass canvas-window (canvas-item)
+  ())
+
+(defmethod initialize-instance :after ((c canvas-window) &key canvas (x 0) (y 0) widget (anchor :nw))
+  (setf (handle c) (create-window canvas x y widget :anchor anchor)))
 
 (defun create-window (canvas x y widget &key (anchor :nw))
   (format-wish "senddata [~a create window ~a ~a -anchor ~(~a~) -window ~a]"
