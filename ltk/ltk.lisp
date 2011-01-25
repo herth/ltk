@@ -406,12 +406,14 @@ toplevel             x
            #:treeview-column
            #:treeview-heading
            #:treeview-move
+           #:treeitem
            #:self
            #:reset-scroll
            #:scroll-to-top
            #:tagbind
            #:pane-configure
-           #:handle))
+           #:handle
+           #:column-values))
 
 (defpackage :ltk-user
   (:use :common-lisp :ltk))
@@ -2814,15 +2816,18 @@ set y [winfo y ~a]
 (defclass treeitem (tkobject)
   ((tree :accessor tree :initform nil :initarg :tree)
    (text :accessor text :initform nil :initarg :text)
+   (image :accessor image :initform nil :initarg :image)
    (master :accessor master :initarg :master :initform nil)
+   (tag    :accessor tag    :initform nil :initarg :tag)
+   (column-values :accessor column-values :initform nil :initarg :column-values)
    ))
 
 (defmethod initialize-instance :after ((item treeitem) &key)
   (setf (name item) (create-name))
-  (format-wish "~a insert ~a end -id ~a -text \"~a\"" (widget-path (tree item)) (if (master item)
+  (format-wish "~a insert ~a end -id ~a -text \"~a\" ~@[-tag ~a~] ~@[-image ~a~]" (widget-path (tree item)) (if (master item)
                                                                                     (name (master item))
                                                                                     "{}")
-               (name item) (text item)))
+               (name item) (text item) (tag item) (and (image item) (name (image item)))))
 
 ;;; canvas widget
 
