@@ -3706,6 +3706,12 @@ set y [winfo y ~a]
     (format-wish "wm protocol ~a WM_DELETE_WINDOW {callback ~A}" (widget-path tl) name))
   tl)
 
+(defmethod on-close ((tl widget) fun)
+  (let ((name (create-name)))
+    (add-callback name fun)
+    (format-wish "wm protocol ~a WM_DELETE_WINDOW {callback ~A}" (widget-path tl) name))
+  tl)
+
 (defmethod on-close ((tl (eql *tk*)) fun)
   (let ((name (create-name)))
     (add-callback name fun)
