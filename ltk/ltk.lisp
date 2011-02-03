@@ -740,7 +740,7 @@ proc getstring {s} {
 
 proc escape_for_lisp {s} {regsub -all {\\\\} $s {\\\\\\\\} s1;regsub -all {\"} $s1 {\\\"} s2;return $s2}
 
-proc process_buffer {} {
+proc process_bufferx {} {
     global buffer
     global server
 
@@ -763,11 +763,30 @@ proc process_buffer {} {
     }
 }
 
+proc process_buffer {} {
+    global buffer
+    global server
+    set cmd $buffer
+    set buffer \"\"
+        if {[catch $cmd result]>0} {
+            # tk_messageBox -icon error -type ok -title \"Error!\" -message $result
+            puts $server \"(:error \\\"[escape_for_lisp $result]\\\")\"
+            flush $server
+        }
+    }
+}
+
 
 proc buffer_text {txt} {
     global buffer
-    set buffer \"$buffer$txt\"
-    ltkdebug \"buffer=$buffer\\n\" 
+    #set buffer \"$buffer$txt\"
+    append buffer $txt
+}
+
+proc b_t {txt} {
+    global buffer
+    #set buffer \"$buffer$txt\"
+    append buffer $txt
 }
 
 fconfigure stdin -encoding utf-8 -translation ~a
@@ -847,7 +866,11 @@ fconfigure stdout -encoding utf-8
               (append (wish-event-queue *wish*) (list event))))))
   nil)
 
+;; maximum line length sent over to non-remote Tk
 (defparameter *max-line-length* 1000)
+;; maximum buffer length sent over to non-remote Tk
+(defparameter *max-buffer-size* 64000)
+
 (defun flush-wish ()
   (let ((buffer (nreverse (wish-output-buffer *wish*))))
     (when buffer
@@ -867,18 +890,29 @@ fconfigure stdout -encoding utf-8
                (format stream "~d ~a~%"(length content) content)
                (dbg "~d ~a~%" (length content) content)))
             (*max-line-length*
-             (format stream "buffer_text {~D }~%" len)
-             (dbg "buffer_text {~D }~%" len)             
-             (dolist (string buffer)
-               (loop while (> (length string) *max-line-length*)
-                     do
-                  (let ((sub (subseq string 0 *max-line-length*)))
-                    (setf string (subseq string *max-line-length*))
-                    (format stream "buffer_text \"~A\"~%" (tkescape2 sub))
-                    (dbg "buffer_text \"~A\"~%" (tkescape2 sub))))
-               (format stream "buffer_text \"~A~%\"~%" (tkescape2 string))
-               (dbg "buffer_text \"~A\"~%" (tkescape2 string))
+             ;;(format stream "buffer_text {~D }~%" len)
+             ;;(dbg "buffer_text {~D }~%" len)
+             (let ((sent 0))
+               (format t "buffer size ~a " len) (finish-output)
+               (dolist (string buffer)
+                 (incf sent (length string))
+                 (loop while (> (length string) *max-line-length*)
+                       do
+                    (let ((sub (subseq string 0 *max-line-length*)))
+                      (setf string (subseq string *max-line-length*))
+                      (format stream "b_t \"~A\"~%" (tkescape2 sub))
+                      (dbg "b_t \"~A\"~%" (tkescape2 sub))))
+                 (format stream "b_t \"~A~%\"~%" (tkescape2 string))
+                 (dbg "buffer_text \"~A\"~%" (tkescape2 string))
+                 (when (> sent *max-buffer-size*)
+                   ;(format t "processing buffer after ~a characters~%" sent) (finish-output)
+                    (format stream "process_buffer~%")
+                    (dbg "process_buffer~%")
+                    (setf sent 0))
+                 )
+              
                )
+             (finish-output)
              (format stream "process_buffer~%")
              (dbg "process_buffer~%")
              )
