@@ -4253,124 +4253,125 @@ tk input to terminate"
   
   (defmacro defwidget (namespec parent slots widgetspecs &rest body)
     (let* ((name (if (listp namespec)
-		     (second namespec)
-		     namespec))
-	   (selfname (if (listp namespec)
-			 (first namespec)
-			 'self)))
+                     (second namespec)
+                     namespec))
+           (selfname (if (listp namespec)
+                         (first namespec)
+                         'self)))
       (unless name
         (error "defwidget: no name given"))
       
       (unless (listp parent)
-	(error "defwidget: parent class(es) specifier \"~a\" needs to be a list of symbols" parent))
+        (error "defwidget: parent class(es) specifier \"~a\" needs to be a list of symbols" parent))
       
       (unless (listp slots)
-	(error "defwidget: slots \"~a\" needs to be a list of slot specifiers" slots))
+        (error "defwidget: slots \"~a\" needs to be a list of slot specifiers" slots))
       
       (unless (listp widgetspecs)
-	(error "defwidget: widgets \"~a\" need to be a list of widget specifiers" widgetspecs))
+        (error "defwidget: widgets \"~a\" need to be a list of widget specifiers" widgetspecs))
       
       (when (null widgetspecs)
-	;; (warn "defwidget: widget list is empty.")
+        ;; (warn "defwidget: widget list is empty.")
         )
       
       (let (defs wnames events accessors methods)
-	(labels ((on-type (subwidget methodname)
-		   "Handle an :on-type form"
-		   (push
-		    `(bind ,subwidget "<KeyPress>"
-			   (lambda (event)
-			     (,methodname ,selfname (event-char event))))
-		    events)
-		   (push `(declaim (ftype function ,methodname))
-			 methods)
-		   ;; 		 (push
-		   ;; 		  `(defgeneric ,methodname (self key))
-		   ;; 		  methods)
-		   ;; 		 (push
-		   ;; 		  `(defmethod ,methodname ((,selfname ,name) keycode))
-		   ;; 		  methods)
-		   )
+        (labels ((on-type (subwidget methodname)
+                   "Handle an :on-type form"
+                   (push
+                    `(bind ,subwidget "<KeyPress>"
+                           (lambda (event)
+                             (,methodname ,selfname (event-char event))))
+                    events)
+                   (push `(declaim (ftype function ,methodname))
+                         methods)
+                   ;; 		 (push
+                   ;; 		  `(defgeneric ,methodname (self key))
+                   ;; 		  methods)
+                   ;; 		 (push
+                   ;; 		  `(defmethod ,methodname ((,selfname ,name) keycode))
+                   ;; 		  methods)
+                   )
 
-		 (process-layout (line parent)
-		   (let ((instance-name (first line))
-			 (class-name (second line)))
-		     (multiple-value-bind (keyargs subwidgets)
-			 (do ((params (cddr line))       ; all other parameters to the
-					; widget/subwidget defs
-			      (keywords+values nil)      ; keyword args for the widget
-			      (sublists nil))	       ; list of the subwidgets	      
-			     ((null params) (values (reverse keywords+values) (reverse sublists)))
-			   (cond ((listp (car params))
-				  (dolist (subwidget (process-layout (pop params) instance-name))
-				    (push subwidget sublists)))
-				 ((equal (car params) :on-type)
-				  (pop params)
-				  (on-type instance-name (pop params)))
-				 (t (let* ((param (pop params))
-					   (val (pop params)))
-				      (push param keywords+values)
-				      (push (if (equal param :pack)
-						(list 'quote val)
-						val)
-					    keywords+values)))))
-		       (cons
-			(list instance-name
-			      (append
-			       (list 'make-instance (list 'quote class-name))
-			       (if parent (list :master parent) nil)
-			       keyargs))
-			subwidgets))))
-		 
-		 (compute-slots (names)
-		   (mapcar (lambda (name)
-			     (if (listp name)
-				 name
-				 `(,name :accessor ,name :initform nil
-					 :initarg ,(intern (symbol-name name) :keyword))))
-			   names))
-		 
-		 (make-accessor (acname spec)
-		   (push `(declaim (ftype function ,acname (setf ,acname)))
-			 accessors)
-		   (push
-		    `(defmethod ,acname ((,selfname ,name))
-		       ,spec)
-		    accessors)
-		   (push
-		    `(defmethod (setf ,acname) (val (,selfname ,name))
-		       (setf ,spec val))
-		    accessors))
-		 
-		 (grab-accessors ()
-		   (loop while (equal (caar body) :accessor)
-		      do (destructuring-bind (unused aname aspec)
-			     (pop body)
-			   (declare (ignore unused))
-			   (make-accessor aname aspec)))))
-	  
-	  (setf defs (mapcan (lambda (w)
-			       (process-layout w selfname)) widgetspecs))
-	  (setf wnames (mapcar #'car defs))
-	  (grab-accessors)
-	  (let* ((all-slots (compute-slots (append slots wnames))))
-	    `(progn
-	       (defclass ,name ,parent
-		 ,all-slots)
-	       ,@(reverse accessors)
-	       ,@(reverse methods)
+                 (process-layout (line parent)
+                   (let ((instance-name (first line))
+                         (class-name (second line)))
+                     (multiple-value-bind (keyargs subwidgets)
+                         (do ((params (cddr line))       ; all other parameters to the
+                                        ; widget/subwidget defs
+                              (keywords+values nil)      ; keyword args for the widget
+                              (sublists nil))	       ; list of the subwidgets	      
+                             ((null params) (values (reverse keywords+values) (reverse sublists)))
+                           (cond ((listp (car params))
+                                  (dolist (subwidget (process-layout (pop params) instance-name))
+                                    (push subwidget sublists)))
+                                 ((equal (car params) :on-type)
+                                  (pop params)
+                                  (on-type instance-name (pop params)))
+                                 (t (let* ((param (pop params))
+                                           (val (pop params)))
+                                      (push param keywords+values)
+                                      (push (if (equal param :pack)
+                                                (list 'quote val)
+                                                val)
+                                            keywords+values)))))
+                       (cons
+                        (list instance-name
+                              (append
+                               (list 'make-instance (list 'quote class-name))
+                               (if parent (unless (member :master keyargs)
+                                            (list :master parent)) nil)
+                               keyargs))
+                        subwidgets))))
+                 
+                 (compute-slots (names)
+                   (mapcar (lambda (name)
+                             (if (listp name)
+                                 name
+                                 `(,name :accessor ,name :initform nil
+                                         :initarg ,(intern (symbol-name name) :keyword))))
+                           names))
+                 
+                 (make-accessor (acname spec)
+                   (push `(declaim (ftype function ,acname (setf ,acname)))
+                         accessors)
+                   (push
+                    `(defmethod ,acname ((,selfname ,name))
+                       ,spec)
+                    accessors)
+                   (push
+                    `(defmethod (setf ,acname) (val (,selfname ,name))
+                       (setf ,spec val))
+                    accessors))
+                 
+                 (grab-accessors ()
+                   (loop while (equal (caar body) :accessor)
+                         do (destructuring-bind (unused aname aspec)
+                                (pop body)
+                              (declare (ignore unused))
+                              (make-accessor aname aspec)))))
+          
+          (setf defs (mapcan (lambda (w)
+                               (process-layout w selfname)) widgetspecs))
+          (setf wnames (mapcar #'car defs))
+          (grab-accessors)
+          (let* ((all-slots (compute-slots (append slots wnames))))
+            `(progn
+               (defclass ,name ,parent
+                 ,all-slots)
+               ,@(reverse accessors)
+               ,@(reverse methods)
 
-	       (defmethod initialize-instance :after ((,selfname ,name) &key)
-		 (let ,wnames
-		   ,@(mapcar (lambda (def)
-			       (append (list 'setf) def)) defs)
-		   ,@(mapcar (lambda (wname)
-			       `(setf (,wname ,selfname) ,wname)) wnames)
+               (defmethod initialize-instance :after ((,selfname ,name) &key)
+                 (let ,wnames
+                   ,@(mapcar (lambda (def)
+                               (append (list 'setf) def)) defs)
+                   ,@(mapcar (lambda (wname)
+                               `(setf (,wname ,selfname) ,wname)) wnames)
 
-		   ,@events
-		   ,@body))
+                   ,@events
+                   ,@body))
 
-	       )))))))
+               )))))))
 
 ;;:on-type test-widget-type
 
