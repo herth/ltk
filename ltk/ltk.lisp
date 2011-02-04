@@ -864,6 +864,7 @@ fconfigure stdout -encoding utf-8
              (when (or *debug-buffers*
                        *debug-tk*)
                (format t "buffer size ~a~%" len) (finish-output))
+             
              (dolist (string buffer)
                (loop while (> (length string) *max-line-length*)
                      do
@@ -872,10 +873,10 @@ fconfigure stdout -encoding utf-8
                     (format stream "bt \"~A\"~%" (tkescape2 sub))
                     (dbg "bt \"~A\"~%" (tkescape2 sub))))
                (format stream "bt \"~A~%\"~%" (tkescape2 string))
-               (dbg "bt \"~A\"~%" (tkescape2 string))
-               (format stream "process_buffer~%")
-               (dbg "process_buffer~%")
-               ))
+               (dbg "bt \"~A\"~%" (tkescape2 string)))
+             (format stream "process_buffer~%")
+             (dbg "process_buffer~%")
+             )
             (t
              (format stream "bt {~D }~%" len)
              (dbg "bt {~D }~%" len)
@@ -888,19 +889,19 @@ fconfigure stdout -encoding utf-8
           (finish-output stream)
 
           #+nil(loop for string in buffer
-             do (loop with end = (length string)
-                   with start = 0
-                   for amount = (min 1024 (- end start))
-                   while (< start end)
-                   do (let ((string (subseq string start (+ start amount))))
-                        (format stream "buffer_text {~A}~%" string)
-                        (dbg "buffer_text {~A}~%" string)
-                        (incf start amount)))
-               (format stream "buffer_text \"\\n\"~%")
-               (dbg "buffer_text \"\\n\"~%")
-             finally (progn (format stream "process_buffer~%")
-                            (dbg "process_buffer~%")
-                            (finish-output stream)))
+                     do (loop with end = (length string)
+                              with start = 0
+                              for amount = (min 1024 (- end start))
+                              while (< start end)
+                              do (let ((string (subseq string start (+ start amount))))
+                                   (format stream "buffer_text {~A}~%" string)
+                                   (dbg "buffer_text {~A}~%" string)
+                                   (incf start amount)))
+                        (format stream "buffer_text \"\\n\"~%")
+                        (dbg "buffer_text \"\\n\"~%")
+                     finally (progn (format stream "process_buffer~%")
+                                    (dbg "process_buffer~%")
+                                    (finish-output stream)))
 
           (setf (wish-output-buffer *wish*) nil))))))
   
