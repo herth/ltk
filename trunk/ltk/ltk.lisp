@@ -4917,7 +4917,8 @@ tk input to terminate"
       (t "An internal error has occured."))))
 
 (defmethod compute-buttons ((handler graphical-condition-handler) master)
-  (let ((ok (make-instance 'button :master master :text "Dismiss"))
+  (let ((exit (make-instance 'button :master master :text "Exit"))
+        (ok (make-instance 'button :master master :text "Dismiss"))
 	(yes (make-instance 'button :master master :text "Yes"))
 	(no (make-instance 'button :master master :text "No"))
 	(show (make-instance 'button :master master :text "Show Details"))
@@ -4941,14 +4942,18 @@ tk input to terminate"
 	       (setf (text show) "Show details"
 		     (command show) #'show))
 	     (give-up () (abort-condition-handler handler))
-	     (debugger () (invoke-restart 'send-to-debugger (handler-condition handler))))
+	     (debugger () (invoke-restart 'send-to-debugger (handler-condition handler)))
+         (exit () (invoke-restart 'exit)))
       (setf (command ok) #'give-up
+            (command exit) #'exit
 	    (command yes) #'continue
 	    (command no) #'abort
 	    (command show) #'show
 	    (command debugger) #'debugger
 	    (command report) (lambda () (report-bug handler)))
-      (append (if (find-restart 'continue)
+      (append (when (find-restart 'exit)
+                (list exit))
+              (if (find-restart 'continue)
 		  (list yes no)
 		  (list ok))
 	      (when (debugp handler) (list show debugger))
