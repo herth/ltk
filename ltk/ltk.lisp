@@ -5074,7 +5074,7 @@ tk input to terminate"
                              (do-msg "After a condition was signalled, computation continued."
                                :title "And then...")))))))
 
-(defun input-box (prompt &key (title "Input"))
+(defun input-box (prompt &key (title "Input") default)
   (let* ((*exit-mainloop* nil)
 	 (ok t)
 	 (w (make-instance 'toplevel :title title))
@@ -5099,6 +5099,8 @@ tk input to terminate"
     (bind w "<Return>" (lambda (event)
 			 (declare (ignore event))
 			 (break-mainloop)))
+    (when (and default (> (length default) 0))
+      (setf (text e) default))
     (focus e)
     (grab w)
     (mainloop)
