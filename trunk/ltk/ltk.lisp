@@ -299,6 +299,7 @@ toplevel             x
            #:on-focus
            #:pack
            #:pack-forget
+           #:pack-forget-all
            #:pack-propagate
            #:paned-window
            #:photo-image
@@ -969,6 +970,9 @@ fconfigure stdout -encoding utf-8
              0.001
            timeout)
          function args))
+
+;; set it to like 0.1 to simulate bad networks
+;;(defparameter *read-delay* nil)
 
 ;;; read from wish 
 (defun read-wish ()
@@ -3389,6 +3393,14 @@ set y [winfo y ~a]
 (defmethod pack-forget ((w widget))
   (format-wish "pack forget ~A" (widget-path w))
   w)
+
+(defgeneric pack-forget-all (widget))
+(defmethod pack-forget-all ((w widget))
+  "removes all widgets packed into w"
+  (format-wish "foreach slave [pack slaves ~A] { pack forget $slave}" (widget-path w))
+  w)
+
+
 
 
 ;;; place manager
