@@ -1,15 +1,16 @@
 
-
-
 (defpackage :tktable
-  (:use :common-lisp :ltk
-        #+(or :cmu :scl) :ext
-	#+:sbcl :sb-ext
-	)
+    (:use :common-lisp :ltk
+          #+:sbcl :sb-ext
+          )
   (:export
-	   #:table
+   #:table
 
-           ))
+   #:scrolled-table
+   #:subvals
+   #:vals
+   #:set-row
+   #:defmethod))
 
 (in-package :tktable)
 
@@ -19,9 +20,6 @@
 				 (list (lambda ()
 					 (send-wish "if {[catch {package require Tktable} err]} {tk_messageBox -icon error -type ok -message \"$err\"}")
 				       )))))
-
-
-  
 
 ;;; tktable widget
 
