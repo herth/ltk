@@ -415,7 +415,8 @@ toplevel             x
            #:tagbind
            #:pane-configure
            #:handle
-           #:column-values))
+           #:column-values
+           #:listbox-insert))
 
 (defpackage :ltk-user
   (:use :common-lisp :ltk))
@@ -2309,6 +2310,12 @@ a list of numbers may be given"
   (format-wish "~a delete ~a ~@[~(~a~)~]" (widget-path l) start end)
   l)
 
+(defgeneric listbox-insert (l index values))
+(defmethod listbox-insert ((l listbox) index values)
+  (if (listp values)
+      (format-wish "~a insert ~a ~{ \{~a\}~}" (widget-path l) index values)
+      (format-wish "~a insert ~a \{~a\}" (widget-path l) index values))
+  l)
 
 (defgeneric listbox-configure (l i &rest options))
 (defmethod listbox-configure ((l listbox) index &rest options)
