@@ -416,7 +416,8 @@ toplevel             x
            #:pane-configure
            #:handle
            #:column-values
-           #:listbox-insert))
+           #:listbox-insert
+           #:font-families))
 
 (defpackage :ltk-user
   (:use :common-lisp :ltk))
@@ -3595,6 +3596,11 @@ set y [winfo y ~a]
    (read-data))
  
 ;;(defun font-names ...)
+
+(defun font-families ()
+  (send-wish "senddatastrings [font families]")
+  (read-data))
+
 
 ;;; wm functions
 
