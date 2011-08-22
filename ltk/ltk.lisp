@@ -2833,7 +2833,9 @@ set y [winfo y ~a]
   (format-wish "~a insert ~a end -id ~a -text \"~a\" ~@[-tag ~a~] ~@[-image ~a~]" (widget-path (tree item)) (if (master item)
                                                                                     (name (master item))
                                                                                     "{}")
-               (name item) (text item) (tag item) (and (image item) (name (image item)))))
+               (name item) (text item) (tag item) (and (image item) (if (stringp (image item))
+                                                                        (image item)
+                                                                        (name (image item))))))
 
 ;;; canvas widget
 
