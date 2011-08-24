@@ -417,7 +417,9 @@ toplevel             x
            #:handle
            #:column-values
            #:listbox-insert
-           #:font-families))
+           #:font-families
+           #:scrolled-treeview
+           #:treeview-get-selection))
 
 (defpackage :ltk-user
   (:use :common-lisp :ltk))
@@ -2691,7 +2693,11 @@ set y [winfo y ~a]
 ;;; treeview widget
 
 #-:tk84
-(defwrapper treeview (tktextvariable widget) () "ttk::treeview")
+(defwrapper treeview (tktextvariable widget)
+  ((xscroll :accessor xscroll :initarg :xscroll :initform nil)
+   (yscroll :accessor yscroll :initarg :yscroll :initform nil)
+   (items   :accessor items   :initform nil :initarg :items))
+  "ttk::treeview")
 
 (defgeneric children (tree item))
 (defmethod children ((tree treeview) item)
@@ -2819,6 +2825,16 @@ set y [winfo y ~a]
                (or parent "{}")
                (or index "end")))
 
+(defgeneric treeview-get-selection (w))
+(defmethod treeview-get-selection ((tv treeview))
+  (format-wish "senddatastrings [~a selection]" (widget-path tv))
+  (let ((names (read-data))
+        (items (items tv)))
+    (mapcar (lambda (name)
+              (find name items :key #'name :test #'equal))
+            names)))
+
+
 (defclass treeitem (tkobject)
   ((tree :accessor tree :initform nil :initarg :tree)
    (text :accessor text :initform nil :initarg :text)
@@ -2835,7 +2851,32 @@ set y [winfo y ~a]
                                                                                     "{}")
                (name item) (text item) (tag item) (and (image item) (if (stringp (image item))
                                                                         (image item)
-                                                                        (name (image item))))))
+                                                                        (name (image item)))))
+  (push item (items (tree item)))
+  item)
+
+(defclass scrolled-treeview (frame)
+  ((treeview :accessor treeview)
+   (hscroll :accessor hscroll)
+   (vscroll :accessor vscroll)))
+
+(defmethod initialize-instance :after ((st scrolled-treeview) &key)
+  (setf (hscroll st) (make-scrollbar st :orientation "horizontal"))
+  (setf (vscroll st) (make-scrollbar st))
+  (setf (treeview st) (make-instance 'treeview :master st :xscroll (hscroll st) :yscroll (vscroll st)))
+  (grid (treeview st) 0 0 :sticky "news")
+  (grid (hscroll st) 1 0 :sticky "we")
+  (grid (vscroll st) 0 1 :sticky "ns")
+  (grid-columnconfigure st 0 :weight 1)
+  (grid-columnconfigure st 1 :weight 0)
+  (grid-rowconfigure st 0 :weight 1)
+  (grid-rowconfigure st 1 :weight 0)
+ 
+  (configure (hscroll st) "command" (concatenate 'string (widget-path (treeview st)) " xview"))
+  (configure (vscroll st) "command" (concatenate 'string (widget-path (treeview st)) " yview"))
+  (configure (treeview st) "xscrollcommand" (concatenate 'string (widget-path (hscroll st)) " set"))
+  (configure (treeview st) "yscrollcommand" (concatenate 'string (widget-path (vscroll st)) " set")))
+   
 
 ;;; canvas widget
 
