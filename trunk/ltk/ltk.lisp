@@ -422,7 +422,8 @@ toplevel             x
            #:treeview-get-selection
            #:treeview-identify
            #:treeview-identify-item
-           #:treeview-set-selection))
+           #:treeview-set-selection
+           #:items))
 
 (defpackage :ltk-user
   (:use :common-lisp :ltk))
@@ -2468,6 +2469,8 @@ a list of numbers may be given"
   (format-wish "~a see ~(~a~)" (widget-path lb) pos)
   lb)
 
+
+
 ;;; scale widget
 
 #+:tk84
@@ -2702,13 +2705,23 @@ set y [winfo y ~a]
    (items   :accessor items   :initform nil :initarg :items))
   "ttk::treeview")
 
+(defmethod see ((tv treeview) (item treeitem))
+  (format-wish "~a see ~a" (widget-path tv) (name item))
+  tv)
+
 (defgeneric children (tree item))
 (defmethod children ((tree treeview) item)
   (format-wish "~a children ~a" (widget-path tree) item))
 
+(defmethod children ((tree treeview) (item treeitem))
+  (format-wish "~a children ~a" (widget-path tree) (name item)))
+
 (defgeneric (setf children) (val tree item))
 (defmethod (setf children) (val (tree treeview) item)
   (format-wish "~a children ~a {~{~a~^ ~}}" (widget-path tree) item val))
+
+(defmethod (setf children) (val (tree treeview) (item treeitem))
+  (format-wish "~a children ~a {~{~a~^ ~}}" (widget-path tree) (name item) val))
 
 (defgeneric column-configure (tree column option value &rest rest))
 (defmethod column-configure ((tree treeview) column option value &rest rest)
@@ -2720,6 +2733,9 @@ set y [winfo y ~a]
   (format-wish "~a delete {~a}" (widget-path tree) item))
 
 (defmethod treeview-delete ((tree treeview) (item treeitem))
+  (let ((l (length (items tree))))
+    (setf (items tree) (remove item (items tree)))
+    (format t "tv-delete ~a -> ~a~%" l (length (items tree))) (finish-output))
   (format-wish "~a delete {~a}" (widget-path tree) (name item)))
 
 (defmethod treeview-delete ((tree treeview) (items cons))
