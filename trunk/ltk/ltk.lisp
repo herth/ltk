@@ -419,7 +419,10 @@ toplevel             x
            #:listbox-insert
            #:font-families
            #:scrolled-treeview
-           #:treeview-get-selection))
+           #:treeview-get-selection
+           #:treeview-identify
+           #:treeview-identify-item
+           #:treeview-set-selection))
 
 (defpackage :ltk-user
   (:use :common-lisp :ltk))
@@ -2726,11 +2729,22 @@ set y [winfo y ~a]
 (defgeneric treeview-focus (tree))
 (defmethod treeview-focus ((tree treeview))
   (format-wish "senddatastring [~a focus]" (widget-path tree))
-  (read-data))
+  (let ((name (read-data)))
+    (find name (items tree) :key #'name :test #'equal)))
+
+(defgeneric treeview-identify-item (tree x y))
+(defmethod treeview-identify-item ((tree treeview) x y)
+  (format-wish "senddatastring [~a identify row ~a ~a ]" (widget-path tree) x y)
+  (let ((name (read-data)))
+    (find name (items tree) :key #'name :test #'equal)))
+
 
 (defgeneric (setf treeview-focus) (item tree))
 (defmethod (setf treeview-focus) (item tree)
   (format-wish "~a focus ~a" (widget-path tree) item))
+
+(defmethod (setf treeview-focus) ((item treeitem) tree)
+  (format-wish "~a focus ~a" (widget-path tree) (name item)))
 
 (defun dictionary-plist (string)
   "return a plist representing the TCL dictionary"
@@ -2833,6 +2847,10 @@ set y [winfo y ~a]
     (mapcar (lambda (name)
               (find name items :key #'name :test #'equal))
             names)))
+
+(defgeneric treeview-set-selection (w items))
+(defmethod treeview-set-selection ((tv treeview) items)
+  (format-wish "~a selection set {~{~a ~}}" (widget-path tv) (mapcar #'name items)))
 
 
 (defclass treeitem (tkobject)
