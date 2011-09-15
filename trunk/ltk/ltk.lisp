@@ -2718,6 +2718,10 @@ set y [winfo y ~a]
 (defgeneric treeview-delete (tree items))
 (defmethod treeview-delete ((tree treeview) item)
   (format-wish "~a delete {~a}" (widget-path tree) item))
+
+(defmethod treeview-delete ((tree treeview) (item treeitem))
+  (format-wish "~a delete {~a}" (widget-path tree) (name item)))
+
 (defmethod treeview-delete ((tree treeview) (items cons))
    (format-wish "~a delete {~{~a~^ ~}}" (widget-path tree) items))
 
