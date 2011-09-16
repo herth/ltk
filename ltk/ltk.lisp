@@ -423,7 +423,8 @@ toplevel             x
            #:treeview-identify
            #:treeview-identify-item
            #:treeview-set-selection
-           #:items))
+           #:items
+           #:image))
 
 (defpackage :ltk-user
   (:use :common-lisp :ltk))
@@ -2705,6 +2706,34 @@ set y [winfo y ~a]
    (items   :accessor items   :initform nil :initarg :items))
   "ttk::treeview")
 
+(defclass treeitem (tkobject)
+  ((tree :accessor tree :initform nil :initarg :tree)
+   (text :accessor text :initform nil :initarg :text)
+   (image :accessor image :initform nil :initarg :image)
+   (master :accessor master :initarg :master :initform nil)
+   (tag    :accessor tag    :initform nil :initarg :tag)
+   (column-values :accessor column-values :initform nil :initarg :column-values)
+   ))
+
+(defmethod initialize-instance :after ((item treeitem) &key)
+  (setf (name item) (create-name))
+  (format-wish "~a insert ~a end -id ~a -text \"~a\" ~@[-tag ~a~] ~@[-image ~a~]" (widget-path (tree item)) (if (master item)
+                                                                                    (name (master item))
+                                                                                    "{}")
+               (name item) (text item) (tag item) (and (image item) (if (stringp (image item))
+                                                                        (image item)
+                                                                        (name (image item)))))
+  (push item (items (tree item)))
+  item)
+
+(defmethod (setf text) (val (item treeitem))
+  (format-wish "~a item ~a -text {~A}" (widget-path (tree item)) (name item) val)
+  val)
+
+(defmethod (setf image) (val (item treeitem))
+  (format-wish "~a item ~a -image {~A}" (widget-path (tree item)) (name item) val)
+  val)
+
 (defmethod see ((tv treeview) (item treeitem))
   (format-wish "~a see ~a" (widget-path tv) (name item))
   tv)
@@ -2873,25 +2902,7 @@ set y [winfo y ~a]
   (format-wish "~a selection set {~{~a ~}}" (widget-path tv) (mapcar #'name items)))
 
 
-(defclass treeitem (tkobject)
-  ((tree :accessor tree :initform nil :initarg :tree)
-   (text :accessor text :initform nil :initarg :text)
-   (image :accessor image :initform nil :initarg :image)
-   (master :accessor master :initarg :master :initform nil)
-   (tag    :accessor tag    :initform nil :initarg :tag)
-   (column-values :accessor column-values :initform nil :initarg :column-values)
-   ))
 
-(defmethod initialize-instance :after ((item treeitem) &key)
-  (setf (name item) (create-name))
-  (format-wish "~a insert ~a end -id ~a -text \"~a\" ~@[-tag ~a~] ~@[-image ~a~]" (widget-path (tree item)) (if (master item)
-                                                                                    (name (master item))
-                                                                                    "{}")
-               (name item) (text item) (tag item) (and (image item) (if (stringp (image item))
-                                                                        (image item)
-                                                                        (name (image item)))))
-  (push item (items (tree item)))
-  item)
 
 (defclass scrolled-treeview (frame)
   ((treeview :accessor treeview)
