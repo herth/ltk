@@ -2764,7 +2764,7 @@ set y [winfo y ~a]
 (defmethod treeview-delete ((tree treeview) (item treeitem))
   (let ((l (length (items tree))))
     (setf (items tree) (remove item (items tree)))
-    (format t "tv-delete ~a -> ~a~%" l (length (items tree))) (finish-output))
+    )
   (format-wish "~a delete {~a}" (widget-path tree) (name item)))
 
 (defmethod treeview-delete ((tree treeview) (items cons))
