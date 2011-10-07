@@ -2720,7 +2720,7 @@ set y [winfo y ~a]
   (format-wish "~a insert ~a end -id ~a -text \"~a\" ~@[-tag ~a~] ~@[-image ~a~]" (widget-path (tree item)) (if (master item)
                                                                                     (name (master item))
                                                                                     "{}")
-               (name item) (text item) (tag item) (and (image item) (if (stringp (image item))
+               (name item) (tkescape (text item)) (tag item) (and (image item) (if (stringp (image item))
                                                                         (image item)
                                                                         (name (image item)))))
   (push item (items (tree item)))
@@ -2818,9 +2818,9 @@ set y [winfo y ~a]
                   (string= arg "")))
          (format stream "{}"))
         ((listp arg)
-         (format stream "{~{~/ltk::tk-princ/~^ ~}}" arg))
+         (format stream "{~{~/ltk::tk-princ/~^ ~}}" (mapcar #'tkescape arg)))
         (t
-         (format stream "~a" arg))))
+         (format stream "~a" (tkescape arg)))))
 
 (defun treeview-insert (tree &rest options
                         &key (parent "{}") (index "end") (id (create-name)) &allow-other-keys)
