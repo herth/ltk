@@ -125,6 +125,7 @@ toplevel             x
         #+(or :cmu :scl) :ext
         #+:sbcl :sb-ext
         )
+  (:shadow #+:sbcl #:exit)
   (:export #:ltktest                           
            #:*ltk-version*
            #:*cursors*
