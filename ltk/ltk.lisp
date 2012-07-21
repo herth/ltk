@@ -569,7 +569,7 @@ toplevel             x
 (defvar *trace-tk* nil)
 
 (defvar *wish-pathname*
-  #+freebsd "wish8.4"
+  #+freebsd "wish8.5"
   #-freebsd "wish")
 
 (defvar *wish-args* '("-name" "LTK"))
