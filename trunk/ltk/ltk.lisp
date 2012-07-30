@@ -505,7 +505,7 @@ toplevel             x
 		  (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* "0.959")
+(defvar *ltk-version* "0.98")
 
 ;;; global var for holding the communication stream
 (defstruct (ltk-connection (:constructor make-ltk-connection (&key remotep))
@@ -2763,9 +2763,7 @@ set y [winfo y ~a]
   (format-wish "~a delete {~a}" (widget-path tree) item))
 
 (defmethod treeview-delete ((tree treeview) (item treeitem))
-  (let ((l (length (items tree))))
-    (setf (items tree) (remove item (items tree)))
-    )
+  (setf (items tree) (remove item (items tree)))
   (format-wish "~a delete {~a}" (widget-path tree) (name item)))
 
 (defmethod treeview-delete ((tree treeview) (items cons))
