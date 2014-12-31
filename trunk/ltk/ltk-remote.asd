@@ -14,6 +14,7 @@
   :description "LTK remote"
   :long-description "Remote Lisp bindings for the Tk toolkit"
   :components ((:file "ltk-remote"))
-  :depends-on ("ltk")
-  )
+  :depends-on ("ltk"
+               #+sbcl "sb-bsd-sockets"
+               ))
 
