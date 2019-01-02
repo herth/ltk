@@ -125,7 +125,8 @@ toplevel             x
         #+(or :cmu :scl) :ext
         #+:sbcl :sb-ext
         )
-  (:shadow #+:sbcl #:exit)
+  (:shadow #+:sbcl #:exit
+           #+:sbcl #:create)
   (:export #:ltktest                           
            #:*ltk-version*
            #:*cursors*
@@ -505,7 +506,7 @@ toplevel             x
 		  (ccl:external-process-input-stream proc)))
     ))
 
-(defvar *ltk-version* "0.99")
+(defvar *ltk-version* "0.991")
 
 ;;; global var for holding the communication stream
 (defstruct (ltk-connection (:constructor make-ltk-connection (&key remotep))
