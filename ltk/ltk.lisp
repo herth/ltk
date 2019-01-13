@@ -496,7 +496,7 @@ toplevel             x
 		 proc
 		 )
     #+:ecl(ext:run-program program args :input :stream :output :stream
-:error :output)
+:error :output :wait wt)
     #+:openmcl (let ((proc (ccl:run-program program args :input
 					    :stream :output :stream :wait wt)))
 		 (unless proc
