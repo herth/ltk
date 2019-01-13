@@ -2416,7 +2416,7 @@ a list of numbers may be given"
 
 (defgeneric notebook-enable-traversal (nb))
 (defmethod notebook-enable-traversal ((nb notebook))
-  (format-wish "ttk::notebook::enableTraversal ~a" nb))
+  (format-wish "ttk::notebook::enableTraversal ~a" (widget-path nb)))
 
 ;; notebook-state
 ;; notebook-tabs
