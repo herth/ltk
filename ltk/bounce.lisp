@@ -70,5 +70,3 @@
 (defun bounce ()
   (with-ltk (:debug 0)
     (pack (make-instance 'bounce) :side :top :expand t :fill :both)))
-
-

@@ -7,12 +7,12 @@
  of the Lisp Lesser GNU Public License
  (http://opensource.franz.com/preamble.html),
  known as the LLGPL.
- 
+
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  GNU General Public License for more details.
- 
+
 |#
 
 (defpackage :ltk-tile
@@ -71,6 +71,3 @@
 	   (make-menubutton mtheme theme (lambda ()
 					   (use-theme theme)))))
        )))
-
-	     
-       

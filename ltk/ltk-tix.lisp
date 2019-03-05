@@ -36,4 +36,3 @@
 (defgeneric balloon-unbind (b w))
 (defmethod balloon-unbind ((balloon balloon) (widget widget))
   (format-wish "~a unbind ~a" (widget-path balloon) (widget-path widget)))
-

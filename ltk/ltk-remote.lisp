@@ -8,12 +8,12 @@
  of the Lisp Lesser GNU Public License
  (http://opensource.franz.com/preamble.html),
  known as the LLGPL.
- 
+
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  GNU General Public License for more details.
- 
+
 |#
 
 #+:sbcl (require 'sb-bsd-sockets)
@@ -33,10 +33,10 @@
 (defmacro with-remote-ltk (port bindings form &rest cleanups)
   (let ((vars (mapcar (lambda (b) (if (consp b) (car b) b)) bindings))
         (vals (mapcar (lambda (b) (when (consp b) (cadr b))) bindings)))
-    `(invoke-remote-ltk ,port 
+    `(invoke-remote-ltk ,port
                         ',vars
                         (list ,@vals)
-                        (lambda () ,form) 
+                        (lambda () ,form)
                         (lambda () ,@cleanups))))
 
 ;;; IMPLEMENTATIONS OF INVOKE-REMOTE-LTK
@@ -193,8 +193,8 @@
 #+:sbcl
 (defun invoke-remote-ltk (port vars vals form cleanup)
   (make-thread
-   (lambda () 
-     (setf *stop-remote* nil)      
+   (lambda ()
+     (setf *stop-remote* nil)
      (let ((socket (make-socket-server port)))
        (loop
         (when *stop-remote*
@@ -280,7 +280,7 @@
            (let ((server (make-socket :type :stream :address-family :internet :connect :passive
                                       :local-host "0.0.0.0" :local-port port
                                       :reuse-address t :keepalive t)))
-             (restart-case 
+             (restart-case
                  (unwind-protect
                      (loop
                       (let ((connection (accept-connection server)))
@@ -364,7 +364,7 @@
      (pack f :expand 1 :fill :both)
      (configure wf :borderwidth 2)
      (configure wf :relief :sunken)
-     
+
      ;(pack b)
      (create-line canv (list 0 0 40 40 60 20 80 80 60 60 40 80 20 60 0 80 0 0))
      (create-line (canvas scanv) (mapcar (lambda (x)
