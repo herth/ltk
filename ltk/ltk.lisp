@@ -123,8 +123,7 @@ toplevel             x
 (defpackage :ltk
   (:use :common-lisp
         #+(or :cmu :scl) :ext
-        #+:sbcl :sb-ext
-        )
+        #+:sbcl :sb-ext)
   (:shadow #+:sbcl #:exit
            #+:sbcl #:create)
   (:export #:ltktest
@@ -526,8 +525,7 @@ toplevel             x
   (input-handler nil)
   (remotep nil)
   (output-buffer nil)
-  (variables (make-hash-table :test #'equal))
-  )
+  (variables (make-hash-table :test #'equal)))
 
 (defmethod wish-variable (name (wish ltk-connection))
   (gethash name (wish-variables wish)))
@@ -585,8 +583,7 @@ toplevel             x
 ;      (finish-output w))
   (when *debug-tk*
     (apply #'format *trace-output* fmt args)
-    (finish-output *trace-output*)
-    ))
+    (finish-output *trace-output*)))
 
 (defmacro with-atomic (&rest code)
   `(let ((*buffer-for-atomic-output* t))
@@ -595,8 +592,7 @@ toplevel             x
 
 (defmacro send-lazy (&rest code)
   `(let ((*buffer-for-atomic-output* t))
-     ,@code
-     ))
+     ,@code))
 
 
 ;;; setup of wish
@@ -615,12 +611,11 @@ toplevel             x
   #-:tk84
   (send-wish "if {[catch {package require Ttk} err]} {tk_messageBox -icon error -type ok -message \"$err\"}")
 
-
   (send-wish "proc debug { msg } {
        global server
        puts $server \"(:debug \\\"[escape $msg]\\\")\"
        flush $server
-    } ")
+    }")
 
   (send-wish "proc escape {s} {regsub -all {\\\\} $s {\\\\\\\\} s1;regsub -all {\"} $s1 {\\\"} s2;return $s2}")
   ;;; proc senddata {s} {puts "(data \"[regsub {"} [regsub {\\} $s {\\\\}] {\"}]\")"}
@@ -631,7 +626,7 @@ toplevel             x
 
        puts $server \"(:data \\\"[escape $s]\\\")\"
        flush $server
-    } ")
+    }")
 
   (send-wish "proc senddatastrings {strings} {
                  global server
@@ -656,8 +651,7 @@ toplevel             x
                  set pos [expr $pos + 1]
                 }
                puts $server \"))\"
-
-}")
+      }")
 
   (send-wish "proc searchall {widget pattern} {
                   set l [string length $pattern]
@@ -839,6 +833,7 @@ fconfigure stdout -encoding utf-8
   (throw *wish* nil))
 
 (defun send-wish (text)
+  "send text to wish process and flush if *buffer-for-atomic-output* is true"
   (push text (wish-output-buffer *wish*))
   (unless *buffer-for-atomic-output*
     (flush-wish)))
@@ -887,8 +882,7 @@ fconfigure stdout -encoding utf-8
                (format stream "bt \"~A~%\"~%" (tkescape2 string))
                (dbg "bt \"~A\"~%" (tkescape2 string)))
              (format stream "process_buffer~%")
-             (dbg "process_buffer~%")
-             )
+             (dbg "process_buffer~%"))
             (t
              (format stream "bt {~D }~%" len)
              (dbg "bt {~D }~%" len)
@@ -1058,6 +1052,7 @@ fconfigure stdout -encoding utf-8
       nil)))
 
 (defun tcldebug (something)
+  "print a sting on standard-output prefixed with \"tcl debug:\""
   (format t "tcl debug: ~a~%" something)
   (finish-output))
 
@@ -1074,8 +1069,7 @@ event to read and blocking is set to nil"
             no-event-value))))
 
 (defun read-data ()
-  "Read data from wish. Non-data events are postponed, bogus messages (eg.
-+error-strings) are ignored."
+  "read data from wish. Non-data events are postponed, bogus messages (eg. +error-strings) are ignored."
   (loop
      for data = (read-wish)
      when (listp data) do
@@ -1096,10 +1090,9 @@ event to read and blocking is set to nil"
          ((eq (first data) :error)
           (error 'tk-error :message (second data)))
          (t
-
-          (format t "read-data problem: ~a~%" data) (finish-output)
-          ))
-       else do
+          (format t "read-data problem: ~a~%" data)
+          (finish-output)))
+     else do
        (dbg "read-data error: ~a~%" data)))
 
 (defun read-keyword ()
@@ -1110,7 +1103,6 @@ event to read and blocking is set to nil"
                                 (string-upcase string)
                                 (string-downcase string))
                       :keyword)))))
-
 
 (defun make-adjustable-string (&optional (string ""))
   (make-array (length string) :element-type 'character
@@ -1154,23 +1146,19 @@ event to read and blocking is set to nil"
      finally (return result)))
   |#
 
-;; basic tk object
 (defclass tkobject ()
-  ((name :accessor name :initarg :name :initform nil)
-   )
+  ((name :accessor name :initarg :name :initform nil))
   (:documentation "Base class for every Tk object"))
 
-;; basic class for all widgets
-(defclass widget(tkobject)
+(defclass widget (tkobject)
   ((master :accessor master :initarg :master :initform nil) ;; parent widget or nil
-   (widget-path :initarg :path :initform nil :accessor %widget-path)         ;; pathname to refer to the widget
-   (init-command :accessor init-command :initform nil :initarg :init-command)
-   )
+   (widget-path :initarg :path :initform nil :accessor %widget-path) ;; pathname to refer to the widget
+   (init-command :accessor init-command :initform nil :initarg :init-command))
   (:documentation "Base class for all widget types"))
 
-;; creating of the tk widget after creating the clos object
 (defmethod initialize-instance :after ((w widget) &key)
-  (unless (name w)			; generate name if not given
+  "initialize the tk widget after the clos object is made."
+  (unless (name w)                      ; generate name if not given
     (setf (name w) (create-name))))
 
 (defvar *tk* (make-instance 'widget :name "." :path ".")
@@ -1179,22 +1167,25 @@ event to read and blocking is set to nil"
 ;;; tcl -> lisp: puts "$x" mit \ und " escaped
 ;;;  puts [regsub {"} [regsub {\\} $x {\\\\}] {\"}]
 
-;;; call to convert untility
-(defun convert(from to)
+(defun convert (from to)
+  "utility to call tcl's convert function"
   (close-process-stream (do-execute "convert" (list from to) t)))
 
 ;;; table used for callback every callback consists of a name of a widget and
 ;;; a function to call
 
+(defun format-trace (format-string &rest args)
+  "like format, but prints only when *debug-tk* is true"
+  (when *debug-tk*
+    (apply #'format *trace-output* format-string args)))
+
 (defun add-callback (sym fun)
   "create a callback sym is the name to use for storage, fun is the function to call"
-  (when *debug-tk*
-    (format *trace-output* "add-callback (~A ~A)~%" sym fun))
+  (format-trace "add-callback (~A ~A)~%" sym fun)
   (setf (gethash sym (wish-callbacks *wish*)) fun))
 
 (defun remove-callback (sym)
-  (when *debug-tk*
-    (format *trace-output* "remove-callback (~A)~%" sym))
+  (format-trace "remove-callback (~A)~%" sym)
   (setf (gethash sym (wish-callbacks *wish*)) nil))
 
 (defun callback (sym arg)
@@ -1255,10 +1246,10 @@ can be passed to AFTER-CANCEL"
   "incremental counter to create unique numbers"
   (incf (wish-counter *wish*)))
 
-#+nil(defun create-name ()
+#+nil
+(defun create-name ()
   "create unique widget name, append unique number to 'w'"
   (format nil "w~A" (get-counter)))
-
 
 (defun encode-base-52 (value)
   (let ((numerals "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -1270,7 +1261,6 @@ can be passed to AFTER-CANCEL"
         (setf result (format nil "~a~a" result (elt numerals rest)))
         (setf value mul)))
     result))
-
 
 (defun create-name ()
   "create unique widget name, append unique number to 'w'"
