@@ -15,4 +15,3 @@
   :long-description "Lisp bindings for the Tk toolkit"
   :components ((:file "ltk"))
   )
-

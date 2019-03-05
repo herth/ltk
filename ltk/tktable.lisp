@@ -75,7 +75,7 @@
 
 (defgeneric set-row (table row value-list))
 (defmethod set-row ((table table) row value-list)
-  (format-wish "~a set row ~d,0 {~{{~a}~^ ~}}" (widget-path table) row value-list))  
+  (format-wish "~a set row ~d,0 {~{{~a}~^ ~}}" (widget-path table) row value-list))
 
 (defclass scrolled-table (frame)
   ((table :accessor table)
@@ -103,7 +103,7 @@
   (grid-columnconfigure st 1 :weight 0)
   (grid-rowconfigure st 0 :weight 1)
   (grid-rowconfigure st 1 :weight 0)
- 
+
   (configure (hscroll st) "command" (concatenate 'string (widget-path (table st)) " xview"))
   (configure (vscroll st) "command" (concatenate 'string (widget-path (table st)) " yview"))
   (configure (table st) "xscrollcommand" (concatenate 'string (widget-path (hscroll st)) " set"))

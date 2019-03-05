@@ -33,6 +33,5 @@ fileevent $server readable {set txt [read $server];puts $wi "$txt";flush $wi}
 fileevent $wi readable {
     if {[eof $wi]} {
 	close $wi
-	exit} else {	    
+	exit} else {
 	    set txt [read $wi]; puts -nonewline $server $txt;flush $server}}
-

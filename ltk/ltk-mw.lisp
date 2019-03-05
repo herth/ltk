@@ -7,12 +7,12 @@
  of the Lisp Lesser GNU Public License
  (http://opensource.franz.com/preamble.html),
  known as the LLGPL.
- 
+
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  GNU General Public License for more details.
- 
+
 |#
 
 #|
@@ -36,7 +36,7 @@ o treelist
 
 o tooltip
     Shows tooltips for registered widgets
-   
+
 |#
 
 (defpackage :ltk-mw
@@ -86,7 +86,7 @@ o tooltip
    ))
 
 (in-package :ltk-mw)
- 
+
 
 ;;;; mixin class for widget construction
 ;;;; for widgets inheriting from redraw-on-resize the generic function
@@ -144,7 +144,7 @@ o tooltip
 ;;;; history entry widget
 ;;;;
 ;;;; Entry widget with history of all text entered.
-;;;; 
+;;;;
 
 
 (defclass history-entry (entry)
@@ -165,18 +165,18 @@ o tooltip
   (setf (history-pos entry) -1))
 
 (defmethod initialize-instance :after ((entry history-entry) &key command)
-  
+
   (bind entry "<KeyPress-Return>"
 	(lambda (event)
-	  (declare (ignore event))	  
+	  (declare (ignore event))
 	  (let ((txt (text entry)))
 	    (add-history entry txt)
 	    (if (keepinput entry)
 		(entry-select entry 0 "end")
 		(setf (text entry) ""))
-	    (ltk::callback (ltk::name entry) (list txt))	   
+	    (ltk::callback (ltk::name entry) (list txt))
 	    )))
-  
+
   (bind entry "<KeyPress-Up>"
 	(lambda (event)
 	  (declare (ignore event))
@@ -186,17 +186,17 @@ o tooltip
 	    (when val
 	      (setf (text entry) val)
 		    )))))
-  
+
   (bind entry "<KeyPress-Down>"
 	(lambda (event)
-	  (declare (ignore event))					
+	  (declare (ignore event))
 	  (if (>= (history-pos entry) 0)
 	      (progn
 		(decf (history-pos entry))
 		(if (>= (history-pos entry) 0)
 		    (setf (text entry) (nth (history-pos entry) (history entry)))
 		  (setf (text entry) "")))
-	    (progn	    
+	    (progn
 	      (setf (text entry) "")))))
 
   (when command (setf (command entry) command))
@@ -225,7 +225,7 @@ o tooltip
     (dolist (c content)
       (append-item entry c))
 
-    
+
     (bind entry "<1>" (lambda (event)
 			(declare (ignore event))
 			(popup mp (+ 3 (window-x entry))  (+ 3 (window-y entry))))))
@@ -239,9 +239,9 @@ o tooltip
 (defmethod append-item ((entry menu-entry) item)
   (setf (entries entry) (append (entries entry) (list item)))
   (make-menubutton (menu entry) item (lambda ()
-				       (setf (text entry) item)			      
+				       (setf (text entry) item)
 				       (ltk::callback (ltk::name entry) (list item))
-				       
+
 				       )))
 (defun remove-nth (n list)
   (concatenate 'list (subseq list 0 n) (subseq list (1+ n))))
@@ -287,12 +287,12 @@ o tooltip
    (slistbox :accessor slistbox :initform nil :initarg :slistbox)
    (label    :accessor label    :initform "" :initarg :label)
    (lbl      :accessor lbl      :initform nil :initarg :lbl)
-   
+
    (listbox  :accessor listbox  :initform nil :initarg :listbox)
    (key      :accessor key      :initform #'identity :initarg :key)
    (selected :accessor selected :initform nil :initarg :selected)
    (selected-index :accessor selected-index :initform nil :initarg :selected-index)
-   
+
    (callback :accessor callback :initform nil :initarg :callback)
    ))
 
@@ -307,7 +307,7 @@ o tooltip
           (listbox lb) listbox)
     (pack lbl :side :top :anchor :w)
     (pack slistbox :side :top :fill :both :expand t)
-    (configure listbox 
+    (configure listbox
                :background *listbox-background*
                :foreground *listbox-foreground*
                :selectforeground *listbox-selected-foreground*
@@ -328,7 +328,7 @@ o tooltip
   (let* ((listbox (listbox lb))
          (oldsel (selected-index lb)))
     (when oldsel
-      (listbox-configure listbox oldsel :background *listbox-background* :foreground *listbox-foreground*))    
+      (listbox-configure listbox oldsel :background *listbox-background* :foreground *listbox-foreground*))
     (when index
       (listbox-configure listbox index :background *listbox-selected-background* :foreground *listbox-selected-foreground*)
       (see listbox index))
@@ -403,7 +403,7 @@ o tooltip
 				:index nr
 				:parent-node parent-node)))
       (setf (aref (entries tree) nr) entry)
-      (listbox-append (aref (listbox tree) nr) 
+      (listbox-append (aref (listbox tree) nr)
                       (mapcar (lambda (node)
                                 (treelist-name tree node)) (nodes entry))))))
 
@@ -425,7 +425,7 @@ o tooltip
             (treelist-select tree selected-node)
             (treelist-setlist tree selected-node (1+ nr))
             ))))))
-  
+
 (defgeneric treelist-select (tree node)
   (:documentation "callback for selecting a tree node"))
 
@@ -538,7 +538,7 @@ o tooltip
 (defmethod popup-tooltip ((tooltip tooltip))
   (normalize tooltip)
   (raise tooltip))
- 
+
 (defgeneric schedule-tooltip (tooltip text x y time)
   )
 
@@ -605,7 +605,7 @@ o tooltip
         (declare (ignore w))
 	))
     h))
-  
+
 
 (defmethod initialize-instance :after ((g gtree) &key)
   (render-tree g (data g) 0 0)
@@ -684,7 +684,7 @@ o tooltip
    (key               :accessor key               :initform #'identity :initarg :key)
    (shrink-to-search  :accessor shrink-to-search  :initform nil :initarg :shrink-to-search)
    (displayed         :accessor displayed         :initform nil :initarg :displayed)
-   
+
    ))
 
 (defgeneric get-searchable-listbox-data (lb))
@@ -753,7 +753,7 @@ o tooltip
 
 (defun searchable-listbox-demo ()
   (with-ltk ()
-    
+
     (pack (make-instance 'searchable-listbox
                          :data (loop for i from 1 to 100
                                      collect (format nil "Nummer: ~d" i))
@@ -782,7 +782,7 @@ o tooltip
   (grid-rowconfigure self 0 "weight" 0)
   (grid-rowconfigure self 1 "weight" 1)
   (grid-rowconfigure self 2 "weight" 0)
-  (format-wish 
+  (format-wish
    "
 proc ~axview {args} {
   eval \"~a xview $args\"
@@ -799,23 +799,23 @@ after idle [list resetScroll ~a]
 after idle [list resetScroll ~a]
 
 bind ~a <Configure> [list resetScroll ~a]
-bind ~a <Configure> [list resetScroll ~a] 
+bind ~a <Configure> [list resetScroll ~a]
 
 "
    (ltk::name self) (widget-path canvas2) (widget-path canvas1)
 
-   (widget-path canvas2) (widget-path hscroll) 
+   (widget-path canvas2) (widget-path hscroll)
    (widget-path canvas2) (widget-path vscroll)
-   
-   (widget-path hscroll) (ltk::name self) 
+
+   (widget-path hscroll) (ltk::name self)
    (widget-path vscroll) (widget-path canvas2)
    (widget-path canvas1) (widget-path topframe)
    (widget-path canvas2) (widget-path frame)
-   
+
    (widget-path canvas1)
    (widget-path canvas2)
    (widget-path topframe) (widget-path canvas1)
-   (widget-path frame) (widget-path canvas2) 
+   (widget-path frame) (widget-path canvas2)
    )
   )
 
@@ -829,9 +829,9 @@ bind ~a <Configure> [list resetScroll ~a]
 	  (dotimes (j 20)
 	    (pack (make-instance 'button :master f :text (format nil "Button ~d" (+ (* i 20) j))) :side :left))
 	  (pack f :side :top)))
-	      
+
       (pack mst :side :top :expand t :fill :both))))
-	    
+
 
 ;;; demo
 
@@ -877,7 +877,7 @@ bind ~a <Configure> [list resetScroll ~a]
   ((collapsed :accessor collapsed :initform nil :initarg :collapsed)
    (up        :accessor up        :initform nil :initarg :up)
    (next      :accessor next      :initform nil :initarg :next)
-   
+
 
    ))
 
@@ -894,17 +894,17 @@ bind ~a <Configure> [list resetScroll ~a]
    self
    (nconc
     (list
-     
+
      (list :line 8 2 292 2 :width 2 :fill :gray)
      (list :line 295 5 295 92 :width 2 :fill :gray)
      (list :line 292 95 8 95  :width 2 :fill :gray)
      (list :line 5 91 5 5     :width 2 :fill :gray)
-     
+
      (list :arc 4 1 20 15  :start 90 :extent 90 :style :arc :width 2 :outline :gray)
-     (list :arc 4 80 20 95  :start 180 :extent 90 :style :arc :width 2 :outline :gray)     
+     (list :arc 4 80 20 95  :start 180 :extent 90 :style :arc :width 2 :outline :gray)
      (list :arc 284 80 295 95  :start 270 :extent 90 :style :arc :width 2 :outline :gray)
      (list :arc 285 1 295 15  :start 0 :extent 90 :style :arc :width 2 :outline :gray))
-    
+
     (when (up self)
       (list
        (list :line 5 0 5 10 :width 2 :fill :gray)
@@ -949,13 +949,13 @@ bind ~a <Configure> [list resetScroll ~a]
   (setf (inner self) (interior sc))
   ;(scrollregion (canvas self) 0 0 300 2000)
   )
-  
+
 
 (defmethod add-card ((self cardstack) (card card))
   (setf (cards self) (append (cards self) (list card)))
   (unless (> (length (shown-cards self)) 50)
     (setf (shown-cards self) (append (shown-cards self) (list card)))
-    
+
     (pack card :side :top))
   card)
 
@@ -965,7 +965,7 @@ bind ~a <Configure> [list resetScroll ~a]
   (dolist (card cards)
     (pack card :side :top))
   (setf (shown-cards self) cards))
-  
+
 
 
 
@@ -992,9 +992,9 @@ bind ~a <Configure> [list resetScroll ~a]
     (declare (ignore event))
     (dolist (card (shown-cards stack))
       (collapse-card card))))
-      
 
-             
+
+
 
 
 

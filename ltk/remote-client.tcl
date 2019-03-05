@@ -33,7 +33,7 @@ if {[llength $argv] > 1} {
 
 
 label .status -text "Connecting to server $host port $port." -font 24
-pack .status 
+pack .status
 tkwait visibility .status
 
 if {[catch {global server; global host; global port; set server [socket $host $port]}]} {
@@ -49,13 +49,13 @@ fileevent $server readable [list sread $server]
 
 set buffer ""
 
-proc getcount {s} { 
+proc getcount {s} {
     if {[regexp {^\s*(\d+) } $s match num]} {
         return $num
     }
 }
 
-proc getstring {s} { 
+proc getstring {s} {
     if {[regexp {^\s*(\d+) } $s match]} {
         return [string range $s [string length $match] end]
     }

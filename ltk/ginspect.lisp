@@ -52,7 +52,7 @@
   (let ((*debug-tk* nil))
   (with-ltk ()
    (setf *debug-tk* nil)
-   (let* ((inspector (make-instance 'ginspector))	   
+   (let* ((inspector (make-instance 'ginspector))
 	  (f (make-instance 'frame))
 	  (lbl (make-instance 'label :text "  "))
 	  (pane (make-instance 'paned-window :orientation "vertical"))
@@ -67,12 +67,12 @@
 	  (quit (make-instance 'button :master f :text "quit"
 			       :command (lambda () (setf ltk::*exit-mainloop* t))))
 	  (back (make-instance 'button :master f :text "back"
-			       :command 
+			       :command
 			       (lambda ()
 				 (let ((val (pop (stack inspector))))
 				   (when val
 				     (setf (value inspector) val)
-				     (do-inspect inspector val)))))))    
+				     (do-inspect inspector val)))))))
      (pack quit :side :left)
      (pack back :side :right)
      (pack f :side :top :fill :x)
@@ -85,7 +85,7 @@
      (grid-rowconfigure f2 0 "weight" 1)
      (configure dscroll "command" (concatenate 'string (widget-path desc) " yview"))
      (configure desc "yscrollcommand" (concatenate 'string (widget-path dscroll) " set"))
-     
+
      (add-pane pane f2)
      (add-pane pane lb-fields)
      (pack entry :side :top :fill :x)
@@ -113,8 +113,8 @@
 	   (lambda (event)
 	     (declare (ignore event))
 	     (let ((txt (text entry)))
-	       (multiple-value-bind (result condition)		   
-		   (ignore-errors 
+	       (multiple-value-bind (result condition)
+		   (ignore-errors
 		     (with-input-from-string
 		      (s txt)
 		      (setf (value inspector) (eval (read s)))
@@ -145,7 +145,7 @@
 		   (setf (text entry) (nth history-pos history)))
 	       (setf (text entry) ""))))
 
-	     
+
 
      (setf (value inspector) inspected-value)
      (do-inspect inspector inspected-value)
@@ -380,6 +380,3 @@
 
 (defmethod inspected-parts ((object t))
   (values (format nil "The object is an ATOM:~%  ~W~%" object) nil nil))
-
-
-	  
