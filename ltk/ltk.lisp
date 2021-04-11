@@ -2023,15 +2023,21 @@ methods, e.g. 'configure'."))
 (defmethod initialize-instance :after ((m menucheckbutton) &key)
   (when (command m)
     (add-callback (name m) (command m)))
-  (format-wish "~A add checkbutton -label {~A} -variable ~a ~@[ -command {callback ~a}~]"
-	       (widget-path (master m)) (text m) (name m) (and (command m) (name m))))
+  (format-wish "~A add checkbutton -label {~A} -variable ~a ~@[ -command {callbackval ~a $~a}~]"
+	       (widget-path (master m)) (text m) (name m) (and (command m) (name m)) (name m)))
 
 (defmethod value ((cb menucheckbutton))
   (format-wish "global ~a; senddata $~a" (name cb) (name cb))
-  (read-data))
+  (if (equal 1 (read-data))
+    t
+    nil))
 
 (defmethod (setf value) (val (cb menucheckbutton))
-  (format-wish "global ~a; set ~a ~a" (name cb) (name cb) val)
+  (when (or (equal val 1)
+            (equal val 0))
+    (warn "Use of 1 and 0 for menucheckbutton values is deprecated, use T or NIL. Treating ~A as t"
+          val))
+  (format-wish "global ~a; set ~a ~a" (name cb) (name cb) (if val 1 0))
   val)
 
 (defclass menuradiobutton(menuentry) 
