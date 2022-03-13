@@ -3833,8 +3833,14 @@ set y [winfo y ~a]
 (defmethod on-focus ((tl toplevel) fun)
   (let ((name (create-name)))
     (add-callback name fun)
-    (format-wish "wm protocol WM_TAKE_FOCUS {callback ~A}"
-	      name))
+    (format-wish "wm protocol ~A WM_TAKE_FOCUS {callback ~A}"
+	         (widget-path tl) name))
+  tl)
+(defmethod on-focus ((tl (eql *tk*)) fun)
+  (let ((name (create-name)))
+    (add-callback name fun)
+    (format-wish "wm protocol . WM_TAKE_FOCUS {callback ~A}"
+	         name))
   tl)
 
 (defun iconwindow (tl wid)
