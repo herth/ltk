@@ -2512,8 +2512,12 @@ a list of numbers may be given"
 (defun make-toplevel (master)
   (make-instance 'toplevel :master master))
 
-;; title method for *tk*
+;; title methods for *tk*
+(defvar *tk-title* "LTK")
+(defmethod title ((w (eql *tk*)))
+  *tk-title*)
 (defmethod (setf title) (value (w (eql *tk*)))
+  (setf *tk-title* value)
   (wm-title *tk* value))
 
 ;;; label widget
