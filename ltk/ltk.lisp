@@ -1492,7 +1492,7 @@ can be passed to AFTER-CANCEL"
       (validate validate "~@[ -validate ~(~a~)~]" validate "")
       ;(validatecommand validatecommand "~@[ -validatecommand ~(~a~)~]" validatecommand "")
 
-      (validatecommand validatecommand "~@[ -validatecommand {callback ~a;1}~]"
+      (validatecommand validatecommand "~@[ -validatecommand {callback ~a;expr 1}~]"
        (and validatecommand 
         (progn
           (add-callback (name widget) validatecommand)
