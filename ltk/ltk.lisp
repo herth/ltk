@@ -10,40 +10,40 @@
  of the Lisp Lesser GNU Public License
  (http://opensource.franz.com/preamble.html),
  known as the LLGPL.
- 
+
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  GNU General Public License for more details.
- 
+
 |#
 
 #|
 All tk commands as of version 8.4 with support information. "-" means not
 supported by purpose (look comment), "x" means supported, though some
-options may not be supported. 
+options may not be supported.
 
 command      supported comment
 bell                 x
-bind                 x 
+bind                 x
 bindtags               modify the tag list of a widget that describes which events it gets
 bitmap               - see image
 button               x
-canvas               x 
+canvas               x
 checkbutton          x
 clipboard            x (canvas get missing... tricky...)
 colors               - constants only
 console              - only on some platforms
-cursors              x 
+cursors              x
 destroy              x
 entry                x
 event                  create and manage virtual events
 focus                x focus management functions
 font
 frame                x
-grab                  
+grab
 grid                 x
-image                x 
+image                x
 keysyms              - constants only
 label                x
 labelframe           x
@@ -52,16 +52,16 @@ loadTk               -
 lower                x
 menu                 x
 menubutton           x
-message              x 
+message              x
 option               -
 options              - only helpfile
 pack                 x
 panedwindow          x
-photo                x 
+photo                x
 place                x geometry manager using coordinates
 radiobutton          x
 raise                x
-scale                x 
+scale                x
 scrollbar            x
 selection
 send
@@ -72,7 +72,7 @@ tk_bisque            - only for tk backwards compatibility
 tk_chooseColor
 tk_chooseDirectory
 tk_dialog
-tk_focusFollowsMouse 
+tk_focusFollowsMouse
 tk_focusNext
 tk_focusPrev
 tk_getOpenFile       x
@@ -87,33 +87,33 @@ tk_textCut
 tk_textPaste
 tkerror              -
 tkvars               -
-tkwait               
+tkwait
 toplevel             x
 winfo                x
-wm                   x 
+wm                   x
 
 
 support of all config args as keywords to make-instance:
 
-bitmap               
+bitmap
 button               x
-canvas               x 
+canvas               x
 checkbutton          x
 entry                x
 frame                x
-image                 
-label                x 
-labelframe           x 
-listbox              x 
-menu                  
-menubutton            
-message                
+image
+label                x
+labelframe           x
+listbox              x
+menu
+menubutton
+message
 panedwindow          x
-photo                  
+photo
 radiobutton          x
 scale                x
-scrollbar            x 
-spinbox              x 
+scrollbar            x
+spinbox              x
 text                 x
 toplevel             x
 
@@ -127,7 +127,7 @@ toplevel             x
         )
   (:shadow #+:sbcl #:exit
            #+:sbcl #:create)
-  (:export #:ltktest                           
+  (:export #:ltktest
            #:*ltk-version*
            #:*cursors*
            #:*debug-tk*
@@ -466,24 +466,24 @@ toplevel             x
              (unless proc
                (error "Cannot create process."))
              #+:ext-8859-1
-             (make-two-way-stream 
-              (sb-sys:make-fd-stream 
+             (make-two-way-stream
+              (sb-sys:make-fd-stream
                (sb-sys:fd-stream-fd (process-output proc))
                :input t :external-format :iso-8859-1)
-              (sb-sys:make-fd-stream 
+              (sb-sys:make-fd-stream
                (sb-sys:fd-stream-fd (process-input proc))
                :output t  :external-format :iso-8859-1))
 
-             (make-two-way-stream 
-              (sb-sys:make-fd-stream 
+             (make-two-way-stream
+              (sb-sys:make-fd-stream
                (sb-sys:fd-stream-fd (process-output proc))
                :input t :external-format :utf-8)
-              (sb-sys:make-fd-stream 
+              (sb-sys:make-fd-stream
                (sb-sys:fd-stream-fd (process-input proc))
                :output t  :external-format :utf-8))
              #+:xxext-8859-1
-	     (make-two-way-stream 
-	      (process-output proc)              
+	     (make-two-way-stream
+	      (process-output proc)
 	      (process-input proc))
              )
     #+:lispworks (system:open-pipe fullstring :direction :io)
@@ -504,7 +504,14 @@ toplevel             x
 		 (make-two-way-stream
 		  (ccl:external-process-output-stream proc)
 		  (ccl:external-process-input-stream proc)))
-    ))
+    #+:abcl(let ((proc (sys:run-program program args :input
+					    :stream :output :stream :error :output :wait wt)))
+		 (unless proc
+		   (error "Cannot create process."))
+             (make-two-way-stream
+              (sys:process-output proc)
+              (sys:process-input proc)))))
+
 
 (defvar *ltk-version* "0.992")
 
@@ -597,7 +604,7 @@ toplevel             x
   `(let ((*buffer-for-atomic-output* t))
      ,@code
      ))
-     
+
 
 ;;; setup of wish
 ;;; put any tcl function definitions needed for running ltk here
@@ -628,13 +635,13 @@ toplevel             x
 
   (send-wish "proc senddatastring {s} {
        global server
-       
+
        puts $server \"(:data \\\"[escape $s]\\\")\"
        flush $server
     } ")
 
   (send-wish "proc senddatastrings {strings} {
-                 global server 
+                 global server
                  puts $server \"(:data (\"
  	         foreach s $strings {
                      puts $server \"\\\"[escape $s]\\\"\"
@@ -643,9 +650,9 @@ toplevel             x
   (send-wish "proc to_keyword  {s} {
                 if {[string index $s 0] == \"-\"} {
                    return \":[string range $s 1 [string length $s]]\" } {return \":$s\"}}")
-  
+
   (send-wish "proc sendpropertylist {l} {
-               global server; 
+               global server;
                set pos 0
                set ll [llength $l]
                puts $server \"(:data (\"
@@ -656,7 +663,7 @@ toplevel             x
                  set pos [expr $pos + 1]
                 }
                puts $server \"))\"
-                  
+
 }")
 
   (send-wish "proc searchall {widget pattern} {
@@ -669,7 +676,7 @@ toplevel             x
                      set result [$widget search $pattern $result+${l}chars]
                  }
              }")
-  
+
   (send-wish "proc searchnext {widget pattern} {
                  set l [string length $pattern]
                  set result [$widget search $pattern insert]
@@ -680,7 +687,7 @@ toplevel             x
                      $widget see insert
                  }
              }")
- 
+
   (send-wish "proc resetScroll {c} {
       $c configure -scrollregion [$c bbox all]
 }
@@ -707,8 +714,8 @@ proc moveToStart {sb} {
   ;(send-wish "global serverlist;set serverlist {{foo 10} {bar 20} {baz 40}}")
   ;(send-wish "global host; set host bar")
   ;(send-wish "global hping; set hping 42")
-  
-  (dolist (fun *init-wish-hook*)	; run init hook funktions 
+
+  (dolist (fun *init-wish-hook*)	; run init hook funktions
     (funcall fun))))
 
 
@@ -743,13 +750,13 @@ proc ltkdebug {text} {
 }
 
 
-proc getcount {s} { 
+proc getcount {s} {
     if {[regexp {^\\s*(\\d+) } $s match num]} {
         return $num
     }
 }
 
-proc getstring {s} { 
+proc getstring {s} {
     if {[regexp {^\\s*(\\d+) } $s match]} {
         return [string range $s [string length $match] end]
     }
@@ -766,7 +773,7 @@ proc process_buffer {} {
         # tk_messageBox -icon error -type ok -title \"Error!\" -message $result
         puts $server \"(:error \\\"[escape_for_lisp $result]\\\")\"
         flush $server
-    } 
+    }
 }
 
 proc bt {txt} {
@@ -876,7 +883,7 @@ fconfigure stdout -encoding utf-8
              (when (or *debug-buffers*
                        *debug-tk*)
                (format t "buffer size ~a~%" len) (finish-output))
-             
+
              (dolist (string buffer)
                (loop while (> (length string) *max-line-length*)
                      do
@@ -897,7 +904,7 @@ fconfigure stdout -encoding utf-8
                (dbg "bt \"~A\"~%" (tkescape2 string)))
              (format stream "process_buffer~%")
              (dbg "process_buffer~%")))
-          
+
           (finish-output stream)
 
           #+nil(loop for string in buffer
@@ -916,7 +923,7 @@ fconfigure stdout -encoding utf-8
                                     (finish-output stream)))
 
           (setf (wish-output-buffer *wish*) nil))))))
-  
+
 (defun handle-dead-stream (err stream)
   (when *debug-tk*
     (format *trace-output* "Error sending command to wish: ~A" err)
@@ -927,7 +934,7 @@ fconfigure stdout -encoding utf-8
 (defun format-wish (control &rest args)
   "format 'args using 'control as control string to wish"
   (send-wish (apply #'format nil control args)))
-  
+
 
 #+nil
 (defmacro format-wish (control &rest args)
@@ -942,7 +949,7 @@ fconfigure stdout -encoding utf-8
              (,stream (wish-stream *wish*)))
          (declare (type stream ,stream)
                   (optimize (speed 3)))
-         
+
          (format ,stream ,control ,@args)
          (format ,stream "~%")
          (finish-output ,stream))
@@ -985,7 +992,7 @@ fconfigure stdout -encoding utf-8
 ;; set it to like 0.1 to simulate bad networks
 ;;(defparameter *read-delay* nil)
 
-;;; read from wish 
+;;; read from wish
 (defun read-wish ()
   "Reads from wish. If the next thing in the stream is looks like a lisp-list
   read it as such, otherwise read one line as a string."
@@ -1012,7 +1019,7 @@ fconfigure stdout -encoding utf-8
   (declare (stream stream)
            #-:lispworks (inline read-char-no-hang unread-char))
   (let ((c (read-char-no-hang stream)))
-    (loop 
+    (loop
        while (and c
                   (member c '(#\Newline #\Return #\Space)))
        do
@@ -1096,7 +1103,7 @@ event to read and blocking is set to nil"
          ((eq (first data) :error)
           (error 'tk-error :message (second data)))
          (t
-          
+
           (format t "read-data problem: ~a~%" data) (finish-output)
           ))
        else do
@@ -1160,7 +1167,7 @@ event to read and blocking is set to nil"
    )
   (:documentation "Base class for every Tk object"))
 
-;; basic class for all widgets 
+;; basic class for all widgets
 (defclass widget(tkobject)
   ((master :accessor master :initarg :master :initform nil) ;; parent widget or nil
    (widget-path :initarg :path :initform nil :accessor %widget-path)         ;; pathname to refer to the widget
@@ -1170,7 +1177,7 @@ event to read and blocking is set to nil"
 
 ;; creating of the tk widget after creating the clos object
 (defmethod initialize-instance :after ((w widget) &key)
-  (unless (name w)			; generate name if not given 
+  (unless (name w)			; generate name if not given
     (setf (name w) (create-name))))
 
 (defvar *tk* (make-instance 'widget :name "." :path ".")
@@ -1206,7 +1213,7 @@ event to read and blocking is set to nil"
 (defun senddatastring (tclcmd args)
   (let ((fmt (format nil "if {[catch {~a} result]} {
             puts \"(:error \\\"[escape $result]\\\")\"
-           } else { 
+           } else {
            senddatastring $result
 }" tclcmd)))
     (apply 'format-wish fmt args)))
@@ -1234,7 +1241,7 @@ can be passed to AFTER-CANCEL"
  (let ((name (format nil "afteridle~a" (incf (wish-after-counter *wish*)))))
    (format-wish "senddatastring [after idle {callback ~A}]" name)
    (let ((id (read-data))
-         (blah (wish-after-ids *wish*)))         
+         (blah (wish-after-ids *wish*)))
      (add-callback name
                    (lambda ()
                      (funcall fun)
@@ -1270,8 +1277,8 @@ can be passed to AFTER-CANCEL"
         (setf result (format nil "~a~a" result (elt numerals rest)))
         (setf value mul)))
     result))
-    
-  
+
+
 (defun create-name ()
   "create unique widget name, append unique number to 'w'"
   (format nil "w~A" (encode-base-52 (get-counter))))
@@ -1285,12 +1292,12 @@ can be passed to AFTER-CANCEL"
                          ""
                          (widget-path master))))
     (format nil "~A.~A" master-path name)))
-  
+
 (eval-when (:compile-toplevel :load-toplevel :execute)
 ;;; widget class built helper functions
 
 ;;(defparameter *generate-accessors* nil)
-  
+
   (defun iarg-name (arg) (nth 0 arg))
   (defun iarg-key (arg) (nth 1 arg))
   (defun iarg-format (arg) (nth 2 arg))
@@ -1302,7 +1309,7 @@ can be passed to AFTER-CANCEL"
       (button.background Button.background "~@[ -Button.background ~(~a~)~]" button.background "")
       (Button.cursor Button.cursor "~@[ -Button.cursor ~(~a~)~]" Button.cursor "")
       (Button.relief Button.relief "~@[ -Button.relief ~(~a~)~]" Button.relief "")
-      
+
       (activebackground activebackground "~@[ -activebackground ~(~a~)~]" activebackground
        "background of the active area")
 
@@ -1314,13 +1321,13 @@ can be passed to AFTER-CANCEL"
 
       (activerelief activerelief "~@[ -activerelief ~(~a~)~]" activerelief
        "the border relief for active widgets (when the mouse cursor is over the widget)")
-      
+
       (activestyle activestyle "~@[ -activestyle ~(~a~)~]" activestyle
        "the style for drawing the active part (dotbox, none, underline (default))")
-      
+
       (anchor anchor "~@[ -anchor ~(~a~)~]" anchor
        "specify the alignment of text/image drawn on the widget, one of (:n :w :s :e :nw :sw :se :ne) with :nw designating the top left corner")
-      
+
       (aspect aspect "~@[ -aspect ~(~a~)~]" aspect
        "Aspect ratio for the wrapping of the text. 100 means that the text is redered as wide as, tall, 200 twice as wide.")
       (autoseparators autoseparators "~:[~; -autoseparators 1~]" autoseparators
@@ -1344,55 +1351,55 @@ can be passed to AFTER-CANCEL"
       (colormap colormap "~@[ -colormap ~(~a~)~]" colormap
        "The colormap to use for the widget.")
 
-      (command command "~@[ -command {callback ~a}~]" (and command 
+      (command command "~@[ -command {callback ~a}~]" (and command
                                                        (progn
                                                          (add-callback (name widget) command)
                                                          (name widget)))
        "function to call when the action of the widget is executed")
-      
-      (cbcommand command "~@[ -command {callbackval ~{~a $~a~}}~]" (and command 
+
+      (cbcommand command "~@[ -command {callbackval ~{~a $~a~}}~]" (and command
                                                                     (progn
                                                                       (add-callback (name widget) command)
                                                                       (list (name widget) (name widget))))
        "function to call when the action of the widget is executed")
-      (scalecommand command "~@[ -command {callbackval ~a }~]" (and command 
+      (scalecommand command "~@[ -command {callbackval ~a }~]" (and command
                                                                     (progn
                                                                       (add-callback (name widget) command)
                                                                       (name widget)))
        "function to call when the action of the widget is executed")
-      (spinbox-command command "~@[ -command {callbackstring ~a %s}~]" (and command 
+      (spinbox-command command "~@[ -command {callbackstring ~a %s}~]" (and command
                                                                            (progn
                                                                              (add-callback (name widget) command)
                                                                              (name widget))))
-      (command-radio-button command "~@[ -command {callbackval ~{~a $~a~}}~]" (and command 
+      (command-radio-button command "~@[ -command {callbackval ~{~a $~a~}}~]" (and command
                         						       (progn
 										 (add-callback (name widget) command)
 										 (list (name widget) (radio-button-variable widget))))
        "function to call when the action of the widget is executed")
-      
-      (command-scrollbar command "~@[ -command {callback ~a}~]" (and command 
+
+      (command-scrollbar command "~@[ -command {callback ~a}~]" (and command
 								 (progn
 								   (add-callback (name widget) command)
 								   (name widget)))"")
       (cols cols "~@[ -cols ~d~]" cols "")
       (compound compound "~@[ -compound ~(~a~)~]" compound
        "")
-      
+
       (confine confine "~:[~; -confine 1~]" confine
        "if t (default) allowed values for view are confined to the scrollregion")
-      
+
       (container container "~:[~; -container 1~]" container
        "if t, then the widget will be used as a container for other widgets.")
-      
+
       (cursor cursor "~@[ -cursor ~(~a~)~]" cursor
        "mouse pointer to display on the widget (valid values are listed in *cursors*)")
-      
+
       (default default "~@[ -default ~(~a~)~]" default
        "")
 
       (digits digits "~@[ -digits ~(~a~)~]" digits
        "number of digits to use when converting the value to a string.")
-      
+
       (direction direction "~@[ -direction ~(~a~)~]" direction "")
       (disabledbackground disabledbackground "~@[ -disabledbackground ~(~a~)~]" disabledbackground "")
       (disabledforeground disabledforeground "~@[ -disabledforeground ~(~a~)~]" disabledforeground "")
@@ -1493,7 +1500,7 @@ can be passed to AFTER-CANCEL"
       ;(validatecommand validatecommand "~@[ -validatecommand ~(~a~)~]" validatecommand "")
 
       (validatecommand validatecommand "~@[ -validatecommand {callback ~a;1}~]"
-       (and validatecommand 
+       (and validatecommand
         (progn
           (add-callback (name widget) validatecommand)
           (name widget))))
@@ -1514,11 +1521,11 @@ can be passed to AFTER-CANCEL"
       (yscrollcommand yscrollcommand "~@[ -yscrollcommand ~(~a~)~]" yscrollcommand "")
       (yscrollincrement yscrollincrement "~@[ -yscrollincrement ~(~a~)~]" yscrollincrement "")
       ))
-  
+
 
   (defparameter *class-args*
     '())
-  
+
   (defun build-args (class parents defs)
     (declare (ignore class))
     ;;(format t  "class ~s parents ~s defs ~s~%" class parents defs) (finish-output)
@@ -1529,12 +1536,12 @@ can be passed to AFTER-CANCEL"
 	  (dolist (arg arglist)
 	    (unless (member arg args)
 	      (setf args (append args (list arg)))))))
-      (loop 
+      (loop
          while defs
          do
            (let ((arg (pop defs)))
              (cond
-               ((eq arg :inherit)	 
+               ((eq arg :inherit)
                 (let* ((inheritedclass (pop defs))
                        (arglist (rest (assoc inheritedclass *class-args*))))
                   (dolist (arg arglist)
@@ -1542,7 +1549,7 @@ can be passed to AFTER-CANCEL"
                       (setf args (append args (list arg)))
                       ))))
                ((eq arg :delete)
-                (setf args (delete (pop defs) args)))	    
+                (setf args (delete (pop defs) args)))
                (t
                 (setf args (append args (list arg)))))))
       ;;(format t "class: ~a args: ~a~&" class args) (finish-output)
@@ -1566,11 +1573,11 @@ can be passed to AFTER-CANCEL"
 
 
 #+:tk84
-(defargs widget () 
+(defargs widget ()
   relief cursor borderwidth background)
 
 #-:tk84
-(defargs widget () 
+(defargs widget ()
   class cursor style takefocus)
 
 #-:tk84
@@ -1581,11 +1588,11 @@ can be passed to AFTER-CANCEL"
 ;(defargs text (widget button) :delete anchor color)
 
 #-:tk84
-(defargs button (widget) 
+(defargs button (widget)
  command compound default image state textvariable underline width)
 
 #+:tk84
-(defargs button (widget) 
+(defargs button (widget)
   activebackground activeforeground anchor bitmap command compound default disabledforeground font foreground height highlightbackground highlightcolor highlightthickness image justify overrelief padx pady repeatdelay repeatinterval state takefocus textvariable underline width wraplength)
 
 (defargs canvas ()
@@ -1723,7 +1730,7 @@ can be passed to AFTER-CANCEL"
       (dolist (arg args)
 	(let ((entry (assoc arg *initargs*)))
 	  (cond
-            (entry 
+            (entry
              (setf cmdstring (concatenate 'string cmdstring (third entry)))
              (when (iarg-key entry)
                (setf keylist (append keylist (list (iarg-key entry)))))
@@ -1738,7 +1745,7 @@ can be passed to AFTER-CANCEL"
                         (not (equal (iarg-key entry) 'scrollregion)))
                (push
                 `(defmethod (setf ,(iarg-key entry)) (value (widget ,class))
-                   (format-wish ,(format nil "~~a configure ~a"(third entry)) (widget-path widget) value))	   
+                   (format-wish ,(format nil "~~a configure ~a"(third entry)) (widget-path widget) value))
                 accessors)
                (push
                 `(defmethod ,(iarg-key entry) ((widget ,class))
@@ -1746,7 +1753,7 @@ can be passed to AFTER-CANCEL"
                    (read-data))
                 accessors))
              )
-            (t 
+            (t
              (setf cmdstring (concatenate 'string cmdstring (format nil "~~@[ -~(~a~) ~~(~~A~~)~~]" arg)))
              (setf keylist (append keylist (list arg)))
              (setf codelist (append codelist (list arg)))
@@ -1764,7 +1771,7 @@ can be passed to AFTER-CANCEL"
 	 ,@accessors
 	 ))))
 
-;;; the library implementation 
+;;; the library implementation
 
 (defvar *cursors*
   (list
@@ -1893,7 +1900,7 @@ can be passed to AFTER-CANCEL"
   (let ((name (create-name)))
     (add-callback name fun)
     ;;(format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K %w %h %X %Y}" (widget-path w) event name)
-    (format-wish "bind  ~a ~a {~:[~;+~]sendevent ~A %x %y %k %K %w %h %X %Y %b ~:[~;;break~]}" 
+    (format-wish "bind  ~a ~a {~:[~;+~]sendevent ~A %x %y %k %K %w %h %X %Y %b ~:[~;;break~]}"
 		 (widget-path w) event append name exclusive)
     w))
 
@@ -1902,7 +1909,7 @@ can be passed to AFTER-CANCEL"
   (let ((name (create-name)))
     (add-callback name fun)
     ;;(format-wish "bind  ~a ~a {sendevent ~A %x %y %k %K %w %h %X %Y}" s event name)
-    (format-wish "bind  ~a ~a {~:[~;+~]sendevent ~A %x %y %k %K %w %h %X %Y %b ~:[~;;break~]}" 
+    (format-wish "bind  ~a ~a {~:[~;+~]sendevent ~A %x %y %k %K %w %h %X %Y %b ~:[~;;break~]}"
 		 s event append name exclusive)))
 
 ;;; generic functions
@@ -2003,7 +2010,7 @@ can be passed to AFTER-CANCEL"
   (:documentation "An abstract base class for menu entries.  These \"widgets\" have to be handled specially by some
 methods, e.g. 'configure'."))
 
-(defclass menubutton(menuentry) 
+(defclass menubutton(menuentry)
   ())
 
 (defmethod initialize-instance :after ((m menubutton) &key command underline accelerator state)
@@ -2034,7 +2041,7 @@ methods, e.g. 'configure'."))
   (format-wish "global ~a; set ~a ~a" (name cb) (name cb) val)
   val)
 
-(defclass menuradiobutton(menuentry) 
+(defclass menuradiobutton(menuentry)
   ((command :accessor command :initarg :command :initform nil)
    (group :accessor group :initarg :group :initform nil)))
 
@@ -2114,15 +2121,15 @@ methods, e.g. 'configure'."))
 ;;; radio button widget
 
 #+:tk84
-(defwrapper radio-button (tktextvariable widget) 
+(defwrapper radio-button (tktextvariable widget)
   ((val :accessor radio-button-value :initarg :value :initform nil)
-   (var :accessor radio-button-variable :initarg :variable :initform nil)) 
+   (var :accessor radio-button-variable :initarg :variable :initform nil))
   "radiobutton")
 
 #-:tk84
-(defwrapper radio-button (tktextvariable widget) 
+(defwrapper radio-button (tktextvariable widget)
   ((val :accessor radio-button-value :initarg :value :initform nil)
-   (var :accessor radio-button-variable :initarg :variable :initform nil)) 
+   (var :accessor radio-button-variable :initarg :variable :initform nil))
   "ttk::radiobutton")
 
 (defmethod value ((rb radio-button))
@@ -2189,10 +2196,10 @@ methods, e.g. 'configure'."))
     (when (> (length string) 0)
       (push string erg))
     (nreverse erg)))
-        
 
 
-;;; frame widget 
+
+;;; frame widget
 
 #+:tk84
 (defwrapper frame (widget) () "frame")
@@ -2205,7 +2212,7 @@ methods, e.g. 'configure'."))
 ;(defun make-frame (master)
 ;  (make-instance 'frame :master master))
 
-;;; labelframe widget 
+;;; labelframe widget
 
 #+:tk84
 (defwrapper labelframe (widget) () "labelframe")
@@ -2355,7 +2362,7 @@ a list of numbers may be given"
   (grid-columnconfigure sl 1 :weight 0)
   (grid-rowconfigure sl 0 :weight 1)
   (grid-rowconfigure sl 1 :weight 0)
- 
+
   (configure (hscroll sl) "command" (concatenate 'string (widget-path (listbox sl)) " xview"))
   (configure (vscroll sl) "command" (concatenate 'string (widget-path (listbox sl)) " yview"))
   (configure (listbox sl) "xscrollcommand" (concatenate 'string (widget-path (hscroll sl)) " set"))
@@ -2440,7 +2447,7 @@ a list of numbers may be given"
   (grid-columnconfigure st 1 :weight 0)
   (grid-rowconfigure st 0 :weight 1)
   (grid-rowconfigure st 1 :weight 0)
- 
+
   (configure (hscroll st) "command" (concatenate 'string (widget-path (textbox st)) " xview"))
   (configure (vscroll st) "command" (concatenate 'string (widget-path (textbox st)) " yview"))
   (configure (textbox st) "xscrollcommand" (concatenate 'string (widget-path (hscroll st)) " set"))
@@ -2483,7 +2490,7 @@ a list of numbers may be given"
 (defwrapper scale (tkvariable widget) () "ttk::scale")
 
 (defmethod (setf command) (val (scale scale))
-  (add-callback (name scale) val)					
+  (add-callback (name scale) val)
   (format-wish "proc ~a-command {val} {callbackval ~a $val}" (name scale) (name scale))
   (format-wish "~a configure -command ~a-command" (widget-path scale) (name scale))
   val)
@@ -2493,16 +2500,16 @@ a list of numbers may be given"
 (defwrapper spinbox (tktextvariable widget) () "spinbox")
 
 (defmethod (setf command) (val (sp spinbox))
-  (add-callback (name sp) val)					
+  (add-callback (name sp) val)
   (format-wish "~a configure -command {callbackstring ~a %s}" (widget-path sp) (name sp))
   val)
 
-;;; toplevel (window) widget 
+;;; toplevel (window) widget
 
-(defwrapper toplevel (widget) 
+(defwrapper toplevel (widget)
   ((protocol-destroy :accessor protocol-destroy :initarg :on-close :initform nil)
    (title :accessor title :initform nil :initarg :title)
-   ) 
+   )
   "toplevel"
   (when (title widget)
     (wm-title widget (title widget)))
@@ -2558,7 +2565,7 @@ a list of numbers may be given"
   (grid-columnconfigure sc 1 :weight 0)
   (grid-rowconfigure sc 0 :weight 1)
   (grid-rowconfigure sc 1 :weight 0)
- 
+
   (configure (hscroll sc) "command" (concatenate 'string (widget-path (canvas sc)) " xview"))
   (configure (vscroll sc) "command" (concatenate 'string (widget-path (canvas sc)) " yview"))
   (configure (canvas sc) "xscrollcommand" (concatenate 'string (widget-path (hscroll sc)) " set"))
@@ -2599,7 +2606,7 @@ a list of numbers may be given"
     (grid-columnconfigure sf 1 "weight" 0)
     (grid-rowconfigure sf 0 "weight" 1)
     (grid-rowconfigure sf 1 "weight" 0)
-    (format-wish 
+    (format-wish
      "
 ~a configure -xscrollcommand [list ~a set] -yscrollcommand [list ~a set]
 ~a configure -command [list ~a xview]
@@ -2608,14 +2615,14 @@ a list of numbers may be given"
 
 after idle [list resetScroll ~a]
 
-bind ~a <Configure> [list resetScroll ~a] 
+bind ~a <Configure> [list resetScroll ~a]
 
 "
      (widget-path canvas) (widget-path (hscroll sf)) (widget-path (vscroll sf))
      (widget-path (hscroll sf)) (widget-path canvas)
      (widget-path (vscroll sf)) (widget-path canvas)
      (widget-path canvas) (widget-path f)
-     (widget-path canvas) 
+     (widget-path canvas)
      (widget-path f) (widget-path canvas)
      )
     ))
@@ -2643,7 +2650,7 @@ bind ~a <Configure> [list resetScroll ~a]
     (grid-columnconfigure sf 1 "weight" 0)
     (grid-rowconfigure sf 0 "weight" 1)
     (grid-rowconfigure sf 1 "weight" 0)
-    
+
     (place (interior sf) 0 0)
     (send-wish (format nil "~a set  0.1 0.5" (widget-path (hscroll sf))))
     (send-wish (format nil "~a set  0.1 0.5" (widget-path (vscroll sf))))
@@ -2679,7 +2686,7 @@ set y [winfo y ~a]
 
 " (name sf)
   (widget-path (interior sf)) (widget-path (interior sf)) (widget-path (interior sf))
-  (widget-path f)  (widget-path (interior sf))  (widget-path (interior sf))		   
+  (widget-path f)  (widget-path (interior sf))  (widget-path (interior sf))
   (widget-path (hscroll sf))
   (name sf)   (widget-path (interior sf))  (widget-path (interior sf))
   (widget-path (interior sf))  (widget-path f)  (widget-path (interior sf))
@@ -2920,12 +2927,12 @@ set y [winfo y ~a]
   (grid-columnconfigure st 1 :weight 0)
   (grid-rowconfigure st 0 :weight 1)
   (grid-rowconfigure st 1 :weight 0)
- 
+
   (configure (hscroll st) "command" (concatenate 'string (widget-path (treeview st)) " xview"))
   (configure (vscroll st) "command" (concatenate 'string (widget-path (treeview st)) " yview"))
   (configure (treeview st) "xscrollcommand" (concatenate 'string (widget-path (hscroll st)) " set"))
   (configure (treeview st) "yscrollcommand" (concatenate 'string (widget-path (vscroll st)) " set")))
-   
+
 
 ;;; canvas widget
 
@@ -2936,7 +2943,7 @@ set y [winfo y ~a]
    (scrollregion-y0 :accessor scrollregion-y0 :initform nil)
    (scrollregion-x1 :accessor scrollregion-x1 :initform nil)
    (scrollregion-y1 :accessor scrollregion-y1 :initform nil)
-   ) 
+   )
   "canvas"
   )
 
@@ -3013,7 +3020,7 @@ set y [winfo y ~a]
     (format-number stream (realpart number))
     (format-number stream (imagpart number)))
    ((integerp number)
-    (format stream " ~d" number))	    
+    (format stream " ~d" number))
    ((typep number 'single-float)
     (format stream " ~a" number))
    ((numberp number)
@@ -3026,7 +3033,7 @@ set y [winfo y ~a]
    ((arrayp number)
     (dotimes (i (length number))
       (format-number stream (aref number i))))
-   ))        
+   ))
 
 (defun process-coords (input)
   (with-output-to-string (s)
@@ -3066,7 +3073,7 @@ set y [winfo y ~a]
   (declare (ignore append exclusive))
   (format-wish "~a bind ~a ~a {~a}"
                (widget-path (canvas w)) (handle w) event code))
-  
+
 
 (defgeneric scrollregion (canvas x0 y0 x1 y1))
 (defmethod scrollregion ((c canvas) x0 y0 x1 y1)
@@ -3220,7 +3227,7 @@ set y [winfo y ~a]
         ((eq itemtype :oval)
          (format stream "~a create oval ~a ~a ~a ~a " cpath (number) (number) (number) (number))
          (args))
-      
+
         ((eq itemtype :line)
          (format stream "~a create line ~a ~a ~a ~a " cpath (number) (number) (number) (number))
          (args))
@@ -3233,7 +3240,7 @@ set y [winfo y ~a]
          (format stream "~a create text ~a ~a -anchor nw -text {~a} "
                  cpath (number) (number) (tkescape (arg)))
          (args))
-      
+
         ((eq itemtype :ctext)
          (format stream "~a create text ~a ~a -anchor n -text {~a} "
                  cpath (number) (number) (tkescape (arg)))
@@ -3665,7 +3672,7 @@ set y [winfo y ~a]
 
 ;;; font functions
 ;; use {~/ltk::down/} on the font name to match itemconfigure
- 
+
 ;;(defun font-actual ...)
 
 (defun font-configure (name &key family size weight slant underline overstrike)
@@ -3676,7 +3683,7 @@ set y [winfo y ~a]
   (format-wish "senddatastring [font create {~/ltk::down/}~@[ -family ~a~]~@[ -size ~a~]~@[ -weight ~(~a~)~]~@[ -slant ~(~a~)~]~@[ -underline ~a~]~@[ -overstrike ~a~]]"
                name family size weight slant underline overstrike)
    (read-data))
- 
+
 (defun font-delete (&rest names)
   (format-wish "font delete~{ {~/ltk::down/}~}" names))
 
@@ -3686,7 +3693,7 @@ set y [winfo y ~a]
  (defun font-metrics (font)
    (format-wish "sendpropertylist [font metrics {~/ltk::down/}]" font)
    (read-data))
- 
+
 ;;(defun font-names ...)
 
 (defun font-families ()
@@ -3724,7 +3731,7 @@ set y [winfo y ~a]
 (defmethod wm-forget ((w widget))
   (format-wish "wm forget ~a" (widget-path w))
   w)
-  
+
 
 (defgeneric wm-state (widget))
 (defmethod wm-state ((w widget))
@@ -3809,7 +3816,7 @@ set y [winfo y ~a]
 (defmethod set-geometry-xy ((tl widget) x y)
   (format-wish "wm geometry ~a +~D+~D" (widget-path tl) (tk-number x) (tk-number y))
   tl)
- 
+
 (defgeneric on-close (toplevel fun))
 (defmethod on-close ((tl toplevel) fun)
   (let ((name (create-name)))
@@ -3839,7 +3846,7 @@ set y [winfo y ~a]
 
 (defun iconwindow (tl wid)
   (format-wish "wm iconwindow ~a ~a" (widget-path tl) (widget-path wid))
-  tl)  
+  tl)
 
 ;;; winfo functions
 
@@ -3956,12 +3963,12 @@ set y [winfo y ~a]
 	(format-wish "senddatastrings [tk_getOpenFile ~
                       -filetypes ~a ~@[ -initialdir {~a}~] -multiple 1 ~
                       ~@[ -parent ~a~] ~@[ -title {~a}~]]"
-		      files initialdir 
+		      files initialdir
 		      (and parent (widget-path parent)) title)
 	(format-wish "senddatastring [tk_getOpenFile ~
                       -filetypes ~a ~@[ -initialdir {~a}~]  ~
                       ~@[ -parent ~a~] ~@[ -title {~a}~]]"
-		      files initialdir 
+		      files initialdir
 		      (and parent (widget-path parent)) title))
     (read-data)))
 
@@ -4053,7 +4060,7 @@ set y [winfo y ~a]
 	(cm entry newpath))))
    (t
     (let* ((name (create-name)))
-      (add-callback name (second tree))		     
+      (add-callback name (second tree))
       (send-wish (format nil "~A add command -label {~A} -command {puts -nonewline  {(\"~A\")};flush $server}" widget-path (first tree) name))
       ))))
 
@@ -4062,7 +4069,7 @@ set y [winfo y ~a]
   (dolist (e menutree)
     (cm e ".menubar"))
   (send-wish (format nil ". configure -menu .menubar"))
-  )  
+  )
 
 
 ;;;; Error handling
@@ -4152,7 +4159,7 @@ set y [winfo y ~a]
 events can be processed, useful in long loops or loops that depend on
 tk input to terminate"
   (let (event)
-    (loop 
+    (loop
      while (setf event (read-event :blocking nil))
      do (with-atomic (process-one-event event)))))
 
@@ -4231,7 +4238,7 @@ tk input to terminate"
   (defun serve-event ()
     #+sbcl (sb-sys:serve-event)
     #+cmu (system:serve-event))
-  
+
   (defun fd-stream-fd (stream)
     #+sbcl (sb-sys:fd-stream-fd stream)
     #+cmu (system:fd-stream-fd stream))
@@ -4240,7 +4247,7 @@ tk input to terminate"
     "Return a SERVE-EVENT input handler."
     (let ((fd-stream (two-way-stream-input-stream (wish-stream wish))))
       (labels ((call-main ()
-		 (with-ltk-handlers () 
+		 (with-ltk-handlers ()
 		   (handler-bind ((stream-error
 				   ;; If there was a stream error on the fd that
 				   ;; we're listening to, we need to remove the
@@ -4324,7 +4331,7 @@ tk input to terminate"
                  (mainloop)))
           (unless serve-event
             (exit-wish)))))))
-       
+
 ;;; with-widget stuff
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -4335,7 +4342,7 @@ tk input to terminate"
       (multiple-value-bind (keyargs subwidgets)
 	  (do ((params (cddr line))	; all other parameters to the widget/subwidget defs
 	       (keywords+values nil)    ; keyword args for the widget
-	       (sublists nil))		; list of the subwidgets	      
+	       (sublists nil))		; list of the subwidgets
  	      ((null params) (values (reverse keywords+values) (reverse sublists)))
  	    (cond ((listp (car params))
  		   (dolist (subwidget (process-layout (pop params) instance-name))
@@ -4355,13 +4362,13 @@ tk input to terminate"
 	   (widgets (mapcar #'car defs)))
       `(let* ,defs
 	 (declare (ignorable ,@widgets))
-	 ,@body)))  
+	 ,@body)))
   )
 
 
 ;; defwidget the better version :)
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  
+
   (defmacro defwidget (namespec parent slots widgetspecs &rest body)
     (let* ((name (if (listp namespec)
                      (second namespec)
@@ -4371,20 +4378,20 @@ tk input to terminate"
                          'self)))
       (unless name
         (error "defwidget: no name given"))
-      
+
       (unless (listp parent)
         (error "defwidget: parent class(es) specifier \"~a\" needs to be a list of symbols" parent))
-      
+
       (unless (listp slots)
         (error "defwidget: slots \"~a\" needs to be a list of slot specifiers" slots))
-      
+
       (unless (listp widgetspecs)
         (error "defwidget: widgets \"~a\" need to be a list of widget specifiers" widgetspecs))
-      
+
       (when (null widgetspecs)
         ;; (warn "defwidget: widget list is empty.")
         )
-      
+
       (let (defs wnames events accessors methods)
         (labels ((on-type (subwidget methodname)
                    "Handle an :on-type form"
@@ -4410,7 +4417,7 @@ tk input to terminate"
                          (do ((params (cddr line))       ; all other parameters to the
                                         ; widget/subwidget defs
                               (keywords+values nil)      ; keyword args for the widget
-                              (sublists nil))	       ; list of the subwidgets	      
+                              (sublists nil))	       ; list of the subwidgets
                              ((null params) (values (reverse keywords+values) (reverse sublists)))
                            (cond ((listp (car params))
                                   (dolist (subwidget (process-layout (pop params) instance-name))
@@ -4433,7 +4440,7 @@ tk input to terminate"
                                             (list :master parent)) nil)
                                keyargs))
                         subwidgets))))
-                 
+
                  (compute-slots (names)
                    (mapcar (lambda (name)
                              (if (listp name)
@@ -4441,7 +4448,7 @@ tk input to terminate"
                                  `(,name :accessor ,name :initform nil
                                          :initarg ,(intern (symbol-name name) :keyword))))
                            names))
-                 
+
                  (make-accessor (acname spec)
                    (push `(declaim (ftype function ,acname (setf ,acname)))
                          accessors)
@@ -4453,14 +4460,14 @@ tk input to terminate"
                     `(defmethod (setf ,acname) (val (,selfname ,name))
                        (setf ,spec val))
                     accessors))
-                 
+
                  (grab-accessors ()
                    (loop while (equal (caar body) :accessor)
                          do (destructuring-bind (unused aname aspec)
                                 (pop body)
                               (declare (ignore unused))
                               (make-accessor aname aspec)))))
-          
+
           (setf defs (mapcan (lambda (w)
                                (process-layout w selfname)) widgetspecs))
           (setf wnames (mapcar #'car defs))
@@ -4489,14 +4496,14 @@ tk input to terminate"
 
 ;; example-usage
 
-(defwidget test-widget (frame) 
+(defwidget test-widget (frame)
   (a b c)
-  ((bu button :text "A button" 
+  ((bu button :text "A button"
        :pack (:side :top :anchor :w)
        :command (lambda ()
 		  (format t "the content of enry is:~a~%" (text entry)) (finish-output)
 		  (setf (text entry) "")))
-   (f1 frame :pack (:side :top :fill :both :expand t) 
+   (f1 frame :pack (:side :top :fill :both :expand t)
        (lb label :text "A label" :pack (:side :left))
        (entry entry :pack (:side :left :fill :x :expand t) :text "")))
 
@@ -4519,7 +4526,7 @@ tk input to terminate"
       :pack (:side :top))
    (e entry :pack (:side :top) :text ""
       :on-type entry-typed))
-   
+
    (:accessor firstline (text (entry (mw this))))
    (:accessor secondline (text (entry (mw2 this))))
 
@@ -4579,7 +4586,7 @@ tk input to terminate"
 			      :command (lambda ()
 					 (format t "the index is:~a~%" (notebook-index nb f2))
 					 (finish-output)))))
-      (pack nb :fill :both :expand t)  
+      (pack nb :fill :both :expand t)
       (pack t1 :fill :both :expand t)
       (pack b1 :side :top)
       (pack b2 :side :top)
@@ -4644,7 +4651,7 @@ tk input to terminate"
 	     #-:tk84
 	     (progress (make-instance 'progressbar :master fprogress :value 0 :length 150))
 	     #-:tk84
-	     (bprogress (make-instance 'button :text "Step" :command 
+	     (bprogress (make-instance 'button :text "Step" :command
 				       (lambda ()
 					 (incf (value progress) 10)
 					 (when (> (value progress) 100)
@@ -4658,7 +4665,7 @@ tk input to terminate"
 	     (scale (make-instance 'scale :master fscale :from 0 :to 100  :length 150 ))
 	     #-:tk84
 	     (separator (make-instance 'separator :master fscale))
-	     
+
 	     (fcheck (make-instance 'frame :master bar))
 	     (lcheck (make-instance 'label :master fcheck :text "Add:"))
 	     (ch1 (make-instance 'check-button :master fcheck :text "Salt"))
@@ -4733,7 +4740,7 @@ tk input to terminate"
 	     (mp-3 (make-menubutton mp "Option 3" (lambda () (format t "Popup 3~&") (finish-output))))
 	     )
 	(declare (ignore mf-print mf-exit mfe-gif mfe-jpg mf-save mf-load sep1 sep2 sep3 sep4
-			 mp-1 mp-2 mp-3 mfs-1 mfs-2 mfs-3 mfs-4)) 
+			 mp-1 mp-2 mp-3 mfs-1 mfs-2 mfs-3 mfs-4))
 
 
 	#-:tk84
@@ -4754,7 +4761,7 @@ tk input to terminate"
 	(pack lprogress :side :left)
 	(pack progress :side :left :fill :x :padx 10)
 	(pack bprogress :side :left)
-	
+
 
 	(pack fscale :side :top :fill :x)
 	(pack scale :side :left :fill :x :padx 20)
@@ -4831,7 +4838,7 @@ tk input to terminate"
       (incf *angle* 0.1f0)
       (incf *angle2* 0.03f0)
       (incf *angle3* 0.01f0)
-      
+
       (dotimes (i 100)
         (declare (fixnum i))
 	(let ((w (+ *angle* (* i 2.8001f0))))
@@ -4839,7 +4846,7 @@ tk input to terminate"
 		(y (+ dy 200 (* 150 (cos w)))))
 	    (push y lines)
 	    (push x lines)
-	    )))    
+	    )))
       (set-coords *demo-canvas* *demo-line* lines))
     (if *do-rotate*
 	(after 25 #'rotate))))
@@ -4893,7 +4900,7 @@ tk input to terminate"
 			       (p1y (+ (- (truncate height 2) (truncate diam 2)) (truncate (* height dy1) (* 2.3 h))))
 			       (p2x (+ (- (* 3 (truncate width 4))  (truncate diam 2)) (truncate (*  width  dx2) (* 4.5 w))))
 			       (p2y (+ (- (truncate height 2) (truncate diam 2)) (truncate (* height dy2) (* 2.3 h))))
-			       
+
 			       )
 			  (setf *debug-tk* nil)
 			  (unless (and (= x old-x)
@@ -5198,11 +5205,11 @@ tk input to terminate"
 	 (l (make-instance 'label :master w :text prompt))
 	 (e (make-instance 'entry :master w :width 40))
 	 (f (make-instance 'frame :master w))
-	 (b_ok (make-instance 'button :master f :text "Ok" 
+	 (b_ok (make-instance 'button :master f :text "Ok"
 			      :command (lambda ()
 					 (break-mainloop)
 					 )))
-	 (b_cancel (make-instance 'button :master f :text "Cancel" 
+	 (b_cancel (make-instance 'button :master f :text "Cancel"
 				  :command (lambda ()
 					     (setf ok nil)
 					     (break-mainloop)
@@ -5228,10 +5235,10 @@ tk input to terminate"
     ))
 (defun modal-test ()
   (with-ltk ()
-   (let* ((b (make-instance 'button :text "Input" 
+   (let* ((b (make-instance 'button :text "Input"
 			    :command (lambda ()
 				       (let ((erg (input-box "Enter a string:" :title "String input")))
-					 (if erg 
+					 (if erg
 					     (format t "input was: ~a~%" erg)
 					   (format t "input was cancelled~%"))
 				       (finish-output))))))
@@ -5266,7 +5273,7 @@ tk input to terminate"
     (dotimes (i 10)
       (let ((s ""))
         (dotimes (j i)
-          (setf s (format nil "~a " s))) 
+          (setf s (format nil "~a " s)))
       (pack (make-instance 'button :text (format nil "Button~a Nr. ~a" s i)))
       (sleep 0.1))
     )))
@@ -5338,5 +5345,3 @@ tk input to terminate"
 		widgets)))
 
 (pushnew :ltk *features*)
-
-
