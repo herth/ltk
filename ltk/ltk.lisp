@@ -504,6 +504,14 @@ toplevel             x
 		 (make-two-way-stream
 		  (ccl:external-process-output-stream proc)
 		  (ccl:external-process-input-stream proc)))
+     #+:abcl (let ((proc (sys:run-program program args :input
+ 					 :stream :output :stream :error :output :wait wt)))
+ 	       (unless proc
+ 		 (error "Cannot create process."))
+               (make-two-way-stream
+		(sys:process-output proc)
+		(sys:process-input proc)))
+
     ))
 
 (defvar *ltk-version* "0.992")
