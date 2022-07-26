@@ -5094,7 +5094,12 @@ tk input to terminate"
 	while f
 	do (terpri stream)
 	  (debugger:output-frame stream f))
-  #+sbcl (sb-debug:backtrace most-positive-fixnum stream)
+  #+sbcl (let ((sym (find-symbol "PRINT-BACKTRACE" "SB-DEBUG")))
+	   (if sym
+	       (funcall sym :count most-positive-fixnum :stream stream)
+	       (let ((sym (find-symbol "BACKTRACE" "SB-DEBUG")))
+		 (when sym
+		   (funcall sym most-positive-fixnum stream)))))
   #+(or cmu scl) (debug:backtrace most-positive-fixnum stream)
   )
 
