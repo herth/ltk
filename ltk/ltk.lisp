@@ -3425,7 +3425,7 @@ set y [winfo y ~a]
 (defgeneric save-text (txt filename))
 (defmethod save-text ((txt text) filename)
   "save the content of the text widget into the file <filename>"
-  (format-wish "set file [open {~a} \"w\"];puts $file [~a get 1.0 end];close $file;puts \"asdf\"" filename (widget-path txt))
+  (format-wish "set file [open {~a} \"w\"];puts $file [~a get 1.0 end];close $file;puts \"(:DATA asdf)\"" filename (widget-path txt))
   (read-line (wish-stream *wish*))
   txt)
 
