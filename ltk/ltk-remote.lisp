@@ -21,9 +21,7 @@
 (defpackage :ltk-remote
   (:use :common-lisp :ltk
         #+(or :cmu :scl) :ext
-       #+:sbcl :sb-ext
-       #+:sbcl :sb-thread
-       #+:sbcl :sb-bsd-sockets)
+	)
   (:export
    #:stop-server
    #:with-remote-ltk))
@@ -179,30 +177,30 @@
 
 #+:sbcl
 (defun make-socket-server (port)
-  (let ((socket (make-instance 'inet-socket :type :stream :protocol :tcp)))
-    (socket-bind socket #(0 0 0 0) port)
-    (socket-listen socket 100)
+  (let ((socket (make-instance 'sb-bsd-sockets:inet-socket :type :stream :protocol :tcp)))
+    (sb-bsd-sockets:socket-bind socket #(0 0 0 0) port)
+    (sb-bsd-sockets:socket-listen socket 100)
     socket))
 
 #+:sbcl
 (defun get-connection-stream (server-socket)
-  (let* ((s (socket-accept server-socket))
-	     (stream (socket-make-stream s :input t :output t)))
+  (let* ((s (sb-bsd-sockets:socket-accept server-socket))
+	     (stream (sb-bsd-sockets:socket-make-stream s :input t :output t)))
     stream)) ;; do we need to return s as well ?
 
 #+:sbcl
 (defun invoke-remote-ltk (port vars vals form cleanup)
-  (make-thread
+  (sb-thread:make-thread
    (lambda () 
      (setf *stop-remote* nil)      
      (let ((socket (make-socket-server port)))
        (loop
         (when *stop-remote*
-          (socket-close socket)
+          (sb-bsd-sockets:socket-close socket)
           (return))
-        (let* ((s (socket-accept socket))
-               (stream (socket-make-stream s :input t :output t)))
-          (make-thread
+        (let* ((s (sb-bsd-sockets:socket-accept socket))
+               (stream (sb-bsd-sockets:socket-make-stream s :input t :output t)))
+          (sb-thread:make-thread
            (lambda ()
              (progv vars vals
                (ltk::call-with-ltk form
@@ -210,7 +208,7 @@
                                    :remotep t)
                (when cleanup
                  (funcall cleanup)))))))
-       (socket-close socket)))))
+       (sb-bsd-sockets:socket-close socket)))))
 
 
 ;; lispworks version
