@@ -824,6 +824,7 @@ fconfigure stdout -encoding utf-8
   (with-ltk-handlers ()
     (let ((stream (wish-stream *wish*)))
       (when stream
+        (withdraw *tk*)
         (remove-input-handler)
         (when (open-stream-p stream)
           (ignore-errors
