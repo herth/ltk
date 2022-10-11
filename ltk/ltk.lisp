@@ -830,16 +830,14 @@ fconfigure stdout -encoding utf-8
   (with-ltk-handlers ()
     (let ((stream (wish-stream *wish*)))
       (when stream
-        ;; NOTE: I added this at some point to fix some GUI problem
-        ;; that I apparently didn't document in detail, but this
-        ;; solution eventually caused problems on exiting wish, so
-        ;; perhaps it was addressing a bug that eventually was patched
-        ;; elsewhere and now leads to problems, removing but leaving
-        ;; the comment for future understanding.
-        ;; 
-        ;; (withdraw *tk*)
         (remove-input-handler)
         (when (open-stream-p stream)
+          ;; When ltk:*exit-mainloop* is set via an event handler,
+          ;; window focus does not return properly.  There will be no
+          ;; active window after the TK app closes.  This withdraw
+          ;; call ensures that the "." root window gets withdrawn
+          ;; before exiting if possible.
+          (withdraw *tk*)
           (ignore-errors
             (send-wish "exit")
             (flush-wish)))
