@@ -832,6 +832,12 @@ fconfigure stdout -encoding utf-8
       (when stream
         (remove-input-handler)
         (when (open-stream-p stream)
+          ;; When ltk:*exit-mainloop* is set via an event handler,
+          ;; window focus does not return properly.  There will be no
+          ;; active window after the TK app closes.  This withdraw
+          ;; call ensures that the "." root window gets withdrawn
+          ;; before exiting if possible.
+          (withdraw *tk*)
           (ignore-errors
             (send-wish "exit")
             (flush-wish)))
@@ -2502,6 +2508,14 @@ a list of numbers may be given"
 (defun make-toplevel (master)
   (make-instance 'toplevel :master master))
 
+;; title methods for *tk*
+(defvar *tk-title* "LTK")
+(defmethod title ((w (eql *tk*)))
+  *tk-title*)
+(defmethod (setf title) (value (w (eql *tk*)))
+  (setf *tk-title* value)
+  (wm-title *tk* value))
+
 ;;; label widget
 
 #+:tk84
@@ -3407,7 +3421,6 @@ set y [winfo y ~a]
 (defmethod save-text ((txt text) filename)
   "save the content of the text widget into the file <filename>"
   (format-wish "set file [open {~a} \"w\"];puts $file [~a get 1.0 end];close $file;puts \"(:DATA asdf)\"" filename (widget-path txt))
-  (read-data)
   txt)
 
 (defgeneric load-text (txt filename))
